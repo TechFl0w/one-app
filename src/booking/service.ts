@@ -22,7 +22,7 @@ export function schedulingOf(bp: Blueprint): Scheduling {
 const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
 
-async function all(b: Backend, table: string, filters: Parameters<Backend["query"]>[0]["filters"] = []) {
+async function all(b: Pick<Backend, "query">, table: string, filters: Parameters<Backend["query"]>[0]["filters"] = []) {
   return (await b.query({ table, filters, limit: 500 })).records;
 }
 
@@ -279,4 +279,25 @@ export async function daysWithSlots(bp: Blueprint, b: Backend, q: SlotQuery & { 
   }
   const start = q.from ?? localToday(now, tz);
   return Array.from({ length: q.days }, (_, i) => isoDate(addDays(start, i))).map((d) => ({ date: d, slots: out.get(d) ?? 0 }));
+}
+
+/**
+ * Guard for rebooking nudges: does the client (of this booking, or this client record) already
+ * have a future booking that still holds its time?
+ */
+export async function hasUpcomingBooking(
+  bp: Blueprint,
+  b: Pick<OwnerBackend, "query">,
+  record: { tableId: string; recordId: string; data: Record<string, unknown> },
+  now = new Date(),
+): Promise<boolean> {
+  const sc = bp.scheduling;
+  if (!sc) return false;
+  const clientId = record.tableId === sc.bookings.table ? str(record.data[sc.bookings.client]) : record.tableId === sc.clients.table ? record.recordId : undefined;
+  if (!clientId) return false;
+  const upcoming = await all(b, sc.bookings.table, [
+    { field: sc.bookings.client, op: "eq", value: clientId },
+    { field: sc.bookings.start, op: "gt", value: now.toISOString() },
+  ]);
+  return upcoming.some((r) => r.id !== record.recordId && blocksTime(stateOf(sc, r.data[sc.bookings.status]), sc.bookings.holdUntil ? str(r.data[sc.bookings.holdUntil]) : null, now));
 }

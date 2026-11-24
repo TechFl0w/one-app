@@ -10,7 +10,7 @@ const BOOKING = "00000000-0000-4000-8000-000000000031";
 /** Demo salon plus a few automations covering each trigger and action kind. */
 function blueprint(extra: Partial<Automation>[] = []): Blueprint {
   const automations: Automation[] = [
-    ...demoBlueprint.automations, // aut_reminder: date_reached fld_start -24h, if booked → whatsapp
+    ...demoBlueprint.automations.filter((a) => a.id === "aut_reminder"), // date_reached fld_start -24h, if booked → message
     {
       id: "aut_thanks",
       label: "Thank you after a visit",
@@ -150,9 +150,9 @@ describe("runner", () => {
     expect(runs[0]).toMatchObject({ status: "skipped", error: "The date changed; a new run is scheduled" });
     expect(await enqueueDueDates("b1", io, queue, new Date("2026-11-25T10:00:00Z"))).toBe(1);
 
-    // WhatsApp isn't connected: the step is skipped with a reason, the run still completes.
+    // "auto" channel: sent (by email until WhatsApp is connected).
     await runDueJobs(io, queue, new Date("2026-11-25T17:00:00Z"));
-    expect(runs[1]).toMatchObject({ status: "done", steps: [{ outcome: "skipped", note: "WhatsApp isn’t connected yet" }] });
+    expect(runs[1]).toMatchObject({ status: "done", steps: [{ outcome: "done" }] });
   });
 
   it("test mode explains what would happen without doing it", () => {
@@ -185,5 +185,23 @@ describe("describeTrigger", () => {
     expect(by("aut_reminder")).toBe("1 day before a booking’s Start");
     expect(by("aut_thanks")).toBe("When a booking’s Status changes to Done");
     expect(by("aut_new_client")).toBe("When a client is added");
+  });
+});
+
+describe("guards", () => {
+  it("skips a rebooking nudge when the client already booked again", async () => {
+    const bp = Blueprint.parse({ ...demoBlueprint });
+    const rebook = bp.automations.find((a) => a.id === "aut_rebook")!;
+    expect(rebook.guards).toEqual(["no_upcoming_booking"]);
+    const done = { id: BOOKING, tableId: "tbl_bookings", data: { fld_client: "c1", fld_start: "2026-11-01T17:00:00.000Z", fld_status: "opt_done" } as Record<string, unknown> };
+    for (const upcoming of [true, false]) {
+      const { io } = memoryIO(bp, [done]);
+      io.hasUpcomingBooking = async () => upcoming;
+      const { queue, runs } = memoryQueue();
+      expect(await enqueueDueDates("b1", io, queue, new Date("2026-11-22T16:30:00Z"))).toBe(1); // due 21 days after
+      await runDueJobs(io, queue, new Date("2026-11-22T17:00:00Z"));
+      expect(runs[0].status).toBe(upcoming ? "skipped" : "done");
+      if (upcoming) expect(runs[0].error).toBe("They already have a booking coming up");
+    }
   });
 });

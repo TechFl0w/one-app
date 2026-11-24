@@ -77,7 +77,10 @@ export function AutomationsView({ mode, runs, samples }: { mode: EditMode; runs:
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <h2 className="font-semibold">{a.label}</h2>
-                  <p className="text-sm text-muted">{describeTrigger(blueprint, a)}</p>
+                  <p className="text-sm text-muted">
+                    {describeTrigger(blueprint, a)}
+                    {a.guards?.includes("no_upcoming_booking") && ", if they haven’t booked again yet"}
+                  </p>
                 </div>
                 <button
                   type="button"

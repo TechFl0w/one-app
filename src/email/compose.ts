@@ -100,6 +100,7 @@ export function slugFromRecipients(recipients: string[], d: EmailDomains): strin
 export const EMAIL_TEMPLATES: Record<string, { subject: string; text: string }> = {
   tpl_reminder: { subject: "See you tomorrow at {{business}}", text: "Hi {{name}},\n\nJust a reminder of your appointment on {{when}}.\n\nReply to this email if you need to change it.\n\n{{business}}" },
   tpl_rebook: { subject: "Time for your next visit?", text: "Hi {{name}},\n\nIt’s been a few weeks — would you like to book your next appointment?\n\nJust reply to this email.\n\n{{business}}" },
+  tpl_review: { subject: "How was your visit to {{business}}?", text: "Hi {{name}},\n\nThank you for coming in! If you have a minute, a short review helps us a lot:\n{{review_link}}\n\n{{business}}" },
   tpl_thanks: { subject: "Thank you from {{business}}", text: "Hi {{name}},\n\nThank you for coming in. We hope to see you again soon!\n\n{{business}}" },
   tpl_shipped: { subject: "Your order is on its way", text: "Hi {{name}},\n\nGood news: your order has shipped.{{tracking}}\n\nThank you for your order!\n\n{{business}}" },
   tpl_rent_due: { subject: "Rent reminder", text: "Hi {{name}},\n\nA friendly reminder that your rent is due on {{when}}.\n\n{{business}}" },
@@ -113,7 +114,7 @@ export const EMAIL_TEMPLATES: Record<string, { subject: string; text: string }> 
 export function renderTemplate(
   templateId: string | undefined,
   message: string | undefined,
-  vars: { business: string; name?: string; when?: string; tracking?: string; data: Record<string, unknown> },
+  vars: { business: string; name?: string; when?: string; tracking?: string; reviewLink?: string; data: Record<string, unknown> },
 ): { subject: string; text: string } {
   const known = templateId ? EMAIL_TEMPLATES[templateId] : undefined;
   const t = known ?? { subject: "A message from {{business}}", text: message ?? "Hi {{name}},\n\n{{business}}" };
@@ -123,6 +124,7 @@ export function renderTemplate(
       .replace(/\{\{\s*name\s*\}\}/g, vars.name || "there")
       .replace(/\{\{\s*when\s*\}\}/g, vars.when ?? "")
       .replace(/\{\{\s*tracking\s*\}\}/g, vars.tracking ? ` Tracking: ${vars.tracking}` : "")
+      .replace(/\{\{\s*review_link\s*\}\}/g, vars.reviewLink ?? "")
       .replace(/\{\{\s*(fld_[a-z0-9_]+)\s*\}\}/g, (_, k: string) => (vars.data[k] == null ? "" : String(vars.data[k])));
   return { subject: safeSubject(fill(t.subject)), text: fill(t.text) };
 }

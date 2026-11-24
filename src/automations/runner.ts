@@ -68,6 +68,8 @@ export interface AutomationIO {
   createRecord(businessId: string, tableId: string, values: Record<string, unknown>, key: string): Promise<void>;
   updateRecord(businessId: string, tableId: string, recordId: string, values: Record<string, unknown>, key: string): Promise<void>;
   notify(businessId: string, message: string, key: string, link: { tableId: string; recordId: string }): Promise<void>;
+  /** For the no_upcoming_booking guard: does this booking's/client's client have a future booking? */
+  hasUpcomingBooking?(businessId: string, record: { tableId: string; recordId: string; data: Record<string, unknown> }, now: Date): Promise<boolean>;
   /** Returns a reason when the message can't be sent (e.g. channel not connected yet). */
   sendMessage(businessId: string, step: Extract<Step, { kind: "send_message" }>, key: string, record: { tableId: string; recordId: string; data: Record<string, unknown> }): Promise<{ sent: true } | { sent: false; reason: string }>;
 }
@@ -135,6 +137,13 @@ export async function runJob(job: Job, io: AutomationIO, queue: JobQueue, now: D
     // Re-check at run time: the record may have changed since the job was queued.
     if (automation.trigger.type === "date_reached" && dateJobKey(automation, job.recordId, data) !== job.key) return finishSkipped("The date changed; a new run is scheduled");
     if (!conditionsHold(automation, table, data)) return finishSkipped("Conditions no longer match");
+    if (automation.guards?.includes("no_upcoming_booking") && io.hasUpcomingBooking) {
+      try {
+        if (await io.hasUpcomingBooking(job.businessId, { tableId: job.tableId, recordId: job.recordId, data }, now)) return finishSkipped("They already have a booking coming up");
+      } catch (e) {
+        return retryOrFail(job, queue, base, [], e, now);
+      }
+    }
   }
 
   const steps: StepLog[] = [];

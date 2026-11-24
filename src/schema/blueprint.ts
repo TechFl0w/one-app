@@ -262,12 +262,19 @@ export const Action = z.looseObject({
   type: z.enum(ACTION_TYPES),
 });
 
+/**
+ * Checks that look beyond the triggering record, evaluated when the job runs.
+ * no_upcoming_booking: skip if the client already has a future booking (rebooking nudges).
+ */
+export const AUTOMATION_GUARDS = ["no_upcoming_booking"] as const;
+
 export const Automation = z.strictObject({
   id: AutomationId,
   label: Label,
   enabled: z.boolean(),
   trigger: Trigger,
   conditions: z.array(Condition),
+  guards: z.array(z.enum(AUTOMATION_GUARDS)).optional(),
   actions: z.array(Action).min(1),
 });
 export type Automation = z.infer<typeof Automation>;
@@ -290,6 +297,8 @@ export const BusinessInfo = z.strictObject({
   name: Label,
   type: z.string().regex(/^[a-z0-9_]{1,40}$/),
   timezone: z.string().min(1).max(64),
+  /** Where review requests send customers (e.g. the Google review link). */
+  reviewUrl: z.url({ protocol: /^https$/ }).max(500).optional(),
 });
 
 // ---------- scheduling (bookings) ----------

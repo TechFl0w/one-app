@@ -11,7 +11,7 @@ export const DEMO_BUSINESS_ID = "demo";
 
 export const demoBlueprint: Blueprint = Blueprint.parse({
   version: 1,
-  business: { name: "Polished Nail Bar", type: "nail_salon", timezone: "America/Vancouver" },
+  business: { name: "Polished Nail Bar", type: "nail_salon", timezone: "America/Vancouver", reviewUrl: "https://g.page/r/polished-nail-bar/review" },
   tables: [
     {
       id: "tbl_team",
@@ -147,7 +147,27 @@ export const demoBlueprint: Blueprint = Blueprint.parse({
       enabled: true,
       trigger: { type: "date_reached", table: "tbl_bookings", field: "fld_start", offset: "-24h" },
       conditions: [{ field: "fld_status", op: "eq", value: "opt_booked" }],
-      actions: [{ type: "send_message", channel: "whatsapp", template: "tpl_reminder" }],
+      actions: [{ type: "send_message", channel: "auto", to: "fld_client", template: "tpl_reminder" }],
+    },
+    {
+      id: "aut_rebook",
+      label: "Rebooking nudge after 3 weeks",
+      enabled: true,
+      trigger: { type: "date_reached", table: "tbl_bookings", field: "fld_start", offset: "+21d" },
+      conditions: [{ field: "fld_status", op: "eq", value: "opt_done" }],
+      guards: ["no_upcoming_booking"],
+      actions: [{ type: "send_message", channel: "auto", to: "fld_client", template: "tpl_rebook" }],
+    },
+    {
+      id: "aut_review",
+      label: "Ask for a review after a visit",
+      enabled: true,
+      trigger: { type: "status_changed", table: "tbl_bookings", field: "fld_status", to: "opt_done" },
+      conditions: [],
+      actions: [
+        { type: "wait", duration: "2h" },
+        { type: "send_message", channel: "auto", to: "fld_client", template: "tpl_review" },
+      ],
     },
   ],
   connections: [{ id: "con_stripe", provider: "stripe", status: "not_connected" }],

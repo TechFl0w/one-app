@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Blueprint } from "@/schema/blueprint";
 import { memoryBackend } from "@/agent/memoryBackend";
 import { demoBlueprint, demoRecords } from "@/demo/salon";
-import { availableSlots, bookSlot, catalog, expireHolds } from "./service";
+import { availableSlots, bookSlot, catalog, expireHolds, hasUpcomingBooking } from "./service";
 import { atLocal } from "./slots";
 
 const TZ = demoBlueprint.business.timezone;
@@ -83,6 +83,20 @@ describe("booking service", () => {
     });
     expect(await expireHolds(bp, backend, now)).toBe(1);
     expect(state.records.find((r) => r.id === id(950))!.data.fld_status).toBe("opt_cancelled");
+  });
+});
+
+describe("hasUpcomingBooking", () => {
+  it("looks for the client's future bookings that still hold time", async () => {
+    const past = { tableId: "tbl_bookings", recordId: id(800), data: { fld_client: id(10) } };
+    const { backend } = setup([
+      { tableId: "tbl_bookings", data: { fld_client: id(10), fld_service: GEL, fld_practitioner: MAI, fld_start: local("10:00"), fld_end: local("11:00"), fld_status: "opt_cancelled" } },
+    ]);
+    expect(await hasUpcomingBooking(demoBlueprint, backend, past, now)).toBe(false); // only a cancelled one
+    await bookSlot(demoBlueprint, backend, { serviceId: GEL, start: local("12:00"), client: { name: "Ava", email: "ava@example.com" } }, now);
+    expect(await hasUpcomingBooking(demoBlueprint, backend, past, now)).toBe(true);
+    expect(await hasUpcomingBooking(demoBlueprint, backend, { tableId: "tbl_clients", recordId: id(10), data: {} }, now)).toBe(true);
+    expect(await hasUpcomingBooking(demoBlueprint, backend, { tableId: "tbl_clients", recordId: id(11), data: {} }, now)).toBe(false);
   });
 });
 

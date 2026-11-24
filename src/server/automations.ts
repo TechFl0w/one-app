@@ -7,7 +7,7 @@ import { Blueprint } from "@/schema/blueprint";
 import { tableOrThrow, validateRecordInput } from "@/engine/records";
 import { getCurrentBlueprint } from "./blueprints";
 import { supabaseOwnerBackend } from "./ownerBackend";
-import { expireHolds } from "@/booking/service";
+import { expireHolds, hasUpcomingBooking } from "@/booking/service";
 import { ensureEmailSettings, sendEmail } from "./email";
 import { renderTemplate, resolveRecipient } from "@/email/compose";
 import { formatDateTime } from "@/components/blocks/format";
@@ -89,7 +89,8 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
     },
     async sendMessage(b, step, key, record) {
       // WhatsApp/SMS arrive with Twilio (Phase 5); until then those steps are skipped.
-      if (step.channel !== "email") return { sent: false, reason: `${step.channel === "whatsapp" ? "WhatsApp" : step.channel} isn’t connected yet` };
+      // "auto" means WhatsApp when connected (Phase 5), email until then.
+      if (step.channel !== "email" && step.channel !== "auto") return { sent: false, reason: `${step.channel === "whatsapp" ? "WhatsApp" : step.channel} isn’t connected yet` };
       const bp = await blueprint(b);
       const to = await resolveRecipient(bp, record.tableId, record.data, step.toField, async (t, id) => {
         const r = await db.from("records").select("data").eq("business_id", b).eq("table_id", t).eq("id", id).maybeSingle();
@@ -106,9 +107,14 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
         name: to.name?.split(" ")[0],
         when: typeof whenValue === "string" ? formatDateTime(whenValue.length === 10 ? `${whenValue}T12:00:00Z` : whenValue, { timezone: bp.business.timezone }) : undefined,
         tracking: tracking ? String(record.data[tracking.id]) : undefined,
+        reviewLink: bp.business.reviewUrl,
         data: record.data,
       });
+      if (step.template === "tpl_review" && !bp.business.reviewUrl) return { sent: false, reason: "Add your review link in Online booking settings" };
       return sendEmail(db, settings, { to: to.email, subject: msg.subject, text: msg.text, key });
+    },
+    async hasUpcomingBooking(b, record, now) {
+      return hasUpcomingBooking(await blueprint(b), supabaseOwnerBackend(db, b), record, now);
     },
   };
 }

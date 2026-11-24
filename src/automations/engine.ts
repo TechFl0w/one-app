@@ -162,7 +162,8 @@ export function planStep(action: Automation["actions"][number], ctx: { tableId: 
     case "send_message":
       return {
         kind: "send_message",
-        channel: typeof action.channel === "string" ? action.channel : "whatsapp",
+        // "auto": WhatsApp once connected, email until then.
+        channel: typeof action.channel === "string" ? action.channel : "auto",
         toField: typeof action.to === "string" ? action.to : undefined,
         template: typeof action.template === "string" ? action.template : undefined,
         message: typeof action.message === "string" ? fillTemplate(action.message, recordId, data) : undefined,
@@ -194,14 +195,29 @@ export function describeStep(bp: Blueprint, step: Step): string {
       return `Set ${fields(step.table, step.values)}`;
     case "notify":
       return `Notify you: “${step.message}”`;
-    case "send_message":
-      return `Send a ${step.channel} message${step.template ? ` (${step.template})` : ""}`;
-    case "wait":
-      return `Wait ${step.ms >= 86_400_000 ? `${step.ms / 86_400_000} day(s)` : step.ms >= 3_600_000 ? `${step.ms / 3_600_000} hour(s)` : `${step.ms / 60_000} min`}`;
+    case "send_message": {
+      const via = step.channel === "auto" ? "by WhatsApp or email" : step.channel === "email" ? "by email" : `by ${step.channel}`;
+      const what = step.template ? `the ${TEMPLATE_NAMES[step.template] ?? step.template}` : "a message";
+      return `Send ${what} ${via}`;
+    }
+    case "wait": {
+      const [n, unit] = step.ms >= 86_400_000 ? [step.ms / 86_400_000, "day"] : step.ms >= 3_600_000 ? [step.ms / 3_600_000, "hour"] : [step.ms / 60_000, "minute"];
+      return `Wait ${n} ${unit}${n === 1 ? "" : "s"}`;
+    }
     case "unsupported":
       return `${step.type}: ${step.reason}`;
   }
 }
+
+const TEMPLATE_NAMES: Record<string, string> = {
+  tpl_reminder: "appointment reminder",
+  tpl_rebook: "time to rebook",
+  tpl_review: "review request",
+  tpl_thanks: "thank you",
+  tpl_shipped: "order shipped",
+  tpl_rent_due: "rent reminder",
+  tpl_doc_expiry: "document expiring",
+};
 
 // ---------- retries ----------
 

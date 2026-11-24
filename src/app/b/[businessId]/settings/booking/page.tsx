@@ -12,9 +12,17 @@ export default async function BookingSettingsPage({ params }: PageProps<"/b/[bus
   async function save(form: FormData) {
     "use server";
     const { createClient } = await import("@/lib/supabase/server");
+    const { commitChangeSet, getCurrentBlueprint } = await import("@/server/blueprints");
+    const db = await createClient();
     const intro = String(form.get("intro") ?? "").trim().slice(0, 500);
-    await updateBookingPage(await createClient(), businessId, { enabled: form.get("enabled") === "on", intro: intro || null });
-    revalidatePath(`/b/${businessId}/settings/booking`);
+    await updateBookingPage(db, businessId, { enabled: form.get("enabled") === "on", intro: intro || null });
+    // The review link is part of the setup (used by review-request messages).
+    const reviewUrl = String(form.get("review_url") ?? "").trim();
+    const bp = await getCurrentBlueprint(db, businessId);
+    if (/^https:\/\/\S+$/.test(reviewUrl) && reviewUrl !== bp.business.reviewUrl) {
+      await commitChangeSet(db, businessId, { baseVersion: bp.version, source: "ui", summary: "Set review link", ops: [{ op: "updateBusiness", business: { reviewUrl } }] });
+    }
+    revalidatePath(`/b/${businessId}`, "layout");
   }
 
   return (
@@ -41,6 +49,11 @@ export default async function BookingSettingsPage({ params }: PageProps<"/b/[bus
           <div>
             <label className="label" htmlFor="intro">Short intro</label>
             <textarea id="intro" name="intro" className="input" rows={3} maxLength={500} defaultValue={page.intro ?? ""} placeholder="e.g. Please arrive 5 minutes early." />
+          </div>
+          <div>
+            <label className="label" htmlFor="review_url">Review link</label>
+            <input id="review_url" name="review_url" type="url" pattern="https://.*" className="input" defaultValue={blueprint.business.reviewUrl ?? ""} placeholder="https://g.page/r/…/review" />
+            <p className="mt-1 text-xs text-muted">Review requests send happy clients here (for example your Google review link). Reminders and follow-ups are on the Automations page.</p>
           </div>
           <p className="text-xs text-muted">
             New bookings start as {blueprint.scheduling.rules.autoConfirm ? "confirmed" : "requests you approve"}; slots every {blueprint.scheduling.rules.slotStepMin} min, at least{" "}

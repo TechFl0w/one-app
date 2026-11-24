@@ -132,7 +132,7 @@ export const chairRental: Template = {
           label: "Rent reminder the day before",
           trigger: { type: "date_reached", table: "tbl_rent", field: "fld_due", offset: "-24h" },
           conditions: [{ field: "fld_status", op: "neq", value: optId("Paid") }],
-          actions: [{ type: "send_message", channel: "whatsapp", to: "fld_renter", template: "tpl_rent_due" }],
+          actions: [{ type: "send_message", channel: "auto", to: "fld_renter", template: "tpl_rent_due" }],
         }),
       );
     }
@@ -142,7 +142,7 @@ export const chairRental: Template = {
           id: "aut_doc_expiry",
           label: "Document expires in 30 days",
           trigger: { type: "date_reached", table: "tbl_documents", field: "fld_expires", offset: "-30d" },
-          actions: [{ type: "notify", to: "owner" }, { type: "send_message", channel: "whatsapp", to: "fld_renter", template: "tpl_doc_expiry" }],
+          actions: [{ type: "notify", to: "owner" }, { type: "send_message", channel: "auto", to: "fld_renter", template: "tpl_doc_expiry" }],
         }),
       );
     }

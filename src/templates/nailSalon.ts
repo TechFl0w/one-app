@@ -48,6 +48,7 @@ const extras: Question & { kind: "multi" } = {
     { id: "deposits", label: "Deposits & payments", hint: "Track what’s paid per booking" },
     { id: "stations", label: "Stations / chairs", hint: "Plan who sits where" },
     { id: "rebook", label: "Rebooking nudges", hint: "Remind clients after 3 weeks" },
+    { id: "reviews", label: "Review requests", hint: "Ask happy clients for a review after their visit" },
   ],
   default: ["reminders"],
 };
@@ -147,7 +148,7 @@ export const nailSalon: Template = {
           label: "Reminder the day before",
           trigger: { type: "date_reached", table: "tbl_bookings", field: "fld_start", offset: "-24h" },
           conditions: [{ field: "fld_status", op: "eq", value: optId("Booked") }],
-          actions: [{ type: "send_message", channel: "whatsapp", to: "fld_client", template: "tpl_reminder" }],
+          actions: [{ type: "send_message", channel: "auto", to: "fld_client", template: "tpl_reminder" }],
         }),
       );
     }
@@ -158,7 +159,22 @@ export const nailSalon: Template = {
           label: "Rebooking nudge after 3 weeks",
           trigger: { type: "date_reached", table: "tbl_bookings", field: "fld_start", offset: "+21d" },
           conditions: [{ field: "fld_status", op: "eq", value: optId("Done") }],
-          actions: [{ type: "send_message", channel: "whatsapp", to: "fld_client", template: "tpl_rebook" }],
+          // Only if they haven't booked again already.
+          guards: ["no_upcoming_booking"],
+          actions: [{ type: "send_message", channel: "auto", to: "fld_client", template: "tpl_rebook" }],
+        }),
+      );
+    }
+    if (want.has("reviews")) {
+      automations.push(
+        automation({
+          id: "aut_review",
+          label: "Ask for a review after a visit",
+          trigger: { type: "status_changed", table: "tbl_bookings", field: "fld_status", to: optId("Done") },
+          actions: [
+            { type: "wait", duration: "2h" },
+            { type: "send_message", channel: "auto", to: "fld_client", template: "tpl_review" },
+          ],
         }),
       );
     }
