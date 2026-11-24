@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/* Light, warm look — see docs/design.md. No dark theme. */
+:root {
+  --ground: #f7f5f0;
+  --card: #ffffff;
+  --line: #e8e4da;
+  --ink: #1c1b19;
+  --muted: #5e5b55;
+  --accent: #17694f;
+  --accent-hover: #0f5640;
+  --accent-tint: #e4f2ea;
+}
+
+@theme inline {
+  --color-ground: var(--ground);
+  --color-card: var(--card);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-tint: var(--accent-tint);
+  --font-sans: var(--font-jakarta);
+  --radius-card: 20px;
+  --shadow-soft: 0 1px 2px rgb(28 27 25 / 0.04), 0 4px 16px rgb(28 27 25 / 0.05);
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+}
+
+/* Shared building blocks (Tailwind v4 @utility so they compose with @apply). */
+@utility card {
+  @apply rounded-card border border-line bg-card shadow-soft;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-accent text-white hover:bg-accent-hover;
+}
+@utility btn-ghost {
+  @apply btn border border-line bg-card text-ink hover:bg-ground;
+}
+@utility input {
+  @apply w-full rounded-xl border border-line bg-card px-4 py-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint;
+}
+@utility label {
+  @apply mb-1.5 block text-sm font-medium text-ink;
+}
