@@ -14,7 +14,8 @@ export interface OwnerBackend {
   query(q: RecordQuery): Promise<{ records: RecordRow[]; total: number }>;
   getRecord(tableId: string, id: string): Promise<RecordRow>;
   createRecord(tableId: string, input: Record<string, unknown>): Promise<RecordRow>;
-  updateRecord(tableId: string, id: string, input: Record<string, unknown>): Promise<RecordRow>;
+  /** `confirmed` is required for risky updates (price changes, see engine/risk.ts). */
+  updateRecord(tableId: string, id: string, input: Record<string, unknown>, opts?: { confirmed?: boolean }): Promise<RecordRow>;
   /** Only called after the owner confirmed. */
   deleteRecord(tableId: string, id: string): Promise<void>;
   commitChangeSet(changeSet: ChangeSet, confirmed: boolean): Promise<CommitResult>;

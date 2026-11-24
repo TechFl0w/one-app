@@ -14,7 +14,7 @@ import { undoBlueprintChange } from "./actions";
 export type ChatResult = { ok: true; transcript: ChatItem[]; changed: boolean } | { ok: false; error: string };
 
 async function session(businessId: string) {
-  const supabase = await createClient();
+  const supabase = await createClient({ source: "ai" });
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims.sub as string | undefined;
   if (!userId) throw new Error("Please sign in again.");

@@ -7,6 +7,7 @@ import { previewChangeSet, type OpPreview } from "@/engine/changeSet";
 import { recordLabel } from "@/engine/blockData";
 import type { UndoToken } from "@/engine/commit";
 import type { OwnerBackend } from "./types";
+import { recordUpdateIsRisky } from "@/engine/risk";
 
 /**
  * The owner agent's tools. Each has a zod schema (inputs are validated before running), a risk
@@ -37,8 +38,6 @@ const tool = <I>(t: OwnerTool<I>) => t as unknown as OwnerTool<unknown>;
 const Values = z.record(FieldId, z.unknown()).describe("Field values keyed by field id (fld_…). Use null to clear a field.");
 
 const tableLabel = (bp: Blueprint, id: string) => bp.tables.find((t) => t.id === id)?.label ?? id;
-const moneyFields = (bp: Blueprint, tableId: string) =>
-  new Set(bp.tables.find((t) => t.id === tableId)?.fields.filter((f) => f.type === "money").map((f) => f.id) ?? []);
 
 export const OWNER_TOOLS: OwnerTool[] = [
   tool({
@@ -85,14 +84,17 @@ export const OWNER_TOOLS: OwnerTool[] = [
     name: "update_record",
     description: "Change some fields of a record (others stay as they are). Changing money fields (prices, amounts) needs the owner's confirmation.",
     input: z.strictObject({ table: TableId, id: RecordId, values: Values }),
-    risk: (i, bp) => (Object.keys(i.values).some((k) => moneyFields(bp, i.table).has(k)) ? "risky" : "safe"),
+    risk: (i, bp) => {
+      const table = bp.tables.find((t) => t.id === i.table);
+      return table && recordUpdateIsRisky(table, i.values) ? "risky" : "safe";
+    },
     describe: (i, bp) => {
       const table = bp.tables.find((t) => t.id === i.table);
       const fields = Object.keys(i.values).map((k) => table?.fields.find((f) => f.id === k)?.label ?? k);
       return [`Change ${fields.join(", ")} on a ${tableLabel(bp, i.table).toLowerCase()} record to ${JSON.stringify(i.values)}`];
     },
-    run: async (b, i, fx) => {
-      const r = await b.updateRecord(i.table, i.id, i.values);
+    run: async (b, i, fx, { confirmed }) => {
+      const r = await b.updateRecord(i.table, i.id, i.values, { confirmed });
       fx.changed = true;
       return { updated: { id: r.id, ...r.data } };
     },

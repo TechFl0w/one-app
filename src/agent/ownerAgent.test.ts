@@ -114,6 +114,10 @@ describe("owner agent", () => {
     expect(booking.data.fld_notes).toBe("Prefers almond shape");
     expect(booking.data.fld_amount).toBe(48);
     expect(r.pending.map((p) => p.tool)).toEqual(["update_record"]);
+
+    await runConfirmedAction(backend, r.pending[0]);
+    expect(state.records.find((x) => x.id === ids.booking)!.data.fld_amount).toBe(60);
+    await expect(backend.updateRecord("tbl_bookings", ids.booking, { fld_amount: 1 })).rejects.toThrow(/needs confirmation/);
   });
 
   it("treats setup changes that remove data or touch automations as risky", async () => {

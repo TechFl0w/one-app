@@ -15,11 +15,12 @@ export async function GET(_request: NextRequest, ctx: Ctx) {
   }
 }
 
-/** Partial update: only the given fields change; `null` clears one. */
+/** Partial update: only the given fields change; `null` clears one. Price/amount changes need `?confirm=true` (else 428). */
 export async function PATCH(request: NextRequest, ctx: Ctx) {
   try {
     const { businessId, tableId, recordId } = await ctx.params;
-    const record = await updateRecord(await createClient(), businessId, tableId, recordId, await readJson(request));
+    const confirmed = request.nextUrl.searchParams.get("confirm") === "true";
+    const record = await updateRecord(await createClient(), businessId, tableId, recordId, await readJson(request), { confirmed });
     return NextResponse.json({ record });
   } catch (e) {
     return errorResponse(e);

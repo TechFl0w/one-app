@@ -5,6 +5,7 @@ import { errorResult, okResult } from "@/engine/commit";
 import { buildRecordQuery, linkedIds, projectData, RecordError, tableOrThrow, validateRecordInput } from "@/engine/records";
 import { memoryQuery } from "@/engine/store";
 import type { OwnerBackend } from "./types";
+import { recordUpdateIsRisky } from "@/engine/risk";
 
 /** OwnerBackend over in-memory state, with the same validation as the real one. Demo + tests. */
 export function memoryBackend(initial: { blueprint: Blueprint; records: RecordRow[] }, newId = () => crypto.randomUUID()) {
@@ -36,8 +37,11 @@ export function memoryBackend(initial: { blueprint: Blueprint; records: RecordRo
       state.records.push(row);
       return view(row);
     },
-    updateRecord: async (t, id, input) => {
+    updateRecord: async (t, id, input, opts = {}) => {
       const patch = validateRecordInput(tableOrThrow(state.blueprint, t), input, "update");
+      if (recordUpdateIsRisky(tableOrThrow(state.blueprint, t), patch) && !opts.confirmed) {
+        throw new RecordError("needs_confirmation", "Changing a price or amount needs confirmation");
+      }
       checkLinks(t, patch);
       const row = find(t, id);
       const data = { ...row.data, ...patch };

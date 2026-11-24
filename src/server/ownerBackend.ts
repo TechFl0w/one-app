@@ -14,7 +14,7 @@ export function supabaseOwnerBackend(supabase: SupabaseClient, businessId: strin
     query: (q) => listRecords(supabase, businessId, q),
     getRecord: (t, id) => getRecord(supabase, businessId, t, id),
     createRecord: (t, input) => createRecord(supabase, businessId, t, input),
-    updateRecord: (t, id, input) => updateRecord(supabase, businessId, t, id, input),
+    updateRecord: (t, id, input, opts) => updateRecord(supabase, businessId, t, id, input, opts),
     deleteRecord: (t, id) => deleteRecord(supabase, businessId, t, id, { confirmed: true }),
     async commitChangeSet(cs, confirmed) {
       try {

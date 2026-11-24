@@ -11,6 +11,7 @@ import {
   validateRecordInput,
 } from "@/engine/records";
 import { getCurrentBlueprint } from "./blueprints";
+import { recordUpdateIsRisky } from "@/engine/risk";
 
 /**
  * Records CRUD that respects the blueprint. Every call takes a Supabase client acting as the
@@ -97,11 +98,15 @@ export async function updateRecord(
   tableId: string,
   recordId: string,
   input: unknown,
+  opts: { confirmed?: boolean } = {},
 ): Promise<RecordRow> {
   checkId(recordId);
   const bp = await getCurrentBlueprint(supabase, businessId);
   const table = tableOrThrow(bp, tableId);
   const patch = validateRecordInput(table, input, "update");
+  if (recordUpdateIsRisky(table, patch) && !opts.confirmed) {
+    throw new RecordError("needs_confirmation", "Changing a price or amount needs confirmation");
+  }
   await assertLinksExist(supabase, businessId, linkedIds(table, patch));
   const set = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== null));
   const unset = Object.keys(patch).filter((k) => patch[k] === null);
