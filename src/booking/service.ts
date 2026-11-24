@@ -205,7 +205,13 @@ export async function expireHolds(bp: Blueprint, b: Backend, now = new Date()): 
  * Books a slot: re-checks it is still free, finds or creates the client, creates the booking.
  * The database's overlap constraint is the final guard against two people taking the same time.
  */
-export async function bookSlot(bp: Blueprint, b: Backend, req: BookingRequest, now = new Date()): Promise<{ bookingId: string; slot: Slot; state: string }> {
+export async function bookSlot(
+  bp: Blueprint,
+  b: Backend,
+  req: BookingRequest,
+  now = new Date(),
+  opts: { holdUntil?: Date } = {},
+): Promise<{ bookingId: string; slot: Slot; state: string; price: number | null }> {
   const sc = schedulingOf(bp);
   const name = req.client.name.trim();
   if (!name) throw new RecordError("invalid", "Please give your name");
@@ -235,8 +241,11 @@ export async function bookSlot(bp: Blueprint, b: Backend, req: BookingRequest, n
     clientId = (await b.createRecord(sc.clients.table, values)).id;
   }
 
-  const state = initialState(sc);
+  // Held (e.g. awaiting a deposit) when asked and the setup supports it; else the normal start state.
+  const hold = opts.holdUntil && sc.statuses.held && sc.bookings.holdUntil ? opts.holdUntil : undefined;
+  const state = hold ? "held" : initialState(sc);
   const service = (await all(b, sc.services.table)).find((s) => s.id === req.serviceId);
+  const price = sc.services.price && typeof service?.data[sc.services.price] === "number" ? (service.data[sc.services.price] as number) : null;
   const values: Record<string, unknown> = {
     [sc.bookings.start]: slot.start,
     [sc.bookings.end]: slot.end,
@@ -246,10 +255,11 @@ export async function bookSlot(bp: Blueprint, b: Backend, req: BookingRequest, n
     [sc.bookings.status]: optionFor(sc, state),
   };
   if (sc.bookings.resource && slot.resourceId) values[sc.bookings.resource] = slot.resourceId;
+  if (hold) values[sc.bookings.holdUntil!] = hold.toISOString();
   if (sc.bookings.amount && sc.services.price && typeof service?.data[sc.services.price] === "number") values[sc.bookings.amount] = service.data[sc.services.price];
   try {
     const created = await b.createRecord(sc.bookings.table, values);
-    return { bookingId: created.id, slot, state };
+    return { bookingId: created.id, slot, state, price };
   } catch (e) {
     if (e instanceof Error && /exclusion|overlap|conflicting/i.test(e.message)) {
       throw new RecordError("invalid", "Sorry, someone just booked that time. Please pick another.");

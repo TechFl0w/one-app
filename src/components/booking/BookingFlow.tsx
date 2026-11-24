@@ -9,7 +9,20 @@ import { loadDays, loadSlots, submitBooking } from "@/app/book/[slug]/actions";
 type Step = "service" | "who" | "day" | "time" | "details" | "done";
 
 /** Public booking: service → who → day → time → details → done. Times shown in the business's timezone. */
-export function BookingFlow({ slug, catalog, currency = "CAD", intro }: { slug: string; catalog: Catalog; currency?: string; intro?: string | null }) {
+export function BookingFlow({
+  slug,
+  catalog,
+  currency = "CAD",
+  intro,
+  returned,
+}: {
+  slug: string;
+  catalog: Catalog;
+  currency?: string;
+  intro?: string | null;
+  /** Back from Stripe Checkout. */
+  returned?: "paid" | "cancelled";
+}) {
   const [step, setStep] = useState<Step>("service");
   const [service, setService] = useState<CatalogService | null>(null);
   const [who, setWho] = useState<string | null>(null);
@@ -62,6 +75,10 @@ export function BookingFlow({ slug, catalog, currency = "CAD", intro }: { slug: 
         website: String(form.get("website") ?? ""),
       });
       if ("error" in r) return setError(r.error ?? null);
+      if (r.checkoutUrl) {
+        window.location.href = r.checkoutUrl; // pay the deposit on Stripe; the booking is held meanwhile
+        return;
+      }
       setDone({ confirmed: r.confirmed, demo: r.demo });
       setStep("done");
     });
@@ -91,6 +108,12 @@ export function BookingFlow({ slug, catalog, currency = "CAD", intro }: { slug: 
         )}
       </header>
 
+      {step === "service" && returned === "paid" && (
+        <p className="mb-4 rounded-xl bg-accent-tint px-3 py-2 text-sm text-accent">Thank you — your deposit is paid. We’ll confirm your booking in a moment.</p>
+      )}
+      {step === "service" && returned === "cancelled" && (
+        <p className="mb-4 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">The deposit wasn’t paid, so the time is only held for a little while. You can book again below.</p>
+      )}
       {step === "service" && (
         <ul className="space-y-2">
           {catalog.services.map((s) => (

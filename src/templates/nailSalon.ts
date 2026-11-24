@@ -108,6 +108,10 @@ export const nailSalon: Template = {
     }
     if (want.has("deposits")) {
       tables[3].fields.push(money("fld_deposit", "Deposit"), status("fld_payment", "Payment", [["Unpaid", COLORS.AMBER], ["Deposit paid", COLORS.BLUE], ["Paid", COLORS.GREEN]]));
+      // Online bookings wait in "Awaiting deposit" until paid (or the hold runs out).
+      tables[3].fields.push(datetime("fld_hold_until", "Held until"));
+      const st = tables[3].fields.find((f) => f.id === "fld_status");
+      if (st && "options" in st) st.options.splice(1, 0, { id: optId("Awaiting deposit"), label: "Awaiting deposit", color: COLORS.AMBER });
     }
 
     const pages: Page[] = [
@@ -178,6 +182,7 @@ export const nailSalon: Template = {
           bookings: {
             table: "tbl_bookings", start: "fld_start", end: "fld_end", service: "fld_service", practitioner: "fld_practitioner",
             client: "fld_client", status: "fld_status", amount: "fld_amount", ...(want.has("stations") ? { resource: "fld_station" } : {}),
+            ...(want.has("deposits") ? { holdUntil: "fld_hold_until" } : {}),
           },
           services: { table: "tbl_services", duration: "fld_minutes", price: "fld_price", bufferAfter: "fld_cleanup", online: "fld_online" },
           practitioners: { table: "tbl_team", hours: "fld_hours", online: "fld_online" },
@@ -185,7 +190,11 @@ export const nailSalon: Template = {
           clients: { table: "tbl_clients", name: "fld_name", email: "fld_email", phone: "fld_whatsapp" },
           hours: OPENING[choice(answers, opening)],
           rules: { slotStepMin: 15, minNoticeMin: 120, horizonDays: 60, holdMin: 15, cancelWindowHours: 24, autoConfirm: false },
-          statuses: { requested: optId("Requested"), confirmed: optId("Booked"), completed: optId("Done"), no_show: optId("No-show"), cancelled: optId("Cancelled") },
+          ...(want.has("deposits") ? { deposit: { kind: "percent" as const, value: 20 } } : {}),
+          statuses: {
+            requested: optId("Requested"), confirmed: optId("Booked"), completed: optId("Done"), no_show: optId("No-show"), cancelled: optId("Cancelled"),
+            ...(want.has("deposits") ? { held: optId("Awaiting deposit") } : {}),
+          },
         },
       }),
       seed,

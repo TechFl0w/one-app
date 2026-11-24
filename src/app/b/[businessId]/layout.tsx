@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck, History, Inbox, Mail, Zap } from "lucide-react";
+import { CalendarCheck, CreditCard, History, Inbox, Mail, Zap } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { getBusinessContext } from "@/server/context";
 import { signOut } from "@/app/login/actions";
@@ -36,6 +36,9 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
               <CalendarCheck className="h-4 w-4" /> Online booking
             </Link>
           )}
+          <Link href={`/b/${businessId}/settings/payments`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
+            <CreditCard className="h-4 w-4" /> Payments
+          </Link>
           <Link href={`/b/${businessId}/settings/email`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
             <Mail className="h-4 w-4" /> Email settings
           </Link>

@@ -367,6 +367,13 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
       return [{ op: "setLayoutOverride", pageId: op.pageId, layout: op.layout, blocks: old }];
     }
 
+    case "setScheduling": {
+      const old = bp.scheduling ?? null;
+      if (op.scheduling) bp.scheduling = structuredClone(op.scheduling);
+      else delete bp.scheduling;
+      return [{ op: "setScheduling", scheduling: old }];
+    }
+
     case "addAutomation": {
       if (bp.automations.some((a) => a.id === op.automation.id)) exists(`Automation ${op.automation.id}`);
       insertAt(bp.automations, structuredClone(op.automation), op.index);
@@ -460,6 +467,8 @@ function describe(bp: Blueprint, op: Operation): string {
       return op.blocks
         ? `Set up a separate ${layoutName(op.layout)} layout for ${page(op.pageId)}`
         : `Remove the ${layoutName(op.layout)} layout of ${page(op.pageId)}`;
+    case "setScheduling":
+      return op.scheduling ? "Change booking settings (hours, rules, deposits)" : "Turn off online booking setup";
     case "addAutomation":
       return `Add automation ${q(op.automation.label)}`;
     case "removeAutomation":

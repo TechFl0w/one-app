@@ -8,8 +8,10 @@ import { demoBlueprint } from "@/demo/salon";
 export const metadata: Metadata = { title: "Book an appointment" };
 
 /** Public booking page (no account needed). /book/demo is the sample salon. */
-export default async function BookPage({ params }: PageProps<"/book/[slug]">) {
+export default async function BookPage({ params, searchParams }: PageProps<"/book/[slug]">) {
   const { slug } = await params;
+  const sp = await searchParams;
+  const returned = sp.paid ? "paid" : sp.cancelled ? "cancelled" : undefined;
   const catalog = await loadCatalog(slug).catch(() => null);
   if (!catalog) notFound();
   const info = slug === "demo" ? { blueprint: demoBlueprint, page: { intro: "Sample salon — try booking, nothing is saved." } } : await publicBooking(slug);
@@ -18,7 +20,7 @@ export default async function BookPage({ params }: PageProps<"/book/[slug]">) {
   const currency = priceField && priceField.type === "money" ? priceField.currency : undefined;
   return (
     <main className="flex flex-1 items-start justify-center p-4 py-10">
-      <BookingFlow slug={slug} catalog={catalog} currency={currency ?? "CAD"} intro={info?.page.intro} />
+      <BookingFlow slug={slug} catalog={catalog} currency={currency ?? "CAD"} intro={info?.page.intro} returned={returned} />
     </main>
   );
 }

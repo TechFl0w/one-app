@@ -349,6 +349,11 @@ export const Scheduling = z.strictObject({
     /** New online bookings start confirmed instead of requested. */
     autoConfirm: z.boolean(),
   }),
+  /**
+   * Online bookings ask for a deposit (when Stripe is connected): a percent of the price or a
+   * fixed amount. The booking is held until paid (needs statuses.held and bookings.holdUntil).
+   */
+  deposit: z.strictObject({ kind: z.enum(["percent", "fixed"]), value: z.number().positive().max(100_000) }).optional(),
   /** Option ids of the bookings status field for each lifecycle state (unmapped states are unused). */
   statuses: z.partialRecord(z.enum(BOOKING_STATES), z.string().regex(/^opt_[a-z0-9_]{1,60}$/)),
 });
@@ -515,6 +520,10 @@ function checkScheduling(
       if (!status.options.some((o) => o.id === opt)) issue(["scheduling", "statuses", state], `unknown option ${opt}`);
     }
   }
+  if (sc.deposit && (!sc.statuses.held || !b.holdUntil)) {
+    issue(["scheduling", "deposit"], "deposits need a held status and a 'held until' field on bookings");
+  }
+  if (sc.deposit?.kind === "percent" && sc.deposit.value > 100) issue(["scheduling", "deposit", "value"], "a percent can't be over 100");
   for (const req of ["requested", "confirmed", "cancelled"] as const) {
     if (!sc.statuses[req]) issue(["scheduling", "statuses", req], `map the ${req} state to a status option`);
   }

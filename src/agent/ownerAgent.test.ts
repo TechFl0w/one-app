@@ -45,7 +45,7 @@ describe("owner agent", () => {
     expect(system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(system[1].text).toContain('blk_cal calendar "Today’s calendar" from tbl_bookings');
     expect(req.tools!.map((t) => (t as Anthropic.Beta.BetaTool).name)).toEqual([
-      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "find_free_times", "book_appointment", "explain_automation",
+      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
     ]);
     expect(req.messages[0].content).toContain('looking at page "Today" (pg_today)');
     expect(r.response).toEqual({ text: "Hi!", changed: false });

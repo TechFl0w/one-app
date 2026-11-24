@@ -180,6 +180,60 @@ export const OWNER_TOOLS: OwnerTool[] = [
   }),
 
   tool({
+    name: "create_payment_link",
+    description: "Create a Stripe payment page for an amount (optionally tied to a record, e.g. a booking or order) and return its link to share with the customer. Use interval for recurring charges like weekly rent.",
+    input: z.strictObject({
+      amount: z.number().positive().max(100_000),
+      currency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
+      description: z.string().min(1).max(200),
+      interval: z.enum(["week", "month"]).optional(),
+      table: TableId.optional(),
+      record: RecordId.optional(),
+      email: z.string().email().optional(),
+    }),
+    risk: "safe",
+    run: async (b, i) => {
+      if (!b.payments) throw new Error("Payments aren’t connected yet. The owner can connect Stripe in Settings → Payments.");
+      const link = await b.payments.createLink({
+        kind: i.interval ? "subscription" : "payment",
+        amount: i.amount,
+        currency: (i.currency ?? process.env.DEFAULT_CURRENCY ?? "CAD").toUpperCase(),
+        description: i.description,
+        interval: i.interval,
+        tableId: i.table,
+        recordId: i.record,
+        email: i.email,
+      });
+      return { link: link.url };
+    },
+  }),
+
+  tool({
+    name: "list_payments",
+    description: "Recent payments (deposits, payment links, subscriptions) with status.",
+    input: z.strictObject({ limit: z.int().min(1).max(50).optional() }),
+    risk: "read",
+    run: async (b, i) => {
+      if (!b.payments) throw new Error("Payments aren’t connected yet.");
+      return { payments: await b.payments.list(i.limit ?? 20) };
+    },
+  }),
+
+  tool({
+    name: "refund_payment",
+    description: "Refund a paid payment in full. Always needs the owner's confirmation.",
+    input: z.strictObject({ payment_id: z.uuid(), reason: z.string().max(200).optional() }),
+    risk: "risky",
+    describe: (i) => [`Refund payment ${i.payment_id.slice(0, 8)} in full${i.reason ? ` (${i.reason})` : ""}`],
+    run: async (b, i, fx) => {
+      if (!b.payments) throw new Error("Payments aren’t connected yet.");
+      await b.payments.refund(i.payment_id);
+      fx.changed = true;
+      return { refunded: i.payment_id };
+    },
+  }),
+
+  tool({
     name: "explain_automation",
     description: "Explain what an automation does, in plain words, with its trigger, conditions and actions.",
     input: z.strictObject({ id: z.string().regex(/^aut_[a-z0-9_]{1,60}$/) }),

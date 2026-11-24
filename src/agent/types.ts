@@ -19,6 +19,15 @@ export interface OwnerBackend {
   /** Only called after the owner confirmed. */
   deleteRecord(tableId: string, id: string): Promise<void>;
   commitChangeSet(changeSet: ChangeSet, confirmed: boolean): Promise<CommitResult>;
+  /** Stripe payments; missing when payments aren't available (demo, not configured). */
+  payments?: PaymentsBackend;
+}
+
+export interface PaymentsBackend {
+  createLink(input: { kind: "payment" | "subscription"; amount: number; currency: string; description: string; interval?: "week" | "month"; tableId?: string; recordId?: string; email?: string }): Promise<{ paymentId: string; url: string }>;
+  list(limit: number): Promise<{ id: string; kind: string; amount: number; currency: string; description: string; status: string; created_at: string; record_id: string | null }[]>;
+  /** Only called after the owner confirmed. */
+  refund(paymentId: string): Promise<void>;
 }
 
 /** A risky tool call held back until the owner confirms it (executed by code, not the model). */

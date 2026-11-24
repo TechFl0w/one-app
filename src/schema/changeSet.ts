@@ -11,6 +11,7 @@ import {
   LayoutKey,
   Page,
   PageId,
+  Scheduling,
   Table,
   TableId,
 } from "./blueprint";
@@ -64,6 +65,9 @@ export const Operation = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("updateAutomation"), automation: Automation }),
   z.strictObject({ op: z.literal("toggleAutomation"), automationId: AutomationId, enabled: z.boolean() }),
 
+  /** Replace the booking setup (roles, hours, rules, deposit, statuses); null removes it. */
+  z.strictObject({ op: z.literal("setScheduling"), scheduling: Scheduling.nullable() }),
+
   /** Restore a whole layout override exactly (used by undo of removeLayoutOverride). */
   z.strictObject({
     op: z.literal("setLayoutOverride"),
@@ -116,4 +120,5 @@ export const OP_RISK: Record<OpName, "safe" | "risky"> = {
   removeAutomation: "risky",
   updateAutomation: "risky",
   toggleAutomation: "risky",
+  setScheduling: "risky",
 };
