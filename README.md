@@ -11,11 +11,11 @@ WhatsApp line for your customers — all changeable by clicking or by asking the
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in your Supabase URL + publishable key
+cp .env.example .env.local   # optional: uncomment and fill in Supabase / Anthropic keys
 npm run dev
 ```
 
-Without Supabase env vars every route redirects to `/demo`: a sample salon on in-memory data.
+Open http://localhost:3000. Without Supabase settings every route redirects to `/demo`: a sample salon on in-memory data.
 
 Apply `supabase/migrations/*.sql` to your Supabase project (`supabase db push` or the SQL editor).
 

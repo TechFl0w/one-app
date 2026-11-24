@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { supabaseEnv } from "@/lib/supabase/env";
+import { isSupabaseConfigured, supabaseEnv } from "@/lib/supabase/env";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
@@ -10,7 +10,7 @@ export async function proxy(request: NextRequest) {
   // The demo and the onboarding preview run without a session or database.
   if (path === "/demo" || path.startsWith("/demo/") || path === "/start") return NextResponse.next();
   // Without Supabase configured (local dev), only the demo works.
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
+  if (!isSupabaseConfigured()) {
     return NextResponse.redirect(new URL("/demo", request.url));
   }
 
