@@ -9,6 +9,8 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   // The demo and the onboarding preview run without a session or database.
   if (path === "/demo" || path.startsWith("/demo/") || path === "/start") return NextResponse.next();
+  // Cron routes authenticate with CRON_SECRET, not a user session.
+  if (path.startsWith("/api/cron/")) return NextResponse.next();
   // Without Supabase configured (local dev), only the demo works.
   if (!isSupabaseConfigured()) {
     return NextResponse.redirect(new URL("/demo", request.url));

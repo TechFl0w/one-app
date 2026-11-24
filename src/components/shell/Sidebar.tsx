@@ -26,7 +26,8 @@ export function Sidebar({ basePath, businesses = [], footer }: SidebarProps) {
   const [addingPage, setAddingPage] = useState(false);
   const businessName = blueprint.business.name;
   const pages = editing ? menuOrder(blueprint) : menuPages(blueprint);
-  const activeId = pathname.match(/\/p\/([^/]+)/)?.[1] ?? pages[0]?.id;
+  // Only page routes highlight a menu item (Automations / Activity are not pages).
+  const activeId = pathname.match(/\/p\/([^/]+)/)?.[1];
 
   const nav = (
     <>

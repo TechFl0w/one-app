@@ -27,7 +27,7 @@ create function public.request_source()
 returns text language sql stable set search_path = ''
 as $$
   select case coalesce(nullif(current_setting('request.headers', true), '')::json ->> 'x-one-source', 'ui')
-    when 'ai' then 'ai' else 'ui' end;
+    when 'ai' then 'ai' when 'automation' then 'system' else 'ui' end;
 $$;
 
 create function public.audit_records()
