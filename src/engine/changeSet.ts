@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import { Blueprint, type Block, type LayoutKey, type Page } from "@/schema/blueprint";
 import { ChangeSet, OP_RISK, type Operation } from "@/schema/changeSet";
+import { layoutName } from "./layout";
 
 /**
  * The single entry point for changing a blueprint (CLAUDE.md: "Blueprint changes go through one
@@ -404,7 +405,7 @@ function describe(bp: Blueprint, op: Operation): string {
   const table = (id: string) => labelOrId(bp.tables, id);
   const page = (id: string) => labelOrId(bp.pages, id);
   const auto = (id: string) => labelOrId(bp.automations, id);
-  const where = (layout?: LayoutKey) => (layout ? ` (${layout} layout)` : "");
+  const where = (layout?: LayoutKey) => (layout ? ` (${layoutName(layout)} layout)` : "");
 
   switch (op.op) {
     case "rename": {
@@ -452,11 +453,13 @@ function describe(bp: Blueprint, op: Operation): string {
     case "resizeBlock":
       return `Resize a block on ${page(op.pageId)}${where(op.layout)}`;
     case "createLayoutOverride":
-      return `Create a separate ${op.layout} layout for ${page(op.pageId)}`;
+      return `Create a separate ${layoutName(op.layout)} layout for ${page(op.pageId)}`;
     case "removeLayoutOverride":
-      return `Remove the ${op.layout} layout of ${page(op.pageId)}`;
+      return `Remove the ${layoutName(op.layout)} layout of ${page(op.pageId)}`;
     case "setLayoutOverride":
-      return `${op.blocks ? "Restore" : "Remove"} the ${op.layout} layout of ${page(op.pageId)}`;
+      return op.blocks
+        ? `Set up a separate ${layoutName(op.layout)} layout for ${page(op.pageId)}`
+        : `Remove the ${layoutName(op.layout)} layout of ${page(op.pageId)}`;
     case "addAutomation":
       return `Add automation ${q(op.automation.label)}`;
     case "removeAutomation":

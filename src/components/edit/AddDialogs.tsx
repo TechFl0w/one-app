@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { BlockType, LayoutKey, Page } from "@/schema/blueprint";
+import type { Block, BlockType, LayoutKey, Page } from "@/schema/blueprint";
 import { ADDABLE_BLOCKS, PAGE_TEMPLATES, newBlockOp, newPageOp, type PageTemplate } from "@/engine/editing";
-import { resolveLayout } from "@/engine/layout";
 import { Dialog } from "./Dialog";
 import { useEdit } from "./EditProvider";
 
@@ -76,15 +75,14 @@ export function AddBlockDialog({
   onClose,
   page,
   layout,
-  device,
-  userId,
+  blocks,
 }: {
   open: boolean;
   onClose: () => void;
   page: Page;
   layout?: LayoutKey;
-  device: "phone" | "tablet" | "desktop";
-  userId?: string;
+  /** Blocks of the layout being edited (new block goes below them). */
+  blocks: Block[];
 }) {
   const { blueprint, push } = useEdit();
   const [type, setType] = useState<BlockType>("table");
@@ -94,7 +92,6 @@ export function AddBlockDialog({
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const blocks = resolveLayout(page, { device, userId }).blocks;
     const op = newBlockOp(blueprint, page, blocks, type, table || undefined, layout);
     if (typeof op === "string") return setProblem(op);
     if (push(op)) {

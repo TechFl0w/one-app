@@ -46,3 +46,37 @@ export function deviceFromUserAgent(ua: { device: { type?: string } }): Device {
   if (ua.device.type === "tablet") return "tablet";
   return "desktop";
 }
+
+export type LayoutTarget = LayoutKey | "default";
+
+/** Blocks of one specific layout, or null if that override doesn't exist. */
+export function layoutBlocks(page: Page, target: LayoutTarget): Block[] | null {
+  if (target === "default") return page.layout.blocks;
+  return page.layoutOverrides?.[target]?.blocks ?? null;
+}
+
+/** Layouts an editor can pick between, and whether each exists yet. */
+export function layoutTargets(page: Page, userId?: string): { key: LayoutTarget; label: string; exists: boolean }[] {
+  const list: { key: LayoutTarget; label: string }[] = [
+    { key: "default", label: "Everyone" },
+    { key: "device:phone", label: "Phones" },
+    { key: "device:tablet", label: "Tablets" },
+  ];
+  if (userId) list.push({ key: `user:${userId}` as LayoutKey, label: "Just me" });
+  return list.map((t) => ({ ...t, exists: layoutBlocks(page, t.key) !== null }));
+}
+
+/** A sensible starting phone layout: every block full width, stacked in reading order. */
+export function stackForPhone(blocks: Block[]): Block[] {
+  let y = 0;
+  return readingOrder(blocks).map((b) => {
+    const out = { ...b, x: 0, w: 12, y };
+    y += b.h;
+    return out;
+  });
+}
+
+/** "device:phone" → "phone", "user:…" → "personal". */
+export function layoutName(key: string): string {
+  return key.startsWith("user:") ? "personal" : key.replace(/^device:/, "");
+}

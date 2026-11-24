@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { GripVertical, Plus, Settings2, Trash2 } from "lucide-react";
 import { GRID_COLUMNS, type Block, type LayoutKey } from "@/schema/blueprint";
-import { gridRows, readingOrder, resolveLayout, type Device } from "@/engine/layout";
+import { gridRows, layoutBlocks, layoutTargets, readingOrder, resolveLayout, stackForPhone, type Device, type LayoutTarget } from "@/engine/layout";
 import { clampMove, clampSize, layoutOps } from "@/engine/editing";
 import { PageIcon } from "@/components/shell/Icon";
 import { useEdit } from "@/components/edit/EditProvider";
@@ -38,6 +38,9 @@ export function EditablePage({
   const [drag, setDrag] = useState<Drag | null>(null);
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // Which layout Edit mode works on; null = the one this viewer currently sees.
+  const [target, setTarget] = useState<LayoutTarget | null>(null);
+  if (!editing && target !== null) setTarget(null);
 
   const page = blueprint.pages.find((p) => p.id === pageId);
   if (!page) {
@@ -50,10 +53,16 @@ export function EditablePage({
   }
 
   const resolved = resolveLayout(page, { device, userId });
-  const layoutKey: LayoutKey | undefined = resolved.source === "default" ? undefined : resolved.source;
-  const alwaysGrid = resolved.source.startsWith("device:");
-  const blocks = readingOrder(resolved.blocks).map((b) => (drag?.id === b.id ? drag.preview : b));
-  const settingsBlock = resolved.blocks.find((b) => b.id === settingsFor);
+  const active: LayoutTarget = editing ? (target ?? resolved.source) : resolved.source;
+  const activeBlocks = editing ? layoutBlocks(page, active) : resolved.blocks;
+  const sourceBlocks = activeBlocks ?? [];
+  const layoutKey: LayoutKey | undefined = active === "default" ? undefined : active;
+  const alwaysGrid = active.startsWith("device:");
+  const canvas = editing && active === "device:phone" ? "max-w-[420px]" : editing && active === "device:tablet" ? "max-w-[820px]" : "";
+  const blocks = readingOrder(sourceBlocks).map((b) => (drag?.id === b.id ? drag.preview : b));
+  const settingsBlock = sourceBlocks.find((b) => b.id === settingsFor);
+  const targets = layoutTargets(page, userId);
+  const activeLabel = targets.find((t) => t.key === active)?.label ?? "This";
 
   const step = () => {
     const width = gridRef.current?.clientWidth ?? 1200;
@@ -84,14 +93,14 @@ export function EditablePage({
     setDrag(null);
     if (p.x === b.x && p.y === b.y && p.w === b.w && p.h === b.h) return;
     const change = drag.mode === "move" ? { x: p.x, y: p.y } : { w: p.w, h: p.h };
-    push(layoutOps(page.id, resolved.blocks, b.id, change, layoutKey));
+    push(layoutOps(page.id, sourceBlocks, b.id, change, layoutKey));
   };
   const nudge = (e: React.KeyboardEvent, b: Block) => {
     const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
     if (!d) return;
     e.preventDefault();
     const change = e.shiftKey ? { w: b.w + d[0], h: b.h + d[1] } : { x: b.x + d[0], y: b.y + d[1] };
-    push(layoutOps(page.id, resolved.blocks, b.id, change, layoutKey));
+    push(layoutOps(page.id, sourceBlocks, b.id, change, layoutKey));
   };
 
   const rows = Math.max(gridRows(blocks), editing ? gridRows(blocks) + 2 : 0);
@@ -126,11 +135,48 @@ export function EditablePage({
         )}
         <EditButton />
       </div>
-      {editing && resolved.source !== "default" && (
-        <p className="mb-4 text-sm text-muted">You are editing the {resolved.source.startsWith("user:") ? "personal" : resolved.source.slice(7)} layout of this page.</p>
+      {editing && (
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted">Layout for</span>
+          <div role="radiogroup" aria-label="Layout to edit" className="flex flex-wrap gap-1 rounded-full bg-card p-1 shadow-soft">
+            {targets.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="radio"
+                aria-checked={t.key === active}
+                onClick={() => setTarget(t.key)}
+                className={`rounded-full px-3 py-1 text-sm ${t.key === active ? "bg-accent text-white" : "text-muted hover:bg-ground"} ${!t.exists && t.key !== active ? "italic" : ""}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {activeBlocks && active !== "default" && (
+            <button type="button" className="text-sm text-muted underline hover:text-ink" onClick={() => push({ op: "removeLayoutOverride", pageId: page.id, layout: active })}>
+              Use the Everyone layout instead
+            </button>
+          )}
+        </div>
+      )}
+      {editing && !activeBlocks && active !== "default" && (
+        <div className="card mb-6 flex flex-col items-start gap-3 p-6 sm:flex-row sm:items-center">
+          <p className="flex-1 text-sm">
+            <strong>{activeLabel}</strong> {active.startsWith("user:") ? "uses" : "use"} the Everyone layout. Give {active.startsWith("user:") ? "yourself" : "them"} a separate one to arrange blocks differently.
+          </p>
+          <button type="button" className="btn-primary" onClick={() =>
+              push(
+                active === "device:phone"
+                  ? { op: "setLayoutOverride", pageId: page.id, layout: active, blocks: stackForPhone(page.layout.blocks) }
+                  : { op: "createLayoutOverride", pageId: page.id, layout: active },
+              )
+            }>
+            Create {activeLabel.toLowerCase()} layout
+          </button>
+        </div>
       )}
 
-      {blocks.length === 0 && !editing ? (
+      {editing && !activeBlocks ? null : blocks.length === 0 && !editing ? (
         <div className="card flex flex-col items-center justify-center gap-1 p-12 text-center">
           <p className="font-semibold">This page is empty</p>
           <p className="text-sm text-muted">Click Edit to add blocks, or ask the assistant to build it.</p>
@@ -138,12 +184,12 @@ export function EditablePage({
       ) : (
         <div
           ref={gridRef}
-          className={`relative gap-4 ${alwaysGrid ? "grid" : "flex flex-col md:grid"} ${editing ? "rounded-card md:bg-[linear-gradient(to_right,var(--line)_1px,transparent_1px)] md:[background-size:calc((100%+16px)/12)_100%]" : ""}`}
+          className={`relative mx-auto gap-4 ${canvas} ${alwaysGrid ? "grid" : "flex flex-col md:grid"} ${editing ? "rounded-card md:bg-[linear-gradient(to_right,var(--line)_1px,transparent_1px)] md:[background-size:calc((100%+16px)/12)_100%]" : ""}`}
           style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, ${ROW_HEIGHT}px)` }}
           onPointerMove={move}
           onPointerUp={end}
           onPointerCancel={() => setDrag(null)}
-          data-layout={resolved.source}
+          data-layout={active}
         >
           {blocks.map((b) => (
             <div
@@ -200,7 +246,7 @@ export function EditablePage({
       {settingsBlock && (
         <BlockSettings open onClose={() => setSettingsFor(null)} pageId={page.id} block={settingsBlock} layout={layoutKey} />
       )}
-      <AddBlockDialog open={adding} onClose={() => setAdding(false)} page={page} layout={layoutKey} device={device} userId={userId} />
+      <AddBlockDialog open={adding} onClose={() => setAdding(false)} page={page} layout={layoutKey} blocks={sourceBlocks} />
     </div>
   );
 }

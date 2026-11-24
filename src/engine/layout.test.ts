@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deviceFromUserAgent, gridRows, menuPages, readingOrder, resolveLayout } from "./layout";
+import { deviceFromUserAgent, gridRows, layoutBlocks, layoutTargets, menuPages, readingOrder, resolveLayout, stackForPhone } from "./layout";
 import { salonBlueprint } from "./__tests__/fixtures";
 import type { Block, Page } from "@/schema/blueprint";
 
@@ -54,5 +54,42 @@ describe("grid helpers", () => {
     expect(deviceFromUserAgent({ device: { type: "mobile" } })).toBe("phone");
     expect(deviceFromUserAgent({ device: { type: "tablet" } })).toBe("tablet");
     expect(deviceFromUserAgent({ device: {} })).toBe("desktop");
+  });
+});
+
+describe("layout targets", () => {
+  const page: Page = {
+    id: "pg_x",
+    label: "X",
+    menuOrder: 0,
+    hidden: false,
+    layout: { columns: 12, blocks: [blk("blk_a", 0, 0)] },
+    layoutOverrides: { "device:phone": { blocks: [blk("blk_a", 0, 0, 12)] } },
+  };
+
+  it("lists targets with existence, 'Just me' only for signed-in users", () => {
+    expect(layoutTargets(page).map((t) => [t.key, t.exists])).toEqual([
+      ["default", true],
+      ["device:phone", true],
+      ["device:tablet", false],
+    ]);
+    expect(layoutTargets(page, USER).at(-1)).toEqual({ key: `user:${USER}`, label: "Just me", exists: false });
+  });
+
+  it("returns the blocks of one layout", () => {
+    expect(layoutBlocks(page, "device:phone")?.[0].w).toBe(12);
+    expect(layoutBlocks(page, "device:tablet")).toBeNull();
+    expect(layoutBlocks(page, "default")).toBe(page.layout.blocks);
+  });
+});
+
+describe("stackForPhone", () => {
+  it("stacks blocks full width in reading order", () => {
+    const out = stackForPhone([blk("blk_b", 6, 0, 6, 2), blk("blk_a", 0, 0, 6, 1), blk("blk_c", 0, 2, 12, 3)]);
+    expect(out.map((b) => [b.id, b.x, b.y, b.w, b.h])).toEqual([
+      ["blk_a", 0, 0, 12, 1],
+      ["blk_b", 0, 1, 12, 2],
+      ["blk_c", 0, 3, 12, 3],
+    ]);
   });
 });

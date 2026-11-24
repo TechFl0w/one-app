@@ -93,6 +93,27 @@ const log = (...a) => console.log("•", ...a);
   await p.waitForSelector('[role="status"]');
   assert.ok((await p.locator("aside:visible nav a").allTextContents()).includes("Price list"));
   log("menu now:", await p.locator("aside:visible nav a").allTextContents());
+  // per-device layout: create a phone layout, make the calendar full width there only
+  await p.goto(BASE + "/demo/p/pg_today");
+  await p.getByRole("button", { name: "Edit" }).click();
+  await p.getByRole("radio", { name: "Phones" }).click();
+  await p.getByRole("button", { name: "Create phones layout" }).click();
+  assert.equal(await p.locator('[data-layout="device:phone"]').count(), 1);
+  // starts stacked full width; make the "Up next" list shorter there
+  await p.locator('[data-block="blk_next"] button[aria-label^="Move"]').focus();
+  await p.keyboard.press("Shift+ArrowUp");
+  const phoneStyle = await p.locator('[data-block="blk_next"]').getAttribute("style");
+  log("phone layout blk_next:", phoneStyle);
+  assert.match(phoneStyle, /span 4 \/ span 12/);
+  await p.screenshot({ path: `${S}/edit-5-phone-layout.png` });
+  await p.getByRole("radio", { name: "Everyone" }).click();
+  const defaultStyle = await p.locator('[data-block="blk_next"]').getAttribute("style");
+  log("default layout blk_next:", defaultStyle);
+  assert.match(defaultStyle, /span 5 \/ span 4/);
+  await p.getByRole("button", { name: "Done" }).click();
+  await p.waitForSelector('[role="status"]');
+  log("saved:", (await p.locator('[role="status"]').textContent()).slice(0, 140));
+
   assert.deepEqual(errors, []);
   log("ok");
   await b.close();
