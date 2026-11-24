@@ -22,6 +22,9 @@ export async function proxy(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const path = request.nextUrl.pathname;
   if (!data?.claims && !PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`))) {
+    if (path.startsWith("/api/")) {
+      return NextResponse.json({ error: { code: "unauthenticated", message: "Sign in first" } }, { status: 401 });
+    }
     const login = request.nextUrl.clone();
     login.pathname = "/login";
     login.searchParams.set("next", path);
