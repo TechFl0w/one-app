@@ -7,6 +7,7 @@ export default function DemoLayout({ children }: LayoutProps<"/demo">) {
   return (
     <AppShell
       blueprint={demoBlueprint}
+      mode={{ kind: "local" }}
       basePath="/demo"
       banner={
         <div className="border-b border-line bg-accent-tint px-4 py-2 text-center text-sm text-accent md:px-8">

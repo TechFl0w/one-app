@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:db": "scripts/test-db.sh",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "e2e": "node e2e/demo-edit.cjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

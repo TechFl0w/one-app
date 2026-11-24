@@ -8,6 +8,7 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
   return (
     <AppShell
       blueprint={blueprint}
+      mode={{ kind: "server", businessId }}
       basePath={`/b/${businessId}`}
       businesses={businesses}
       footer={

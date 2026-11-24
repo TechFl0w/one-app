@@ -1,6 +1,6 @@
-import { notFound } from "next/navigation";
 import { getDevice } from "@/server/context";
 import { PageView } from "@/components/page/PageView";
+import { EditablePage } from "@/components/page/EditablePage";
 import { demoBlueprint, demoRecords } from "@/demo/salon";
 import { memoryStore } from "@/engine/store";
 import { submitDemoForm } from "../../actions";
@@ -8,7 +8,7 @@ import { submitDemoForm } from "../../actions";
 export default async function DemoPage({ params }: PageProps<"/demo/p/[pageId]">) {
   const { pageId } = await params;
   const page = demoBlueprint.pages.find((p) => p.id === pageId);
-  if (!page) notFound();
+  if (!page) return <EditablePage pageId={pageId} device={await getDevice()} rendered={{}} />;
   return (
     <PageView
       page={page}

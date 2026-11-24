@@ -113,13 +113,16 @@ describe("applyChangeSet", () => {
     // Off the grid
     expectError(() => applyChangeSet(bp, cs(bp, { op: "resizeBlock", pageId: "pg_today", blockId: "blk_cal", w: 13, h: 4 })), "invalid");
     expectError(() => applyChangeSet(bp, cs(bp, { op: "moveBlock", pageId: "pg_today", blockId: "blk_cal", x: 6, y: 0 })), "invalid");
-    // Removing a field a block depends on
-    expectError(
+    // Removing a field a block depends on — explained in owner terms
+    const e = expectError(
       () => applyChangeSet(bp, cs(bp, { op: "removeField", tableId: "tbl_bookings", fieldId: "fld_amount" }), { confirmed: true }),
       "invalid",
     );
+    expect(e.message).toBe("That can’t be removed yet: the number block on page “Today” still uses it. Change or remove that first.");
     // Removing a table others link to
-    expectError(() => applyChangeSet(bp, cs(bp, { op: "removeTable", tableId: "tbl_team" }), { confirmed: true }), "invalid");
+    expect(expectError(() => applyChangeSet(bp, cs(bp, { op: "removeTable", tableId: "tbl_team" }), { confirmed: true }), "invalid").message).toMatch(
+      /field “Favourite tech” on “Clients” still uses it/,
+    );
     // Duplicate ids
     expectError(
       () => applyChangeSet(bp, cs(bp, { op: "addField", tableId: "tbl_clients", field: { id: "fld_name", label: "x", type: "text" } })),

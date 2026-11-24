@@ -3,22 +3,29 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ChevronsUpDown, Menu, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Eye, EyeOff, Menu, Plus, X } from "lucide-react";
+import { menuPages } from "@/engine/layout";
+import { menuOrder, movePageOp } from "@/engine/editing";
+import { useEdit } from "@/components/edit/EditProvider";
+import { AddPageDialog } from "@/components/edit/AddDialogs";
 import { PageIcon } from "./Icon";
 
 export interface SidebarProps {
-  businessName: string;
   basePath: string;
-  pages: { id: string; label: string; icon?: string }[];
   businesses?: { id: string; name: string }[];
   footer?: React.ReactNode;
 }
 
-/** White sidebar with the business's pages; collapses into a drawer on phones. */
-export function Sidebar({ businessName, basePath, pages, businesses = [], footer }: SidebarProps) {
+/** White sidebar with the business's pages; collapses into a drawer on phones. In Edit mode
+ * every page (hidden ones too) can be renamed, reordered, hidden and added. */
+export function Sidebar({ basePath, businesses = [], footer }: SidebarProps) {
+  const { blueprint, editing, push } = useEdit();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [addingPage, setAddingPage] = useState(false);
+  const businessName = blueprint.business.name;
+  const pages = editing ? menuOrder(blueprint) : menuPages(blueprint);
   const activeId = pathname.match(/\/p\/([^/]+)/)?.[1] ?? pages[0]?.id;
 
   const nav = (
@@ -49,8 +56,41 @@ export function Sidebar({ businessName, basePath, pages, businesses = [], footer
           </ul>
         )}
       </div>
-      <nav className="flex-1 space-y-0.5" aria-label="Pages">
-        {pages.map((p) => {
+      <nav className="flex-1 space-y-0.5 overflow-y-auto" aria-label="Pages">
+        {editing &&
+          pages.map((p, i) => (
+            <div key={p.id} className={`group flex items-center gap-1 rounded-2xl px-1.5 py-1 ${p.hidden ? "opacity-50" : ""} ${p.id === activeId ? "bg-accent-tint" : ""}`}>
+              <PageIcon name={p.icon} className="h-[18px] w-[18px] shrink-0 text-muted" />
+              <input
+                key={`${p.id}:${p.label}`}
+                aria-label={`Rename ${p.label}`}
+                className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1.5 py-1 text-sm outline-none hover:border-line focus:border-accent focus:bg-card"
+                defaultValue={p.label}
+                maxLength={80}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v && v !== p.label) push({ op: "rename", target: { kind: "page", pageId: p.id }, label: v });
+                  else e.target.value = p.label;
+                }}
+                onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+              />
+              <button type="button" className="rounded-full p-1 text-muted hover:bg-card hover:text-ink disabled:opacity-30" disabled={i === 0} onClick={() => { const op = movePageOp(blueprint, p.id, -1); if (op) push(op); }} aria-label={`Move ${p.label} up`}>
+                <ArrowUp className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" className="rounded-full p-1 text-muted hover:bg-card hover:text-ink disabled:opacity-30" disabled={i === pages.length - 1} onClick={() => { const op = movePageOp(blueprint, p.id, 1); if (op) push(op); }} aria-label={`Move ${p.label} down`}>
+                <ArrowDown className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" className="rounded-full p-1 text-muted hover:bg-card hover:text-ink" onClick={() => push({ op: "setPageHidden", pageId: p.id, hidden: !p.hidden })} aria-label={p.hidden ? `Show ${p.label}` : `Hide ${p.label}`}>
+                {p.hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          ))}
+        {editing && (
+          <button type="button" className="mt-2 flex w-full items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-accent hover:bg-accent-tint" onClick={() => setAddingPage(true)}>
+            <Plus className="h-4 w-4" /> Add page
+          </button>
+        )}
+        {!editing && pages.map((p) => {
           const active = p.id === activeId;
           return (
             <Link
@@ -97,6 +137,7 @@ export function Sidebar({ businessName, basePath, pages, businesses = [], footer
           </aside>
         </div>
       )}
+      <AddPageDialog open={addingPage} onClose={() => setAddingPage(false)} basePath={basePath} />
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-card p-4 md:flex">{nav}</aside>
     </>

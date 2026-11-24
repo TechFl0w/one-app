@@ -1,28 +1,13 @@
 import type { Page } from "@/schema/blueprint";
-import { resolveLayout, type Device } from "@/engine/layout";
-import { PageIcon } from "@/components/shell/Icon";
+import type { Device } from "@/engine/layout";
 import { BlockView, type BlockEnv } from "@/components/blocks/BlockView";
-import { PageGrid } from "./PageGrid";
+import { EditablePage } from "./EditablePage";
 
-export function PageView({
-  page,
-  device,
-  userId,
-  env,
-}: {
-  page: Page;
-  device: Device;
-  userId?: string;
-  env: BlockEnv;
-}) {
-  const layout = resolveLayout(page, { device, userId });
-  return (
-    <div className="mx-auto max-w-[1400px]">
-      <div className="mb-6 flex items-center gap-3">
-        <PageIcon name={page.icon} className="h-6 w-6 text-accent" />
-        <h1 className="text-2xl font-bold tracking-tight">{page.label}</h1>
-      </div>
-      <PageGrid layout={layout} renderBlock={(b) => <BlockView block={b} env={env} />} />
-    </div>
+/** Server part of a page: renders every block's content, then hands layout to EditablePage. */
+export function PageView({ page, device, userId, env }: { page: Page; device: Device; userId?: string; env: BlockEnv }) {
+  const blocks = new Map(
+    [page.layout.blocks, ...Object.values(page.layoutOverrides ?? {}).map((o) => o?.blocks ?? [])].flat().map((b) => [b.id, b]),
   );
+  const rendered = Object.fromEntries([...blocks.values()].map((b) => [b.id, <BlockView key={b.id} block={b} env={env} />]));
+  return <EditablePage pageId={page.id} device={device} userId={userId} rendered={rendered} />;
 }

@@ -119,13 +119,7 @@ function run(blueprint: Blueprint, input: unknown, opts: ApplyOptions): ChangeSe
   draft.version = blueprint.version + 1;
   const checked = Blueprint.safeParse(draft);
   if (!checked.success) {
-    const first = checked.error.issues[0];
-    throw new ChangeSetError(
-      "invalid",
-      `Result would be invalid: ${first.path.join(".")}: ${first.message}`,
-      undefined,
-      checked.error.issues,
-    );
+    throw new ChangeSetError("invalid", explainIssue(draft, checked.error.issues[0]), undefined, checked.error.issues);
   }
 
   return {
@@ -139,6 +133,34 @@ function run(blueprint: Blueprint, input: unknown, opts: ApplyOptions): ChangeSe
     ops: previews,
     requiresConfirmation: previews.some((p) => p.risk === "risky"),
   };
+}
+
+/** Turns a validation issue on the would-be blueprint into a sentence an owner understands. */
+export function explainIssue(bp: Blueprint, issue: z.core.$ZodIssue): string {
+  const [section, i, ...rest] = issue.path as (string | number)[];
+  let where: string | undefined;
+  if (section === "pages" && typeof i === "number") {
+    const page = bp.pages[i];
+    const blockIdx = rest[rest.indexOf("blocks") + 1];
+    const block = rest.includes("blocks") && typeof blockIdx === "number"
+      ? (rest[0] === "layoutOverrides" ? page?.layoutOverrides?.[rest[1] as LayoutKey]?.blocks[blockIdx] : page?.layout.blocks[blockIdx])
+      : undefined;
+    const title = typeof block?.options?.title === "string" ? `“${block.options.title}”` : block ? `${block.type}` : undefined;
+    where = block ? `the ${title} block on page “${page?.label}”` : page ? `page “${page.label}”` : undefined;
+  } else if (section === "automations" && typeof i === "number") {
+    where = bp.automations[i] ? `automation “${bp.automations[i].label}”` : undefined;
+  } else if (section === "tables" && typeof i === "number") {
+    const t = bp.tables[i];
+    const fieldIdx = rest[0] === "fields" ? rest[1] : undefined;
+    const f = typeof fieldIdx === "number" ? t?.fields[fieldIdx] : undefined;
+    where = f ? `field “${f.label}” on “${t.label}”` : t ? `table “${t.label}”` : undefined;
+  }
+  if (/^(unknown (table|field)|links to unknown table|rollup must)/.test(issue.message) && where) {
+    return `That can’t be removed yet: ${where} still uses it. Change or remove that first.`;
+  }
+  if (/duplicate/.test(issue.message)) return `Something with that name already exists${where ? ` (${where})` : ""}.`;
+  if (/columns/.test(issue.message) && where) return `${where[0].toUpperCase()}${where.slice(1)} doesn’t fit the 12-column grid.`;
+  return `That change doesn’t work${where ? ` for ${where}` : ""}: ${issue.message}.`;
 }
 
 // ---------- lookups ----------
