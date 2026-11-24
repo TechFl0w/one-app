@@ -1,5 +1,5 @@
 import type { Field } from "@/schema/blueprint";
-import { startOfLocalDay } from "./dates";
+import { localDateTimeToIso } from "./dates";
 
 /**
  * Turns HTML form values (always strings) into typed record input keyed by field id.
@@ -35,6 +35,7 @@ export function formToInput(
       case "rollup":
       case "file":
       case "person":
+      case "hours":
         break; // not editable through simple forms
       default:
         out[f.id] = str === "" ? null : str;
@@ -43,17 +44,4 @@ export function formToInput(
   return out;
 }
 
-/** "2026-12-01T09:30" (wall clock in `tz`, from <input type="datetime-local">) → ISO instant. */
-export function localDateTimeToIso(value: string, tz: string): string | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
-  if (!m) return null;
-  const [, y, mo, d, h, mi] = m.map(Number);
-  // Midnight + wall-clock minutes, then re-check the offset at that instant (DST days).
-  const midnight = startOfLocalDay({ year: y, month: mo, day: d }, tz);
-  const guess = new Date(midnight.getTime() + (h * 60 + mi) * 60_000);
-  const local = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", hour: "2-digit", minute: "2-digit" })
-    .formatToParts(guess)
-    .reduce((acc, p) => (p.type === "hour" ? acc + Number(p.value) * 60 : p.type === "minute" ? acc + Number(p.value) : acc), 0);
-  const drift = local - (h * 60 + mi);
-  return new Date(guess.getTime() - (((drift % 1440) + 1440 + 720) % 1440 - 720) * 60_000).toISOString();
-}
+export { localDateTimeToIso } from "./dates";

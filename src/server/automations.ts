@@ -6,6 +6,8 @@ import type { RecordEvent } from "@/automations/engine";
 import { Blueprint } from "@/schema/blueprint";
 import { tableOrThrow, validateRecordInput } from "@/engine/records";
 import { getCurrentBlueprint } from "./blueprints";
+import { supabaseOwnerBackend } from "./ownerBackend";
+import { expireHolds } from "@/booking/service";
 import { ensureEmailSettings, sendEmail } from "./email";
 import { renderTemplate, resolveRecipient } from "@/email/compose";
 import { formatDateTime } from "@/components/blocks/format";
@@ -131,6 +133,12 @@ export async function automationTick(db: SupabaseClient, now = new Date()) {
     if (bp.success && bp.data.automations.some((a) => a.enabled && a.trigger.type === "date_reached")) {
       queued += await enqueueDueDates(c.business_id, io, queue, now);
     }
+  }
+
+  // Holds that ran out free their time (status → cancelled; the slot guard updates by trigger).
+  for (const c of current) {
+    const bp = Blueprint.safeParse(c.json);
+    if (bp.success && bp.data.scheduling?.statuses.held) await expireHolds(bp.data, supabaseOwnerBackend(db, c.business_id), now);
   }
 
   const runs = await runDueJobs(io, queue, now);

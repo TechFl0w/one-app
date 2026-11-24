@@ -92,7 +92,7 @@ async function groupsFor(blueprint: Blueprint, field: Field, store: RecordStore,
 export function formFieldsFor(table: Table, wanted?: unknown): Field[] {
   const ids = Array.isArray(wanted) && wanted.every(isStr) ? (wanted as string[]) : undefined;
   const fields = ids ? ids.map((id) => table.fields.find((f) => f.id === id)).filter((f): f is Field => !!f) : table.fields;
-  return fields.filter((f) => !["formula", "rollup", "file", "person"].includes(f.type));
+  return fields.filter((f) => !["formula", "rollup", "file", "person", "hours"].includes(f.type));
 }
 
 const opt = <T>(v: unknown, guard: (x: unknown) => x is T): T | undefined => (guard(v) ? v : undefined);

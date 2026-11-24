@@ -56,6 +56,8 @@ export function valueText(field: Field, value: unknown, labels: LinkLabels, ctx:
       const ids = Array.isArray(value) ? value : [value];
       return ids.map((id) => labels[String(id)] ?? "—").join(", ");
     }
+    case "hours":
+      return hoursSummary(value as Record<string, [string, string][]>);
     case "file":
       return typeof value === "object" && value && "name" in value ? String((value as { name: unknown }).name) : "File";
     default:
@@ -105,4 +107,21 @@ export function FieldValue({ field, value, labels, ctx }: { field: Field; value:
     default:
       return <>{valueText(field, value, labels, ctx)}</>;
   }
+}
+
+const DAY_LABEL: Record<string, string> = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
+
+/** { mon:[["09:00","17:00"]], tue:… } → "Mon–Fri 09:00–17:00, Sat 10:00–14:00" */
+export function hoursSummary(h: Record<string, [string, string][]> | null | undefined): string {
+  if (!h || typeof h !== "object") return "";
+  const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+  const key = (d: string) => (h[d] ?? []).map(([a, b]) => `${a}–${b}`).join(", ");
+  const groups: { from: string; to: string; ranges: string }[] = [];
+  for (const d of days) {
+    const ranges = key(d);
+    const last = groups.at(-1);
+    if (ranges && last && last.ranges === ranges && days.indexOf(last.to) === days.indexOf(d) - 1) last.to = d;
+    else if (ranges) groups.push({ from: d, to: d, ranges });
+  }
+  return groups.map((g) => `${DAY_LABEL[g.from]}${g.to !== g.from ? `–${DAY_LABEL[g.to]}` : ""} ${g.ranges}`).join("; ") || "Closed";
 }

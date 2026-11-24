@@ -32,7 +32,8 @@ const plain: Fmt = (f, v) => {
 };
 
 export function auditLine(bp: Blueprint, row: AuditRow, me: string | undefined, fmt: Fmt = plain): AuditLine {
-  const who = row.source === "ai" ? "Assistant" : row.actor_id && row.actor_id === me ? "You" : row.actor_id ? "A team member" : "System";
+  const who =
+    row.source === "ai" ? "Assistant" : row.actor_id && row.actor_id === me ? "You" : row.actor_id ? "A team member" : row.source === "ui" ? "Online booking" : "Automation";
   const table = bp.tables.find((t) => t.id === row.table_id);
   const thing = table?.label.replace(/s$/, "").toLowerCase() ?? "record";
   const data = (row.details?.after ?? row.details?.before ?? {}) as Record<string, unknown>;

@@ -42,6 +42,7 @@ export const FIELD_TYPES = [
   "email",
   "formula",
   "rollup",
+  "hours",
 ] as const;
 export const FieldType = z.enum(FIELD_TYPES);
 export type FieldType = z.infer<typeof FieldType>;
@@ -72,6 +73,7 @@ const SimpleField = z.strictObject({
     "checkbox",
     "phone",
     "email",
+    "hours",
   ]),
 });
 
@@ -290,6 +292,68 @@ export const BusinessInfo = z.strictObject({
   timezone: z.string().min(1).max(64),
 });
 
+// ---------- scheduling (bookings) ----------
+
+export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "time like 09:30");
+/** Opening/working hours per weekday: { mon: [["09:00","12:00"],["13:00","17:00"]], … }. Missing day = closed. */
+export const WeeklyHours = z
+  .partialRecord(z.enum(WEEKDAYS), z.array(z.tuple([HHMM, HHMM])).max(6))
+  .refine((h) => Object.values(h).every((ranges) => ranges!.every(([a, b]) => a < b)), "each range must end after it starts");
+export type WeeklyHours = z.infer<typeof WeeklyHours>;
+
+export const BOOKING_STATES = ["requested", "held", "confirmed", "checked_in", "completed", "paid", "cancelled", "no_show"] as const;
+export type BookingState = (typeof BOOKING_STATES)[number];
+
+/**
+ * Which tables/fields play which role in bookings, plus booking rules. Everything is referenced
+ * by id, so owners can rename freely. See docs/booking-engine.md.
+ */
+export const Scheduling = z.strictObject({
+  bookings: z.strictObject({
+    table: TableId,
+    start: FieldId,
+    end: FieldId,
+    service: FieldId,
+    practitioner: FieldId,
+    resource: FieldId.optional(),
+    client: FieldId,
+    status: FieldId,
+    holdUntil: FieldId.optional(),
+    amount: FieldId.optional(),
+  }),
+  services: z.strictObject({
+    table: TableId,
+    duration: FieldId,
+    price: FieldId.optional(),
+    bufferBefore: FieldId.optional(),
+    bufferAfter: FieldId.optional(),
+    /** Link (multiple) to practitioners who can do it; empty = anyone. */
+    practitioners: FieldId.optional(),
+    /** Choice field matched by option label against resources.type. */
+    resourceType: FieldId.optional(),
+    /** Checkbox: shown on the public booking page (missing field = all shown). */
+    online: FieldId.optional(),
+  }),
+  practitioners: z.strictObject({ table: TableId, hours: FieldId.optional(), maxPerDay: FieldId.optional(), online: FieldId.optional() }),
+  resources: z.strictObject({ table: TableId, type: FieldId.optional() }).optional(),
+  timeOff: z.strictObject({ table: TableId, who: FieldId, start: FieldId, end: FieldId }).optional(),
+  clients: z.strictObject({ table: TableId, name: FieldId, email: FieldId.optional(), phone: FieldId.optional() }),
+  hours: WeeklyHours,
+  rules: z.strictObject({
+    slotStepMin: z.int().min(5).max(240),
+    minNoticeMin: z.int().min(0).max(60 * 24 * 30),
+    horizonDays: z.int().min(1).max(365),
+    holdMin: z.int().min(1).max(240),
+    cancelWindowHours: z.int().min(0).max(24 * 14),
+    /** New online bookings start confirmed instead of requested. */
+    autoConfirm: z.boolean(),
+  }),
+  /** Option ids of the bookings status field for each lifecycle state (unmapped states are unused). */
+  statuses: z.partialRecord(z.enum(BOOKING_STATES), z.string().regex(/^opt_[a-z0-9_]{1,60}$/)),
+});
+export type Scheduling = z.infer<typeof Scheduling>;
+
 const BlueprintShape = z.strictObject({
   version: z.int().min(1),
   business: BusinessInfo,
@@ -298,6 +362,7 @@ const BlueprintShape = z.strictObject({
   automations: z.array(Automation),
   connections: z.array(Connection),
   modules: z.array(Module),
+  scheduling: Scheduling.optional(),
 });
 
 /** Full blueprint with referential-integrity checks. */
@@ -383,8 +448,77 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
   });
 
   bp.connections.forEach((c, ci) => claim(c.id, ["connections", ci, "id"]));
+
+  if (bp.scheduling) checkScheduling(bp.scheduling, tables, issue);
 });
 export type Blueprint = z.infer<typeof Blueprint>;
+
+/** Every role in the scheduling section must point at a real table/field of the right type. */
+function checkScheduling(
+  sc: Scheduling,
+  tables: Map<string, Table>,
+  issue: (path: (string | number)[], message: string) => void,
+) {
+  const role = (path: string[], tableId: string, fieldId: string | undefined, types: Field["type"][], linkTo?: string) => {
+    if (!fieldId) return;
+    const f = tables.get(tableId)?.fields.find((x) => x.id === fieldId);
+    const at = ["scheduling", ...path];
+    if (!f) return issue(at, `unknown field ${fieldId}`);
+    if (!types.includes(f.type)) return issue(at, `${fieldId} must be ${types.join(" or ")}`);
+    if (linkTo && f.type === "link" && f.to !== linkTo) issue(at, `${fieldId} must link to ${linkTo}`);
+  };
+  const sections = [
+    ["bookings", sc.bookings.table],
+    ["services", sc.services.table],
+    ["practitioners", sc.practitioners.table],
+    ["clients", sc.clients.table],
+    ...(sc.resources ? [["resources", sc.resources.table]] : []),
+    ...(sc.timeOff ? [["timeOff", sc.timeOff.table]] : []),
+  ] as const;
+  for (const [name, t] of sections) if (!tables.has(t)) issue(["scheduling", name, "table"], `unknown table ${t}`);
+  if (sections.some(([, t]) => !tables.has(t))) return;
+
+  const b = sc.bookings;
+  role(["bookings", "start"], b.table, b.start, ["datetime"]);
+  role(["bookings", "end"], b.table, b.end, ["datetime"]);
+  role(["bookings", "service"], b.table, b.service, ["link"], sc.services.table);
+  role(["bookings", "practitioner"], b.table, b.practitioner, ["link"], sc.practitioners.table);
+  role(["bookings", "client"], b.table, b.client, ["link"], sc.clients.table);
+  role(["bookings", "status"], b.table, b.status, ["status", "choice"]);
+  role(["bookings", "holdUntil"], b.table, b.holdUntil, ["datetime"]);
+  role(["bookings", "amount"], b.table, b.amount, ["money", "number"]);
+  if (sc.resources) role(["bookings", "resource"], b.table, b.resource, ["link"], sc.resources.table);
+  const s = sc.services;
+  role(["services", "duration"], s.table, s.duration, ["number"]);
+  role(["services", "price"], s.table, s.price, ["money", "number"]);
+  role(["services", "bufferBefore"], s.table, s.bufferBefore, ["number"]);
+  role(["services", "bufferAfter"], s.table, s.bufferAfter, ["number"]);
+  role(["services", "practitioners"], s.table, s.practitioners, ["link"], sc.practitioners.table);
+  role(["services", "resourceType"], s.table, s.resourceType, ["choice", "status"]);
+  role(["services", "online"], s.table, s.online, ["checkbox"]);
+  role(["practitioners", "hours"], sc.practitioners.table, sc.practitioners.hours, ["hours"]);
+  role(["practitioners", "maxPerDay"], sc.practitioners.table, sc.practitioners.maxPerDay, ["number"]);
+  role(["practitioners", "online"], sc.practitioners.table, sc.practitioners.online, ["checkbox"]);
+  if (sc.resources) role(["resources", "type"], sc.resources.table, sc.resources.type, ["choice", "status"]);
+  if (sc.timeOff) {
+    role(["timeOff", "who"], sc.timeOff.table, sc.timeOff.who, ["link"], sc.practitioners.table);
+    role(["timeOff", "start"], sc.timeOff.table, sc.timeOff.start, ["datetime", "date"]);
+    role(["timeOff", "end"], sc.timeOff.table, sc.timeOff.end, ["datetime", "date"]);
+  }
+  role(["clients", "name"], sc.clients.table, sc.clients.name, ["text"]);
+  role(["clients", "email"], sc.clients.table, sc.clients.email, ["email"]);
+  role(["clients", "phone"], sc.clients.table, sc.clients.phone, ["phone"]);
+
+  const status = tables.get(b.table)?.fields.find((f) => f.id === b.status);
+  if (status && "options" in status) {
+    for (const [state, opt] of Object.entries(sc.statuses)) {
+      if (!status.options.some((o) => o.id === opt)) issue(["scheduling", "statuses", state], `unknown option ${opt}`);
+    }
+  }
+  for (const req of ["requested", "confirmed", "cancelled"] as const) {
+    if (!sc.statuses[req]) issue(["scheduling", "statuses", req], `map the ${req} state to a status option`);
+  }
+}
 
 /** A minimal valid blueprint for a brand-new business. */
 export function emptyBlueprint(business: z.infer<typeof BusinessInfo>): Blueprint {

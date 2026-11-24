@@ -45,7 +45,7 @@ describe("owner agent", () => {
     expect(system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(system[1].text).toContain('blk_cal calendar "Today’s calendar" from tbl_bookings');
     expect(req.tools!.map((t) => (t as Anthropic.Beta.BetaTool).name)).toEqual([
-      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "explain_automation",
+      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "find_free_times", "book_appointment", "explain_automation",
     ]);
     expect(req.messages[0].content).toContain('looking at page "Today" (pg_today)');
     expect(r.response).toEqual({ text: "Hi!", changed: false });
@@ -175,5 +175,26 @@ describe("tool definitions and setup summary", () => {
     expect(s).toContain('fld_status "Status" status options: opt_requested="Requested"');
     expect(s).toContain('fld_client "Client" link required → tbl_clients');
     expect(s).toContain('pg_settings "Settings" (hidden)');
+  });
+});
+
+describe("booking tools", () => {
+  it("finds free times and books one", async () => {
+    const { backend, state } = setup();
+    const { model, requests } = scripted(
+      call("find_free_times", { service: "00000000-0000-4000-8000-000000000020", practitioner: "00000000-0000-4000-8000-000000000002", date: "2026-12-02" }),
+      say("Priya is free from 9."),
+    );
+    await runOwnerTurn({ backend, history: [], message: "when is priya free wed", model, now: new Date("2026-11-30T12:00:00Z") });
+    const free = JSON.parse(lastToolResult(requests[1]).content);
+    expect(free.count).toBeGreaterThan(10);
+
+    const { model: m2 } = scripted(
+      call("book_appointment", { service: "00000000-0000-4000-8000-000000000020", start: free.slots[0].start, practitioner: "00000000-0000-4000-8000-000000000002", client: { name: "Zoe", email: "zoe@example.com" } }),
+      say("Booked."),
+    );
+    const r = await runOwnerTurn({ backend, history: [], message: "book zoe", model: m2 });
+    expect(r.response.changed).toBe(true);
+    expect(state.records.some((x) => x.tableId === "tbl_bookings" && x.data.fld_start === free.slots[0].start)).toBe(true);
   });
 });

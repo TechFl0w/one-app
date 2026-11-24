@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Blueprint, DataSource, Field, Table } from "@/schema/blueprint";
+import { WeeklyHours, type Blueprint, type DataSource, type Field, type Table } from "@/schema/blueprint";
 import { isDateToken, isoDate, startOfLocalDay, tokenRange, localToday } from "./dates";
 import { FileValue, RecordInput, RecordQuery, type FilterOp, type RecordFilter } from "@/schema/records";
 
@@ -99,6 +99,10 @@ export function checkValue(field: Field, value: unknown): Check {
     case "file": {
       const r = FileValue.safeParse(value);
       return r.success ? ok(r.data) : bad("must be an uploaded file");
+    }
+    case "hours": {
+      const r = WeeklyHours.safeParse(value);
+      return r.success ? ok(r.data) : bad("must be weekly hours like { mon: [[\"09:00\", \"17:00\"]] }");
     }
     case "formula":
     case "rollup":
@@ -201,6 +205,7 @@ export function fieldKind(field: Field): FieldKind | null {
     case "file":
     case "formula":
     case "rollup":
+    case "hours":
       return null;
   }
 }

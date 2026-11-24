@@ -66,3 +66,22 @@ describe("template answers", () => {
     expect(channel && "options" in channel ? channel.options.map((o) => o.label) : []).toEqual(["Market"]);
   });
 });
+
+describe("nail salon booking", () => {
+  it("is bookable right after onboarding", async () => {
+    const { availableSlots, catalog } = await import("@/booking/service");
+    const { memoryBackend } = await import("@/agent/memoryBackend");
+    const salon = TEMPLATES.find((t) => t.id === "nail_salon")!;
+    for (const extras of [[], ["stations"]]) {
+      const { blueprint, seed } = salon.build(business, { team: ["Mai", "Priya"], opening: "mon_fri", extras });
+      let n = 0;
+      const records = seed.map((s) => ({ id: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, tableId: s.table, data: s.data, createdAt: "", updatedAt: "" }));
+      const { backend } = memoryBackend({ blueprint, records });
+      const c = await catalog(blueprint, backend);
+      expect(c.practitioners.map((p) => p.name)).toEqual(["Mai", "Priya"]);
+      const slots = await availableSlots(blueprint, backend, { serviceId: c.services[0].id, from: { year: 2026, month: 12, day: 7 }, days: 1 }, new Date("2026-12-01T00:00:00Z"));
+      expect(slots.length).toBeGreaterThan(20); // Monday 9–5, 15-minute steps
+      if (extras.length) expect(slots[0].resourceId).toBeDefined();
+    }
+  });
+});

@@ -8,6 +8,7 @@ import { recordLabel } from "@/engine/blockData";
 import type { UndoToken } from "@/engine/commit";
 import type { OwnerBackend } from "./types";
 import { recordUpdateIsRisky } from "@/engine/risk";
+import { availableSlots, bookSlot } from "@/booking/service";
 
 /**
  * The owner agent's tools. Each has a zod schema (inputs are validated before running), a risk
@@ -139,6 +140,42 @@ export const OWNER_TOOLS: OwnerTool[] = [
       fx.changed = true;
       fx.preview = { summary: i.summary, ops: p.ok ? p.ops : [], undo: r.undo };
       return { applied: r.summary, version: r.blueprint.version };
+    },
+  }),
+
+  tool({
+    name: "find_free_times",
+    description: "Free appointment times for a service (optionally with one practitioner), from a date (YYYY-MM-DD, business timezone) for up to 7 days. Needs online booking set up.",
+    input: z.strictObject({
+      service: RecordId,
+      practitioner: RecordId.optional(),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      days: z.int().min(1).max(7).optional(),
+    }),
+    risk: "read",
+    run: async (b, i) => {
+      const bp = await b.blueprint();
+      const [y, m, d] = i.date.split("-").map(Number);
+      const slots = await availableSlots(bp, b, { serviceId: i.service, practitionerId: i.practitioner, from: { year: y, month: m, day: d }, days: i.days ?? 1 });
+      return { timezone: bp.business.timezone, count: slots.length, slots: slots.slice(0, 40) };
+    },
+  }),
+
+  tool({
+    name: "book_appointment",
+    description: "Book an appointment at a free time (use find_free_times first). Finds the client by email/phone or adds them. Starts as a request unless the business auto-confirms.",
+    input: z.strictObject({
+      service: RecordId,
+      start: z.string().describe("Exact slot start (ISO) from find_free_times"),
+      practitioner: RecordId.optional(),
+      client: z.strictObject({ name: z.string().min(1).max(100), email: z.string().optional(), phone: z.string().optional() }),
+    }),
+    risk: "safe",
+    run: async (b, i, fx) => {
+      const bp = await b.blueprint();
+      const r = await bookSlot(bp, b, { serviceId: i.service, practitionerId: i.practitioner, start: i.start, client: i.client });
+      fx.changed = true;
+      return { booked: r };
     },
   }),
 

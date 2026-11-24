@@ -8,7 +8,7 @@ const PUBLIC_PATHS = ["/login", "/auth"];
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   // The demo and the onboarding preview run without a session or database.
-  if (path === "/demo" || path.startsWith("/demo/") || path === "/start") return NextResponse.next();
+  if (path === "/demo" || path.startsWith("/demo/") || path === "/start" || path.startsWith("/book/")) return NextResponse.next();
   // Cron routes (CRON_SECRET) and webhooks (signatures) authenticate themselves, not with a session.
   if (path.startsWith("/api/cron/") || path.startsWith("/api/webhooks/")) return NextResponse.next(); // signed, no session
   // Without Supabase configured (local dev), only the demo works.
