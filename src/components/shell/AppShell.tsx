@@ -1,6 +1,8 @@
 import type { Blueprint } from "@/schema/blueprint";
 import { EditProvider, type EditMode } from "@/components/edit/EditProvider";
 import { Sidebar } from "./Sidebar";
+import { ChatPanel } from "@/components/chat/ChatPanel";
+import type { ChatItem } from "@/agent/transcript";
 
 export function AppShell({
   blueprint,
@@ -9,8 +11,11 @@ export function AppShell({
   businesses,
   footer,
   banner,
+  transcript,
   children,
 }: {
+  /** Owner chat so far (server mode). */
+  transcript?: ChatItem[];
   blueprint: Blueprint;
   mode: EditMode;
   basePath: string;
@@ -28,6 +33,7 @@ export function AppShell({
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
       </div>
     </div>
+    <ChatPanel mode={mode} initialTranscript={transcript} />
     </EditProvider>
   );
 }

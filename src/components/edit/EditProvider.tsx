@@ -41,6 +41,8 @@ interface EditContextValue {
   cancelConfirm(): void;
   clearError(): void;
   dismissSaved(): void;
+  /** Take a blueprint changed elsewhere (demo assistant). Ignored while editing. */
+  adoptBlueprint(bp: Blueprint): void;
 }
 
 const EditContext = createContext<EditContextValue | null>(null);
@@ -185,6 +187,9 @@ export function EditProvider({ blueprint: fromServer, mode, children }: { bluepr
       cancelConfirm: () => setConfirm(null),
       clearError: () => setError(null),
       dismissSaved: () => setLastSaved(null),
+      adoptBlueprint: (bp: Blueprint) => {
+        if (!editing) setBase(bp);
+      },
     }),
     [editing, draft, base, ops.length, error, busy, confirm, lastSaved, mode.kind, reset, push, save, undo],
   );
