@@ -1,0 +1,103 @@
+/**
+ * Timezone helpers without a date library. A business has one IANA timezone; "today" etc. are
+ * computed there, then turned into UTC instants for queries.
+ */
+
+export interface LocalDate {
+  year: number;
+  month: number; // 1-12
+  day: number;
+}
+
+const partsCache = new Map<string, Intl.DateTimeFormat>();
+function formatter(tz: string) {
+  let f = partsCache.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    partsCache.set(tz, f);
+  }
+  return f;
+}
+
+/** Wall-clock parts of an instant in a timezone. */
+export function zonedParts(instant: Date, tz: string) {
+  const p = Object.fromEntries(formatter(tz).formatToParts(instant).map((x) => [x.type, x.value]));
+  return {
+    year: Number(p.year),
+    month: Number(p.month),
+    day: Number(p.day),
+    hour: Number(p.hour),
+    minute: Number(p.minute),
+    second: Number(p.second),
+  };
+}
+
+/** Offset (ms) of `tz` from UTC at `instant`. */
+function offsetAt(instant: Date, tz: string): number {
+  const p = zonedParts(instant, tz);
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(instant.getTime() / 1000) * 1000;
+}
+
+/** The UTC instant of local midnight at the start of `date` in `tz` (handles DST). */
+export function startOfLocalDay(date: LocalDate, tz: string): Date {
+  const naive = Date.UTC(date.year, date.month - 1, date.day);
+  let guess = naive - offsetAt(new Date(naive), tz);
+  guess = naive - offsetAt(new Date(guess), tz);
+  return new Date(guess);
+}
+
+export function localToday(now: Date, tz: string): LocalDate {
+  const { year, month, day } = zonedParts(now, tz);
+  return { year, month, day };
+}
+
+export function addDays(d: LocalDate, n: number): LocalDate {
+  const t = new Date(Date.UTC(d.year, d.month - 1, d.day + n));
+  return { year: t.getUTCFullYear(), month: t.getUTCMonth() + 1, day: t.getUTCDate() };
+}
+
+export function isoDate(d: LocalDate): string {
+  return `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
+}
+
+/** Monday-based week start. */
+export function startOfWeek(d: LocalDate): LocalDate {
+  const dow = new Date(Date.UTC(d.year, d.month - 1, d.day)).getUTCDay(); // 0 = Sunday
+  return addDays(d, -((dow + 6) % 7));
+}
+
+export type DateToken = "@today" | "@tomorrow" | "@yesterday" | "@this_week" | "@this_month" | "@now";
+
+/** A token as a half-open local-date range [start, end). `@now` has no range. */
+export function tokenRange(token: Exclude<DateToken, "@now">, now: Date, tz: string): { start: LocalDate; end: LocalDate } {
+  const today = localToday(now, tz);
+  switch (token) {
+    case "@today":
+      return { start: today, end: addDays(today, 1) };
+    case "@tomorrow":
+      return { start: addDays(today, 1), end: addDays(today, 2) };
+    case "@yesterday":
+      return { start: addDays(today, -1), end: today };
+    case "@this_week": {
+      const start = startOfWeek(today);
+      return { start, end: addDays(start, 7) };
+    }
+    case "@this_month": {
+      const start = { year: today.year, month: today.month, day: 1 };
+      const next = today.month === 12 ? { year: today.year + 1, month: 1, day: 1 } : { year: today.year, month: today.month + 1, day: 1 };
+      return { start, end: next };
+    }
+  }
+}
+
+export const isDateToken = (v: unknown): v is DateToken =>
+  typeof v === "string" && ["@today", "@tomorrow", "@yesterday", "@this_week", "@this_month", "@now"].includes(v);

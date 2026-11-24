@@ -40,21 +40,12 @@ create policy "members update records" on public.records
 create policy "owners and admins delete records" on public.records
   for delete to authenticated using (public.has_role(business_id, '{owner,admin}'));
 
--- Filtered, sorted, paginated read over one table. Runs as the caller, so RLS applies.
+-- Builds the WHERE fragment (" and ...") for record filters. Pure string building; every value
+-- goes through format(%L) and field ids are checked against a strict pattern.
 -- p_filters: [{ field, op, value?, kind }]   kind: text | number | bool | date | datetime | array
--- p_sort:    [{ field, dir, kind }]          field may also be _created_at / _updated_at
--- The app builds these from the blueprint (src/engine/records.ts); this function re-checks shapes
--- and only ever interpolates identifiers/literals through format(%L).
-create function public.query_records(
-  p_business_id uuid,
-  p_table_id text,
-  p_filters jsonb default '[]',
-  p_sort jsonb default '[]',
-  p_limit int default 50,
-  p_offset int default 0
-)
-returns table (id uuid, data jsonb, created_at timestamptz, updated_at timestamptz, total bigint)
-language plpgsql stable security invoker set search_path = ''
+-- The app builds these from the blueprint (src/engine/records.ts).
+create function public.records_where(p_filters jsonb)
+returns text language plpgsql immutable set search_path = ''
 as $$
 declare
   f jsonb;
@@ -65,7 +56,6 @@ declare
   expr text;
   is_empty text;
   w text := '';
-  o text := '';
 begin
   for f in select * from jsonb_array_elements(coalesce(p_filters, '[]')) loop
     fld := f ->> 'field';
@@ -89,7 +79,7 @@ begin
     w := w || ' and ' || case
       when op = 'empty' then is_empty
       when op = 'not_empty' then format('not %s', is_empty)
-      when kind = 'array' and op = 'contains' then format('r.data -> %L ? %L', fld, f ->> 'value')
+      when kind = 'array' and op = 'contains' then format('coalesce(r.data -> %L ? %L, false)', fld, f ->> 'value')
       when kind = 'text' and op = 'contains' then
         format('%s ilike %L', expr, '%' || replace(replace(replace(f ->> 'value', '\', '\\'), '%', '\%'), '_', '\_') || '%')
       when kind <> 'array' and op in ('eq', 'neq', 'gt', 'gte', 'lt', 'lte') then
@@ -102,7 +92,29 @@ begin
       raise exception 'operator % not allowed for % fields', op, kind using errcode = '22023';
     end if;
   end loop;
+  return w;
+end;
+$$;
 
+-- Filtered, sorted, paginated read over one table. Runs as the caller, so RLS applies.
+-- p_sort: [{ field, dir, kind }]  field may also be _created_at / _updated_at
+create function public.query_records(
+  p_business_id uuid,
+  p_table_id text,
+  p_filters jsonb default '[]',
+  p_sort jsonb default '[]',
+  p_limit int default 50,
+  p_offset int default 0
+)
+returns table (id uuid, data jsonb, created_at timestamptz, updated_at timestamptz, total bigint)
+language plpgsql stable security invoker set search_path = ''
+as $$
+declare
+  f jsonb;
+  fld text;
+  expr text;
+  o text := '';
+begin
   for f in select * from jsonb_array_elements(coalesce(p_sort, '[]')) loop
     fld := f ->> 'field';
     expr := case
@@ -124,11 +136,43 @@ begin
        from public.records r
       where r.business_id = $1 and r.table_id = $2 %s
       order by %s r.created_at desc, r.id
-      limit $3 offset $4', w, o)
+      limit $3 offset $4', public.records_where(p_filters), o)
     using p_business_id, p_table_id, least(greatest(coalesce(p_limit, 50), 1), 500), greatest(coalesce(p_offset, 0), 0);
 end;
 $$;
 
+-- count / sum / avg / min / max over filtered records (number blocks). count ignores p_field.
+create function public.aggregate_records(
+  p_business_id uuid,
+  p_table_id text,
+  p_filters jsonb,
+  p_agg text,
+  p_field text default null
+)
+returns numeric
+language plpgsql stable security invoker set search_path = ''
+as $$
+declare
+  result numeric;
+  expr text;
+begin
+  if p_agg = 'count' then
+    expr := 'count(*)';
+  elsif p_agg in ('sum', 'avg', 'min', 'max') and p_field ~ '^fld_[a-z0-9_]{1,60}$' then
+    expr := format('%s((r.data ->> %L)::numeric)', p_agg, p_field);
+  else
+    raise exception 'invalid aggregate % on %', p_agg, p_field using errcode = '22023';
+  end if;
+  execute format(
+    'select %s from public.records r where r.business_id = $1 and r.table_id = $2 %s',
+    expr, public.records_where(p_filters))
+    into result using p_business_id, p_table_id;
+  return result;
+end;
+$$;
+
+revoke execute on function public.aggregate_records(uuid, text, jsonb, text, text) from public, anon;
+grant execute on function public.aggregate_records(uuid, text, jsonb, text, text) to authenticated;
 revoke execute on function public.query_records(uuid, text, jsonb, jsonb, int, int) from public, anon;
 grant execute on function public.query_records(uuid, text, jsonb, jsonb, int, int) to authenticated;
 

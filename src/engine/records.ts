@@ -1,6 +1,7 @@
 import { z } from "zod";
-import type { Blueprint, Field, Table } from "@/schema/blueprint";
-import { FileValue, RecordInput, RecordQuery, type FilterOp } from "@/schema/records";
+import type { Blueprint, DataSource, Field, Table } from "@/schema/blueprint";
+import { isDateToken, isoDate, startOfLocalDay, tokenRange, localToday } from "./dates";
+import { FileValue, RecordInput, RecordQuery, type FilterOp, type RecordFilter } from "@/schema/records";
 
 /**
  * Pure rules for records: validate values against the blueprint, turn stored rows into views,
@@ -221,16 +222,106 @@ export interface QueryRecordsParams {
   p_offset: number;
 }
 
+/** Where relative dates (`@today`, `@now`, …) are evaluated. Defaults: business timezone, now. */
+export interface QueryContext {
+  timezone?: string;
+  now?: Date;
+}
+
+type Filter = QueryRecordsParams["p_filters"][number];
+
+/** Expands a date token into plain comparisons, or returns an error message. */
+function expandDateToken(
+  field: Field,
+  kind: FieldKind,
+  op: FilterOp,
+  token: string,
+  ctx: Required<QueryContext>,
+): Filter[] | string {
+  if (kind !== "date" && kind !== "datetime") return "only works with dates";
+  const at = (d: { year: number; month: number; day: number }) =>
+    kind === "date" ? isoDate(d) : startOfLocalDay(d, ctx.timezone).toISOString();
+  if (token === "@now") {
+    const value = kind === "date" ? isoDate(localToday(ctx.now, ctx.timezone)) : ctx.now.toISOString();
+    return [{ field: field.id, op, kind, value }];
+  }
+  const { start, end } = tokenRange(token as Parameters<typeof tokenRange>[0], ctx.now, ctx.timezone);
+  const f = (o: FilterOp, d: typeof start): Filter => ({ field: field.id, op: o, kind, value: at(d) });
+  switch (op) {
+    case "eq":
+      return [f("gte", start), f("lt", end)];
+    case "gt":
+      return [f("gte", end)];
+    case "gte":
+      return [f("gte", start)];
+    case "lt":
+      return [f("lt", start)];
+    case "lte":
+      return [f("lt", end)];
+    default:
+      return `does not support "${op}" with ${token}`;
+  }
+}
+
 /** Validates a query against the blueprint and builds `query_records` RPC params. */
-export function buildRecordQuery(blueprint: Blueprint, query: RecordQuery): QueryRecordsParams {
+export function buildRecordQuery(blueprint: Blueprint, query: RecordQuery, context: QueryContext = {}): QueryRecordsParams {
   const parsed = RecordQuery.safeParse(query);
   if (!parsed.success) throw new RecordError("invalid", `Invalid query: ${parsed.error.issues[0].message}`);
   const q = parsed.data;
   const table = tableOrThrow(blueprint, q.table);
+  const p_filters = buildFilters(table, q.filters, {
+    timezone: context.timezone ?? blueprint.business.timezone,
+    now: context.now ?? new Date(),
+  });
   const fields = new Map(table.fields.map((f) => [f.id, f]));
   const errors: { field: string; message: string }[] = [];
 
-  const p_filters = q.filters.flatMap((flt): QueryRecordsParams["p_filters"] => {
+  const p_sort = q.sort.flatMap((s): QueryRecordsParams["p_sort"] => {
+    if (s.field === "_created_at" || s.field === "_updated_at") return [{ field: s.field, dir: s.dir }];
+    const field = fields.get(s.field);
+    const kind = field && fieldKind(field);
+    if (!field || !kind || kind === "array") {
+      errors.push({ field: s.field, message: field ? `${field.label} cannot be sorted` : "Unknown field" });
+      return [];
+    }
+    return [{ field: s.field, dir: s.dir, kind }];
+  });
+
+  if (errors.length) throw new RecordError("invalid", errors.map((e) => e.message).join("; "), errors);
+  return { p_table_id: table.id, p_filters, p_sort, p_limit: q.limit, p_offset: q.offset };
+}
+
+export interface AggregateParams {
+  p_table_id: string;
+  p_filters: Filter[];
+  p_agg: "count" | "sum" | "avg" | "min" | "max";
+  p_field: string | null;
+}
+
+/** Builds `aggregate_records` params for a block source (number blocks). */
+export function buildAggregate(blueprint: Blueprint, source: DataSource, context: QueryContext = {}): AggregateParams {
+  const table = tableOrThrow(blueprint, source.table);
+  const agg = source.agg ?? "count";
+  let field: string | null = null;
+  if (agg !== "count") {
+    const f = table.fields.find((x) => x.id === source.field);
+    if (!f || (f.type !== "number" && f.type !== "money")) {
+      throw new RecordError("invalid", `${agg} needs a number or money field`);
+    }
+    field = f.id;
+  }
+  const p_filters = buildFilters(table, source.filters ?? [], {
+    timezone: context.timezone ?? blueprint.business.timezone,
+    now: context.now ?? new Date(),
+  });
+  return { p_table_id: table.id, p_filters, p_agg: agg, p_field: field };
+}
+
+function buildFilters(table: Table, filters: RecordFilter[], ctx: Required<QueryContext>): Filter[] {
+  const fields = new Map(table.fields.map((f) => [f.id, f]));
+  const errors: { field: string; message: string }[] = [];
+
+  const p_filters = filters.flatMap((flt): Filter[] => {
     const field = fields.get(flt.field);
     const kind = field && fieldKind(field);
     if (!field || !kind) {
@@ -246,6 +337,14 @@ export function buildRecordQuery(blueprint: Blueprint, query: RecordQuery): Quer
       errors.push({ field: flt.field, message: `${field.label}: "${flt.op}" needs a value` });
       return [];
     }
+    if (isDateToken(flt.value)) {
+      const expanded = expandDateToken(field, kind, flt.op, flt.value, ctx);
+      if (typeof expanded === "string") {
+        errors.push({ field: flt.field, message: `${field.label}: ${flt.value} ${expanded}` });
+        return [];
+      }
+      return expanded;
+    }
     // contains on a text field is a substring search, so any text is fine.
     const check = flt.op === "contains" && kind === "text"
       ? (typeof flt.value === "string" ? ok(flt.value) : bad("needs text"))
@@ -257,17 +356,6 @@ export function buildRecordQuery(blueprint: Blueprint, query: RecordQuery): Quer
     return [{ field: flt.field, op: flt.op, kind, value: String(check.value) }];
   });
 
-  const p_sort = q.sort.flatMap((s): QueryRecordsParams["p_sort"] => {
-    if (s.field === "_created_at" || s.field === "_updated_at") return [{ field: s.field, dir: s.dir }];
-    const field = fields.get(s.field);
-    const kind = field && fieldKind(field);
-    if (!field || !kind || kind === "array") {
-      errors.push({ field: s.field, message: field ? `${field.label} cannot be sorted` : "Unknown field" });
-      return [];
-    }
-    return [{ field: s.field, dir: s.dir, kind }];
-  });
-
   if (errors.length) throw new RecordError("invalid", errors.map((e) => e.message).join("; "), errors);
-  return { p_table_id: table.id, p_filters, p_sort, p_limit: q.limit, p_offset: q.offset };
+  return p_filters;
 }

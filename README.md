@@ -15,6 +15,8 @@ cp .env.example .env.local   # fill in your Supabase URL + publishable key
 npm run dev
 ```
 
+Without Supabase env vars every route redirects to `/demo`: a sample salon on in-memory data.
+
 Apply `supabase/migrations/*.sql` to your Supabase project (`supabase db push` or the SQL editor).
 
 | Command | What it does |
@@ -26,5 +28,7 @@ Apply `supabase/migrations/*.sql` to your Supabase project (`supabase db push` o
 ### Layout
 - `src/schema/` — zod schemas: `blueprint.ts`, `changeSet.ts`
 - `src/engine/changeSet.ts` — `previewChangeSet` / `applyChangeSet` / `undoChangeSet` (pure)
-- `src/server/blueprints.ts` — load / commit / undo against Supabase (RLS applies)
+- `src/engine/records.ts`, `store.ts`, `blockData.ts` — record validation, typed queries, block data (Supabase or in-memory store)
+- `src/components/` — app shell, page grid, blocks
+- `src/server/` — Supabase-backed blueprints, records, store (RLS applies)
 - `supabase/migrations/` — tables, RLS policies, `create_business` + `commit_blueprint_version` RPCs

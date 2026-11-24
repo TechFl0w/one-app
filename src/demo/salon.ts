@@ -1,5 +1,6 @@
 import { Blueprint } from "@/schema/blueprint";
 import type { RecordRow } from "@/schema/records";
+import { addDays, localToday, startOfLocalDay } from "@/engine/dates";
 
 /**
  * Sample nail salon used by /demo: lets the shell and blocks run without Supabase.
@@ -152,11 +153,12 @@ export const demoBlueprint: Blueprint = Blueprint.parse({
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
-/** Today at hh:mm in the demo timezone (approximated as UTC-8), as ISO. */
+/** Today (in the business timezone) at hh:mm local time, as ISO. */
 function todayAt(hour: number, minute = 0, dayOffset = 0): string {
-  const now = new Date();
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + dayOffset, hour + 8, minute));
-  return d.toISOString();
+  const tz = demoBlueprint.business.timezone;
+  const day = addDays(localToday(new Date(), tz), dayOffset);
+  const midnight = startOfLocalDay(day, tz);
+  return new Date(midnight.getTime() + (hour * 60 + minute) * 60_000).toISOString();
 }
 
 const row = (n: number, tableId: string, data: Record<string, unknown>): RecordRow => ({
