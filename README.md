@@ -32,6 +32,7 @@ Apply `supabase/migrations/*.sql` to your Supabase project (`supabase db push` o
 - `src/engine/records.ts`, `store.ts`, `blockData.ts` — record validation, typed queries, block data (Supabase or in-memory store)
 - `src/components/` — app shell, page grid, blocks
 - `src/automations/` — automation engine (matching, due dates, steps, retries) and runner; worker at `/api/cron/automations` (Vercel Cron every 5 min, needs `SUPABASE_SECRET_KEY` + `CRON_SECRET`)
+- `src/email/` — email rules (From/Reply-To, templates, recipients, inbound + webhook signatures); Resend wiring in `src/server/email.ts`, webhook at `/api/webhooks/resend`
 - `src/agent/` — owner agent: typed tools, tool loop, structured replies
 - `src/server/` — Supabase-backed blueprints, records, store (RLS applies)
 - `supabase/migrations/` — tables, RLS policies, `create_business` + `commit_blueprint_version` RPCs

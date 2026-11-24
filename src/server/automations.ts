@@ -6,6 +6,9 @@ import type { RecordEvent } from "@/automations/engine";
 import { Blueprint } from "@/schema/blueprint";
 import { tableOrThrow, validateRecordInput } from "@/engine/records";
 import { getCurrentBlueprint } from "./blueprints";
+import { ensureEmailSettings, sendEmail } from "./email";
+import { renderTemplate, resolveRecipient } from "@/email/compose";
+import { formatDateTime } from "@/components/blocks/format";
 
 /** Supabase implementations of the automation queue and side effects (service role). */
 
@@ -82,9 +85,28 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
     async notify(b, message, key, link) {
       must(await db.from("notifications").upsert({ business_id: b, key, message, link }, { onConflict: "business_id,key", ignoreDuplicates: true }), "notify");
     },
-    async sendMessage(_b, step) {
-      // Channels arrive with Resend (email) and Twilio (WhatsApp); until then the step is skipped.
-      return { sent: false, reason: `${step.channel === "whatsapp" ? "WhatsApp" : step.channel === "email" ? "Email" : step.channel} isn’t connected yet` };
+    async sendMessage(b, step, key, record) {
+      // WhatsApp/SMS arrive with Twilio (Phase 5); until then those steps are skipped.
+      if (step.channel !== "email") return { sent: false, reason: `${step.channel === "whatsapp" ? "WhatsApp" : step.channel} isn’t connected yet` };
+      const bp = await blueprint(b);
+      const to = await resolveRecipient(bp, record.tableId, record.data, step.toField, async (t, id) => {
+        const r = await db.from("records").select("data").eq("business_id", b).eq("table_id", t).eq("id", id).maybeSingle();
+        return (r.data?.data as Record<string, unknown>) ?? null;
+      });
+      if (!to) return { sent: false, reason: "No email address for this record" };
+      const settings = await ensureEmailSettings(db, b, bp.business.name);
+      const table = bp.tables.find((t) => t.id === record.tableId);
+      const whenField = table?.fields.find((f) => f.type === "datetime" || f.type === "date");
+      const whenValue = whenField && record.data[whenField.id];
+      const tracking = table?.fields.find((f) => /track/i.test(f.label) && typeof record.data[f.id] === "string");
+      const msg = renderTemplate(step.template, step.message, {
+        business: bp.business.name,
+        name: to.name?.split(" ")[0],
+        when: typeof whenValue === "string" ? formatDateTime(whenValue.length === 10 ? `${whenValue}T12:00:00Z` : whenValue, { timezone: bp.business.timezone }) : undefined,
+        tracking: tracking ? String(record.data[tracking.id]) : undefined,
+        data: record.data,
+      });
+      return sendEmail(db, settings, { to: to.email, subject: msg.subject, text: msg.text, key });
     },
   };
 }
