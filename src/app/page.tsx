@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { CreateBusinessForm } from "./CreateBusinessForm";
+import { Wizard } from "@/components/onboarding/Wizard";
+import { buildBusiness } from "./actions";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -24,7 +25,7 @@ export default async function Home() {
           </ul>
         </div>
       )}
-      <CreateBusinessForm />
+      <Wizard build={buildBusiness} />
     </main>
   );
 }

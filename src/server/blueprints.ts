@@ -12,10 +12,14 @@ import { applyChangeSet, ChangeSetError, previewChangeSet, undoChangeSet, type C
 
 export async function createBusiness(
   supabase: SupabaseClient,
-  input: { name: string; type?: string; timezone?: string },
+  input: { name: string; type?: string; timezone?: string; blueprint?: Blueprint },
 ): Promise<string> {
-  const business = { name: input.name, type: input.type ?? "other", timezone: input.timezone ?? "UTC" };
-  const blueprint = emptyBlueprint(business);
+  const business = {
+    name: input.name,
+    type: input.blueprint?.business.type ?? input.type ?? "other",
+    timezone: input.blueprint?.business.timezone ?? input.timezone ?? "UTC",
+  };
+  const blueprint = input.blueprint ? Blueprint.parse({ ...input.blueprint, version: 1, business: { ...input.blueprint.business, name: input.name } }) : emptyBlueprint(business);
   const { data, error } = await supabase.rpc("create_business", {
     p_name: business.name,
     p_type: business.type,

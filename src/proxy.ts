@@ -7,8 +7,8 @@ const PUBLIC_PATHS = ["/login", "/auth"];
 /** Refreshes the Supabase session cookie on every request and sends signed-out users to /login. */
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  // The demo runs on in-memory data and needs no session.
-  if (path === "/demo" || path.startsWith("/demo/")) return NextResponse.next();
+  // The demo and the onboarding preview run without a session or database.
+  if (path === "/demo" || path.startsWith("/demo/") || path === "/start") return NextResponse.next();
   // Without Supabase configured (local dev), only the demo works.
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
     return NextResponse.redirect(new URL("/demo", request.url));

@@ -168,7 +168,7 @@ export const DataSource = z.strictObject({
   table: TableId,
   filters: z.array(BlockFilter).max(20).optional(),
   sort: z
-    .array(z.strictObject({ field: FieldId, dir: z.enum(["asc", "desc"]) }))
+    .array(z.strictObject({ field: z.union([FieldId, z.enum(["_created_at", "_updated_at"])]), dir: z.enum(["asc", "desc"]) }))
     .optional(),
   groupBy: FieldId.optional(),
   agg: z.enum(["sum", "count", "avg", "min", "max"]).optional(),
@@ -349,7 +349,7 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
       if (!fields.has(f.field)) issue([...path, "filters", i, "field"], `unknown field ${f.field}`);
     });
     src.sort?.forEach((s, i) => {
-      if (!fields.has(s.field)) issue([...path, "sort", i, "field"], `unknown field ${s.field}`);
+      if (!s.field.startsWith("_") && !fields.has(s.field)) issue([...path, "sort", i, "field"], `unknown field ${s.field}`);
     });
   };
 
