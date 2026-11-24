@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>One page, three layouts made by prompt</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F5F0}
+a{color:#17694F}a:hover{color:#0F5640}
+</style>
+</helmet>
+<div style="font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: #1C1B19; background: #F7F5F0; min-height: 900px; padding: 28px 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px">
+
+<header>
+<h1 style="margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.02em">Same data, any layout</h1>
+<p style="margin: 6px 0 0; color: #5E5B55; font-size: 15px">The salon's "Today" page, rearranged three ways by one sentence each.</p>
+</header>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: start">
+
+<section aria-label="Owner layout" style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; line-height: 1.45; padding: 10px 14px; border-radius: 16px 16px 16px 4px; background: #FFFFFF; border: 1px solid #E8E4DA">"I mostly care about money and gaps in the day."</div>
+<div style="background: #FFFFFF; border: 1px solid #E8E4DA; border-radius: 20px; padding: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="grid-column: span 2; border-radius: 14px; background: #E4F2EA; padding: 14px"><div style="font-size: 11px; color: #0F3D2E">Revenue today</div><div style="font-size: 24px; font-weight: 700">[AMOUNT]</div><div aria-hidden="true" style="margin-top: 8px; height: 40px; border-radius: 8px; background: linear-gradient(180deg, transparent 50%, rgba(23,105,79,0.18) 50%)"></div></div>
+<div style="border-radius: 14px; background: #F7F5F0; padding: 12px"><div style="font-size: 11px; color: #5E5B55">Chair use</div><div style="font-size: 20px; font-weight: 700">78%</div></div>
+<div style="border-radius: 14px; background: #FFF4E5; padding: 12px"><div style="font-size: 11px; color: #6B4700">Gaps to fill</div><div style="font-size: 20px; font-weight: 700">3</div></div>
+<div style="grid-column: span 2; border-radius: 14px; border: 1px solid #E8E4DA; padding: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 12px"><span style="font-weight: 600">Gaps today</span><span>Sam · 12:00–1:00</span><span>Jo · 2:00–3:00</span><span>Mia · 4:30–5:00</span></div>
+</div>
+</section>
+
+<section aria-label="Front desk layout" style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; line-height: 1.45; padding: 10px 14px; border-radius: 16px 16px 16px 4px; background: #FFFFFF; border: 1px solid #E8E4DA">"Make a front-desk screen for the tablet: big calendar, check-in buttons, no money."</div>
+<div style="background: #FFFFFF; border: 1px solid #E8E4DA; border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; font-size: 11px; font-weight: 600; color: #3A3833"><span>Mia</span><span>Sam</span><span>Jo</span><span>Lee</span></div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; height: 170px">
+<div style="display: flex; flex-direction: column; gap: 5px"><div style="flex: 3; border-radius: 8px; background: #FCE7F3"></div><div style="flex: 2; border-radius: 8px; background: #FCE7F3"></div><div style="flex: 2"></div></div>
+<div style="display: flex; flex-direction: column; gap: 5px"><div style="flex: 4; border-radius: 8px; background: #E0E7FF"></div><div style="flex: 3"></div></div>
+<div style="display: flex; flex-direction: column; gap: 5px"><div style="flex: 1"></div><div style="flex: 2; border-radius: 8px; background: #DCFCE7"></div><div style="flex: 2; border-radius: 8px; background: #DCFCE7"></div></div>
+<div style="display: flex; flex-direction: column; gap: 5px"><div style="flex: 2; border-radius: 8px; background: #FEF3C7"></div><div style="flex: 3; border-radius: 8px; background: #FEF3C7"></div></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<button type="button" style="font: inherit; font-size: 14px; font-weight: 600; padding: 14px; border: none; border-radius: 14px; background: #17694F; color: #FFFFFF; cursor: pointer">Check in</button>
+<button type="button" style="font: inherit; font-size: 14px; font-weight: 600; padding: 14px; border: 1px solid #D9D4C8; border-radius: 14px; background: #FFFFFF; cursor: pointer">Walk-in</button>
+</div>
+</div>
+</section>
+
+<section aria-label="Phone layout" style="display: flex; flex-direction: column; gap: 10px; align-items: center">
+<div style="align-self: stretch; font-size: 13px; line-height: 1.45; padding: 10px 14px; border-radius: 16px 16px 16px 4px; background: #FFFFFF; border: 1px solid #E8E4DA">"On my phone, just show my next client and my messages."</div>
+<div style="width: 220px; border: 8px solid #1C1B19; border-radius: 32px; background: #F7F5F0; padding: 14px 10px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 11px; color: #5E5B55">Next client · 2:00pm</div>
+<div style="border-radius: 14px; background: #FFFFFF; border: 1px solid #E8E4DA; padding: 10px"><div style="font-size: 14px; font-weight: 600">Priya K.</div><div style="font-size: 12px; color: #5E5B55">Gel + art · 90 min</div><div style="font-size: 11px; color: #0F5640; margin-top: 4px">Deposit paid</div></div>
+<div style="font-size: 11px; color: #5E5B55; margin-top: 4px">Messages</div>
+<div style="border-radius: 12px; background: #FFFFFF; border: 1px solid #E8E4DA; padding: 8px; font-size: 11px">Kim: running 10 min late</div>
+<div style="border-radius: 12px; background: #FFFFFF; border: 1px solid #E8E4DA; padding: 8px; font-size: 11px">Ruth: can I add a pedi?</div>
+<div style="border-radius: 12px; background: #FFFFFF; border: 1px solid #E8E4DA; padding: 8px; font-size: 11px">Nora: thank you!</div>
+</div>
+</section>
+</div>
+
+<section aria-label="Look and feel" style="background: #FFFFFF; border: 1px solid #E8E4DA; border-radius: 20px; padding: 18px; display: flex; flex-wrap: wrap; gap: 24px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 200px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 600">Look and feel</h2>
+<span style="font-size: 13px; color: #5E5B55">Or ask: "Match the colours of my logo."</span>
+</div>
+<div role="group" aria-label="Accent colour" style="display: flex; gap: 8px; align-items: center">
+<span style="font-size: 12px; color: #5E5B55; margin-right: 4px">Accent</span>
+<button type="button" aria-label="Forest green (selected)" style="width: 32px; height: 32px; border-radius: 999px; border: 3px solid #FFFFFF; outline: 2px solid #17694F; background: #17694F; cursor: pointer"></button>
+<button type="button" aria-label="Deep blue" style="width: 32px; height: 32px; border-radius: 999px; border: none; background: #1D4E89; cursor: pointer"></button>
+<button type="button" aria-label="Terracotta" style="width: 32px; height: 32px; border-radius: 999px; border: none; background: #B4532A; cursor: pointer"></button>
+<button type="button" aria-label="Charcoal" style="width: 32px; height: 32px; border-radius: 999px; border: none; background: #3A3833; cursor: pointer"></button>
+<button type="button" aria-label="Rose" style="width: 32px; height: 32px; border-radius: 999px; border: none; background: #A53860; cursor: pointer"></button>
+</div>
+<div role="group" aria-label="Density" style="display: flex; gap: 4px; padding: 3px; background: #F7F5F0; border-radius: 999px">
+<button type="button" aria-pressed="false" style="font: inherit; font-size: 13px; padding: 8px 14px; border: none; border-radius: 999px; background: transparent; cursor: pointer">Compact</button>
+<button type="button" aria-pressed="true" style="font: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; border: none; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.14); cursor: pointer">Comfortable</button>
+<button type="button" aria-pressed="false" style="font: inherit; font-size: 13px; padding: 8px 14px; border: none; border-radius: 999px; background: transparent; cursor: pointer">Large (tablet)</button>
+</div>
+<button type="button" style="font: inherit; font-size: 14px; padding: 10px 16px; border: 1px solid #D9D4C8; border-radius: 999px; background: #FFFFFF; cursor: pointer">Upload logo</button>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

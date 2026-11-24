@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI builder — chair rental setup</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F5F0}
+a{color:#17694F}a:hover{color:#0F5640}
+</style>
+</helmet>
+<div style="font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: #1C1B19; background: #F7F5F0; min-height: 860px; display: flex; flex-wrap: wrap; align-items: stretch">
+
+<nav aria-label="Workspace" style="flex: 1 1 220px; max-width: 260px; background: #FFFFFF; border-right: 1px solid #E8E4DA; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+<button type="button" style="display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid #E8E4DA; border-radius: 12px; background: #FFFFFF; color: #1C1B19; font: inherit; text-align: left; cursor: pointer">
+<span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 10px; background: #C2410C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px">CH</span>
+<span style="display: flex; flex-direction: column; flex: 1"><span style="font-weight: 600; font-size: 14px">Coastline Hair</span><span style="font-size: 12px; color: #6B6862">Hair salon</span></span>
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B6862" stroke-width="2"><path d="M7 10l5-5 5 5M7 14l5 5 5-5"/></svg>
+</button>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<a href="#" style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; background: #E4F2EA; color: #0F5640; text-decoration: none; font-weight: 600; font-size: 14px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z"/></svg>Assistant</a>
+<a href="#" style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; color: #3A3833; text-decoration: none; font-size: 14px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</a>
+<a href="#" style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; color: #3A3833; text-decoration: none; font-size: 14px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-7 7-7s7 3 7 7M17 11a3 3 0 100-6M22 21c0-3-2-5-4-6"/></svg>Clients</a>
+<a href="#" style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; color: #3A3833; text-decoration: none; font-size: 14px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 01-11.5 7.2L4 21l1.8-5.5A8 8 0 1121 12z"/></svg>Inbox</a>
+<a href="#" style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; color: #3A3833; text-decoration: none; font-size: 14px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Automations</a>
+<span style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; color: #8A5A00; font-size: 14px; border: 1px dashed #E2B65A; background: #FFF8E8"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 11h14v4H5zM7 15v6M17 15v6M8 11V5a2 2 0 012-2h4a2 2 0 012 2v6"/></svg>Chair rental <span style="margin-left: auto; font-size: 11px; font-weight: 600">PREVIEW</span></span>
+</div>
+<div style="margin-top: auto; font-size: 12px; color: #6B6862; line-height: 1.5">Modules appear here as the assistant builds them.</div>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between">
+<div>
+<h1 style="margin: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; letter-spacing: -0.02em; font-size: 26px; font-weight: 600">Assistant</h1>
+<p style="margin: 4px 0 0; color: #5E5E66; font-size: 14px">Describe what you need. Nothing changes until you approve.</p>
+</div>
+<span style="font-size: 13px; color: #3A3A40; background: #FFFFFF; border: 1px solid #E8E6E0; padding: 6px 10px; border-radius: 999px">Template: Space rental</span>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+
+<section aria-label="Conversation" style="flex: 1 1 340px; min-width: 0; background: #FFFFFF; border: 1px solid #E8E6E0; border-radius: 20px; box-shadow: 0 1px 2px rgba(20,20,30,0.04), 0 10px 30px rgba(20,20,30,0.05); padding: 18px; display: flex; flex-direction: column; gap: 12px">
+<div style="align-self: flex-end; max-width: 85%; background: #1C1B19; color: #FFFFFF; padding: 10px 14px; border-radius: 20px; box-shadow: 0 1px 2px rgba(20,20,30,0.04), 0 10px 30px rgba(20,20,30,0.05) 14px 4px 14px; font-size: 14px; line-height: 1.5">I own a hair salon and want to start renting out chairs.</div>
+<div style="align-self: flex-start; max-width: 90%; background: #F1F1EC; padding: 10px 14px; border-radius: 20px; box-shadow: 0 1px 2px rgba(20,20,30,0.04), 0 10px 30px rgba(20,20,30,0.05) 14px 14px 4px; font-size: 14px; line-height: 1.5">Great. A few quick questions so I set it up right. How do you want to charge?</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" style="font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 999px; border: 2px solid #17694F; background: #E4F2EA; color: #0F5640; font-weight: 600; cursor: pointer">Weekly rent</button>
+<button type="button" style="font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 999px; border: 1px solid #D4D4CE; background: #FFFFFF; cursor: pointer">Monthly rent</button>
+<button type="button" style="font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 999px; border: 1px solid #D4D4CE; background: #FFFFFF; cursor: pointer">Day rate</button>
+<button type="button" style="font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 999px; border: 1px solid #D4D4CE; background: #FFFFFF; cursor: pointer">Commission split</button>
+</div>
+<div style="align-self: flex-end; max-width: 85%; background: #1C1B19; color: #FFFFFF; padding: 10px 14px; border-radius: 20px; box-shadow: 0 1px 2px rgba(20,20,30,0.04), 0 10px 30px rgba(20,20,30,0.05) 14px 4px 14px; font-size: 14px; line-height: 1.5">Weekly, auto-charged. 2 of my 4 chairs are free. Renters need a licence and insurance.</div>
+<div style="align-self: flex-start; max-width: 90%; background: #F1F1EC; padding: 10px 14px; border-radius: 20px; box-shadow: 0 1px 2px rgba(20,20,30,0.04), 0 10px 30px rgba(20,20,30,0.05) 14px 14px 4px; font-size: 14px; line-height: 1.5">Got it. Here's what I'll build. You can change anything before I switch it on.</div>
+<form style="margin-top: 6px; display: flex; gap: 8px">
+<label for="ask" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Message the assistant</label>
+<input id="ask" type="text" placeholder="Ask for a change, e.g. add a Sunday day rate" style="flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 12px; border: 1px solid #D4D4CE; border-radius: 10px">
+<button type="submit" aria-label="Send" style="width: 46px; height: 46px; border: none; border-radius: 999px; background: #17694F; color: #FFFFFF; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+</form>
+</section>
+
+<section aria-label="Blueprint preview" style="flex: 1.3 1 420px; min-width: 0; background: #FFFFFF; border: 1px solid #E8E6E0; border-radius: 20px; box-shadow: 0 1px 2px rgba(20,20,30,0.04), 0 10px 30px rgba(20,20,30,0.05); padding: 20px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap">
+<h2 style="margin: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; letter-spacing: -0.02em; font-size: 20px; font-weight: 600">Chair rental — what I'll build</h2>
+<span style="font-size: 13px; color: #5E5E66">5 tables · 4 views · 5 automations · 2 connections</span>
+</div>
+
+<div>
+<h3 style="margin: 0 0 8px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #5E5E66">Tables</h3>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<span style="font-size: 13px; padding: 6px 10px; border-radius: 8px; background: #F1F1EC">Chairs</span>
+<span style="font-size: 13px; padding: 6px 10px; border-radius: 8px; background: #F1F1EC">Renters</span>
+<span style="font-size: 13px; padding: 6px 10px; border-radius: 8px; background: #F1F1EC">Agreements</span>
+<span style="font-size: 13px; padding: 6px 10px; border-radius: 8px; background: #F1F1EC">Rent payments</span>
+<span style="font-size: 13px; padding: 6px 10px; border-radius: 8px; background: #F1F1EC">Documents (with expiry)</span>
+</div>
+</div>
+
+<div>
+<h3 style="margin: 0 0 8px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #5E5E66">Views</h3>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<span style="font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid #E8E6E0">Chair board</span>
+<span style="font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid #E8E6E0">Applicant pipeline</span>
+<span style="font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid #E8E6E0">Rent this month</span>
+<span style="font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid #E8E6E0">Public "Rent a chair" page</span>
+</div>
+</div>
+
+<div>
+<h3 style="margin: 0 0 8px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #5E5E66">Automations</h3>
+<ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px">
+<li style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.45"><span style="flex: none; font-size: 12px; font-weight: 600; color: #0F5640; background: #E4F2EA; padding: 2px 8px; border-radius: 6px">WHEN</span><span>Application submitted → confirm to applicant on WhatsApp, ask you to approve</span></li>
+<li style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.45"><span style="flex: none; font-size: 12px; font-weight: 600; color: #0F5640; background: #E4F2EA; padding: 2px 8px; border-radius: 6px">WHEN</span><span>Approved → send agreement to sign → on signing, chair marked occupied</span></li>
+<li style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.45"><span style="flex: none; font-size: 12px; font-weight: 600; color: #0F5640; background: #E4F2EA; padding: 2px 8px; border-radius: 6px">WHEN</span><span>Rent due Monday → auto-charge card → if it fails, remind renter and alert you</span></li>
+<li style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.45"><span style="flex: none; font-size: 12px; font-weight: 600; color: #0F5640; background: #E4F2EA; padding: 2px 8px; border-radius: 6px">WHEN</span><span>Insurance expires in 30 days → ask renter for the new document</span></li>
+<li style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.45"><span style="flex: none; font-size: 12px; font-weight: 600; color: #0F5640; background: #E4F2EA; padding: 2px 8px; border-radius: 6px">WHEN</span><span>Notice given → chair shows as available from the end date</span></li>
+</ol>
+</div>
+
+<div>
+<h3 style="margin: 0 0 8px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #5E5E66">Connections</h3>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<span style="font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid #E8E6E0">Stripe — rent payments</span>
+<span style="font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid #E8E6E0">E-signature — agreements</span>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 10px; padding-top: 6px; border-top: 1px solid #EEEEE9">
+<button type="button" style="font: inherit; font-size: 15px; font-weight: 600; padding: 12px 20px; border: none; border-radius: 999px; background: #17694F; color: #FFFFFF; cursor: pointer">Build it</button>
+<button type="button" style="font: inherit; font-size: 15px; padding: 12px 20px; border: 1px solid #D9D6CE; border-radius: 999px; background: #FFFFFF; cursor: pointer">Change something</button>
+<span style="align-self: center; font-size: 13px; color: #5E5E66">Undo anytime from Settings › History</span>
+</div>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

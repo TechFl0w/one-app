@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout editor — ask the AI or drag blocks</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F5F0}
+a{color:#17694F}a:hover{color:#0F5640}
+</style>
+</helmet>
+<div style="font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: #1C1B19; background: #F7F5F0; min-height: 900px; display: flex; flex-wrap: wrap; align-items: stretch">
+
+<main style="flex: 999 1 640px; min-width: 0; padding: 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+
+<div role="status" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 12px 10px 18px; border-radius: 999px; background: #E4F2EA; border: 1px solid #BFE0CF; color: #0F3D2E">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#17694F" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>
+<span style="font-size: 14px; font-weight: 600">Editing layout: Today</span>
+<span style="font-size: 13px; color: #2F4A3F; flex: 1; min-width: 220px">Drag blocks, resize from the corner, or ask the assistant. Preview shown — nothing is live yet.</span>
+<div role="group" aria-label="Preview size" style="display: flex; gap: 4px; padding: 3px; background: #FFFFFF; border-radius: 999px; border: 1px solid #BFE0CF">
+<button type="button" aria-pressed="true" style="font: inherit; font-size: 13px; font-weight: 600; padding: 7px 12px; border: none; border-radius: 999px; background: #17694F; color: #FFFFFF; cursor: pointer">Desktop</button>
+<button type="button" aria-pressed="false" style="font: inherit; font-size: 13px; padding: 7px 12px; border: none; border-radius: 999px; background: transparent; cursor: pointer">Tablet</button>
+<button type="button" aria-pressed="false" style="font: inherit; font-size: 13px; padding: 7px 12px; border: none; border-radius: 999px; background: transparent; cursor: pointer">Phone</button>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; padding: 14px; border-radius: 20px; background-color: #FFFFFF; background-image: linear-gradient(90deg, rgba(23,105,79,0.05) 1px, transparent 1px); background-size: calc(100% / 12) 100%; border: 1px solid #E8E4DA">
+
+<div style="grid-column: span 4; position: relative; border: 2px solid #17694F; border-radius: 16px; padding: 14px; background: #F6FBF8">
+<span style="position: absolute; top: -11px; left: 12px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #17694F; color: #FFFFFF">Number · moved to top</span>
+<div style="font-size: 12px; color: #5E5B55">Revenue today</div>
+<div style="font-size: 30px; font-weight: 700; letter-spacing: -0.02em">[AMOUNT]</div>
+<div style="font-size: 12px; color: #0F5640">vs. last Saturday</div>
+</div>
+<div style="grid-column: span 4; position: relative; border: 1px dashed #B9B4A8; border-radius: 16px; padding: 14px">
+<span style="position: absolute; top: -11px; left: 12px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #FFFFFF; border: 1px solid #D9D4C8; color: #3A3833">Number</span>
+<div style="font-size: 12px; color: #5E5B55">Bookings today</div>
+<div style="font-size: 30px; font-weight: 700; letter-spacing: -0.02em">14</div>
+<div style="font-size: 12px; color: #5E5B55">2 waiting for deposit</div>
+</div>
+<div style="grid-column: span 4; position: relative; border: 1px dashed #B9B4A8; border-radius: 16px; padding: 14px">
+<span style="position: absolute; top: -11px; left: 12px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #FFFFFF; border: 1px solid #D9D4C8; color: #3A3833">Number</span>
+<div style="font-size: 12px; color: #5E5B55">Free slots left</div>
+<div style="font-size: 30px; font-weight: 700; letter-spacing: -0.02em">5</div>
+<div style="font-size: 12px; color: #5E5B55">mostly after 3pm</div>
+</div>
+
+<div style="grid-column: span 8; position: relative; border: 2px solid #17694F; border-radius: 16px; padding: 14px; min-height: 330px; background: #F6FBF8; display: flex; flex-direction: column; gap: 10px">
+<span style="position: absolute; top: -11px; left: 12px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #17694F; color: #FFFFFF">Calendar · made wider</span>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; font-size: 12px; font-weight: 600; color: #3A3833"><span>Mia</span><span>Sam</span><span>Jo</span><span>Lee</span></div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; flex: 1">
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 70px; border-radius: 10px; background: #FCE7F3"></div><div style="height: 44px; border-radius: 10px; background: #FCE7F3"></div><div style="height: 90px; border-radius: 10px; border: 2px dashed #17694F"></div></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 100px; border-radius: 10px; background: #E0E7FF"></div><div style="height: 44px; border-radius: 10px; background: #E0E7FF"></div></div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding-top: 40px"><div style="height: 44px; border-radius: 10px; background: #DCFCE7"></div><div style="height: 44px; border-radius: 10px; background: #DCFCE7"></div></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 44px; border-radius: 10px; background: #FEF3C7"></div><div style="height: 70px; border-radius: 10px; background: #FEF3C7"></div></div>
+</div>
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#17694F" stroke-width="2.5" style="position: absolute; right: 8px; bottom: 8px"><path d="M21 13v8h-8M21 21l-7-7"/></svg>
+</div>
+
+<div style="grid-column: span 4; position: relative; border: 2px solid #17694F; border-radius: 16px; padding: 14px; background: #F6FBF8; display: flex; flex-direction: column; gap: 8px">
+<span style="position: absolute; top: -11px; left: 12px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #17694F; color: #FFFFFF">Messages · moved right</span>
+<div style="font-size: 13px; font-weight: 600">WhatsApp</div>
+<div style="font-size: 12px; line-height: 1.45; padding: 8px 10px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E8E4DA">Priya: Can I move to 3:30?</div>
+<div style="font-size: 12px; line-height: 1.45; padding: 8px 10px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E8E4DA">New booking: gel + art, 2pm</div>
+<div style="font-size: 12px; line-height: 1.45; padding: 8px 10px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E8E4DA">Kim: running 10 min late</div>
+</div>
+
+<div style="grid-column: span 12; border: 1px dashed #B9B4A8; border-radius: 16px; padding: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #5E5B55; font-size: 13px">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Drop a block here
+</div>
+</div>
+</main>
+
+<aside aria-label="Assistant and blocks" style="flex: 1 1 300px; max-width: 380px; min-width: 0; background: #FFFFFF; border-left: 1px solid #E8E4DA; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 17px; font-weight: 600">Assistant</h2>
+<div style="align-self: flex-end; max-width: 92%; background: #1C1B19; color: #FFFFFF; padding: 10px 14px; border-radius: 16px 16px 4px 16px; font-size: 14px; line-height: 1.5">Put today's revenue first, make the calendar bigger and move WhatsApp to the right.</div>
+<div style="background: #F7F5F0; padding: 12px 14px; border-radius: 16px 16px 16px 4px; font-size: 14px; line-height: 1.5; display: flex; flex-direction: column; gap: 8px">
+<span>Done in the preview. 3 changes:</span>
+<ol style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+<li>Revenue moved to the first spot</li>
+<li>Calendar widened from half to two-thirds</li>
+<li>WhatsApp moved to the right column</li>
+</ol>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button type="button" style="flex: 1; font: inherit; font-size: 14px; font-weight: 600; padding: 11px 16px; border: none; border-radius: 999px; background: #17694F; color: #FFFFFF; cursor: pointer">Keep it</button>
+<button type="button" style="flex: 1; font: inherit; font-size: 14px; padding: 11px 16px; border: 1px solid #D9D4C8; border-radius: 999px; background: #FFFFFF; cursor: pointer">Undo</button>
+</div>
+<form style="display: flex; gap: 8px">
+<label for="layout-ask" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Ask for a layout change</label>
+<input id="layout-ask" type="text" placeholder="e.g. hide revenue from staff" style="flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 11px 14px; border: 1px solid #D9D4C8; border-radius: 999px">
+<button type="submit" aria-label="Send" style="width: 44px; height: 44px; border: none; border-radius: 999px; background: #17694F; color: #FFFFFF; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+</form>
+
+<div style="border-top: 1px solid #EEEAE1; padding-top: 14px; display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-size: 13px; font-weight: 600; color: #3A3833">Add a block</h3>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<button type="button" style="font: inherit; font-size: 12px; padding: 12px 6px; border: 1px solid #E8E4DA; border-radius: 12px; background: #FFFFFF; cursor: grab">Number</button>
+<button type="button" style="font: inherit; font-size: 12px; padding: 12px 6px; border: 1px solid #E8E4DA; border-radius: 12px; background: #FFFFFF; cursor: grab">Chart</button>
+<button type="button" style="font: inherit; font-size: 12px; padding: 12px 6px; border: 1px solid #E8E4DA; border-radius: 12px; background: #FFFFFF; cursor: grab">List</button>
+<button type="button" style="font: inherit; font-size: 12px; padding: 12px 6px; border: 1px solid #E8E4DA; border-radius: 12px; background: #FFFFFF; cursor: grab">Calendar</button>
+<button type="button" style="font: inherit; font-size: 12px; padding: 12px 6px; border: 1px solid #E8E4DA; border-radius: 12px; background: #FFFFFF; cursor: grab">Board</button>
+<button type="button" style="font: inherit; font-size: 12px; padding: 12px 6px; border: 1px solid #E8E4DA; border-radius: 12px; background: #FFFFFF; cursor: grab">Messages</button>
+<button type="button" style="font: inherit; font-size: 12px; padding: 12px 6px; border: 1px solid #E8E4DA; border-radius: 12px; background: #FFFFFF; cursor: grab">Form</button>
+<button type="button" style="font: inherit; font-size: 12px; padding: 12px 6px; border: 1px solid #E8E4DA; border-radius: 12px; background: #FFFFFF; cursor: grab">Buttons</button>
+<button type="button" style="font: inherit; font-size: 12px; padding: 12px 6px; border: 1px solid #E8E4DA; border-radius: 12px; background: #FFFFFF; cursor: grab">Notes</button>
+</div>
+</div>
+<p style="margin: auto 0 0; font-size: 12px; color: #5E5B55; line-height: 1.5">Each person can save their own version of a page. Owners can lock a layout for the team.</p>
+</aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
