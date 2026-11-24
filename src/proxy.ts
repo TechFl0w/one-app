@@ -6,6 +6,14 @@ const PUBLIC_PATHS = ["/login", "/auth"];
 
 /** Refreshes the Supabase session cookie on every request and sends signed-out users to /login. */
 export async function proxy(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  // The demo runs on in-memory data and needs no session.
+  if (path === "/demo" || path.startsWith("/demo/")) return NextResponse.next();
+  // Without Supabase configured (local dev), only the demo works.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
+    return NextResponse.redirect(new URL("/demo", request.url));
+  }
+
   let response = NextResponse.next({ request });
   const { url, key } = supabaseEnv();
   const supabase = createServerClient(url, key, {
@@ -20,7 +28,6 @@ export async function proxy(request: NextRequest) {
   });
 
   const { data } = await supabase.auth.getClaims();
-  const path = request.nextUrl.pathname;
   if (!data?.claims && !PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`))) {
     if (path.startsWith("/api/")) {
       return NextResponse.json({ error: { code: "unauthenticated", message: "Sign in first" } }, { status: 401 });

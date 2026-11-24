@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { FieldId, TableId } from "./blueprint";
+import { FieldId, FilterOp, TableId } from "./blueprint";
+
+export { FILTER_OPS, FilterOp } from "./blueprint";
 
 /** Record input/query shapes. Field values are checked per field type in src/engine/records.ts. */
 
@@ -8,10 +10,6 @@ export const RecordId = z.uuid();
 /** Values keyed by field id. `null` clears a field. */
 export const RecordInput = z.record(FieldId, z.unknown());
 export type RecordInput = z.infer<typeof RecordInput>;
-
-export const FILTER_OPS = ["eq", "neq", "gt", "gte", "lt", "lte", "contains", "empty", "not_empty"] as const;
-export const FilterOp = z.enum(FILTER_OPS);
-export type FilterOp = z.infer<typeof FilterOp>;
 
 export const RecordFilter = z.strictObject({
   field: FieldId,

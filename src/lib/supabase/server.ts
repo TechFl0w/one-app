@@ -5,8 +5,8 @@ import { supabaseEnv } from "./env";
 
 /** Supabase client for server components, server actions and route handlers (acts as the signed-in user). */
 export async function createClient() {
+  const cookieStore = await cookies(); // first, so pages using this are always dynamic
   const { url, key } = supabaseEnv();
-  const cookieStore = await cookies();
   return createServerClient(url, key, {
     cookies: {
       getAll: () => cookieStore.getAll(),

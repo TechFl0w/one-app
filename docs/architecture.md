@@ -17,7 +17,7 @@ A business's whole configuration is one versioned JSON document validated by zod
   "pages": [
     { "id": "pg_today", "label": "Today", "icon": "calendar", "menuOrder": 1, "hidden": false,
       "layout": { "columns": 12, "blocks": [
-        { "id": "blk_rev", "type": "number", "source": { "table": "tbl_payments", "agg": "sum", "field": "fld_amount", "filter": "today" }, "x": 0, "y": 0, "w": 4, "h": 1 },
+        { "id": "blk_rev", "type": "number", "source": { "table": "tbl_payments", "agg": "sum", "field": "fld_amount", "filters": [{ "field": "fld_start", "op": "eq", "value": "@today" }] }, "x": 0, "y": 0, "w": 4, "h": 1 },
         { "id": "blk_cal", "type": "calendar", "source": { "table": "tbl_bookings", "groupBy": "fld_practitioner" }, "x": 0, "y": 1, "w": 8, "h": 4 }
       ]},
       "layoutOverrides": { "device:phone": { "blocks": [] }, "user:<uuid>": { "blocks": [] } }

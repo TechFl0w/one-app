@@ -147,9 +147,26 @@ export const BLOCK_TYPES = [
 export const BlockType = z.enum(BLOCK_TYPES);
 export type BlockType = z.infer<typeof BlockType>;
 
+export const FILTER_OPS = ["eq", "neq", "gt", "gte", "lt", "lte", "contains", "empty", "not_empty"] as const;
+export const FilterOp = z.enum(FILTER_OPS);
+export type FilterOp = z.infer<typeof FilterOp>;
+
+/**
+ * Date tokens resolved at query time in the business timezone. With `eq` on a date/datetime
+ * field, `@today` etc. mean "within that day/week/month".
+ */
+export const DATE_TOKENS = ["@today", "@tomorrow", "@yesterday", "@this_week", "@this_month", "@now"] as const;
+
+export const BlockFilter = z.strictObject({
+  field: FieldId,
+  op: FilterOp,
+  value: z.union([z.string().max(200), z.number(), z.boolean()]).optional(),
+});
+export type BlockFilter = z.infer<typeof BlockFilter>;
+
 export const DataSource = z.strictObject({
   table: TableId,
-  filter: z.string().max(500).optional(),
+  filters: z.array(BlockFilter).max(20).optional(),
   sort: z
     .array(z.strictObject({ field: FieldId, dir: z.enum(["asc", "desc"]) }))
     .optional(),
@@ -235,7 +252,7 @@ export const Trigger = z.looseObject({
 
 export const Condition = z.strictObject({
   field: FieldId,
-  op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains", "empty", "not_empty"]),
+  op: FilterOp,
   value: z.unknown().optional(),
 });
 
@@ -328,6 +345,9 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
     const fields = fieldsOf(src.table);
     if (src.groupBy && !fields.has(src.groupBy)) issue([...path, "groupBy"], `unknown field ${src.groupBy}`);
     if (src.field && !fields.has(src.field)) issue([...path, "field"], `unknown field ${src.field}`);
+    src.filters?.forEach((f, i) => {
+      if (!fields.has(f.field)) issue([...path, "filters", i, "field"], `unknown field ${f.field}`);
+    });
     src.sort?.forEach((s, i) => {
       if (!fields.has(s.field)) issue([...path, "sort", i, "field"], `unknown field ${s.field}`);
     });
