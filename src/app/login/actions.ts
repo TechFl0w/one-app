@@ -31,6 +31,8 @@ export async function signUp(_prev: AuthState, form: FormData): Promise<AuthStat
     options: { emailRedirectTo: `${origin}/auth/callback` },
   });
   if (error) return { error: error.message };
+  // Supabase answers a sign-up for an existing email with a user that has no identities (and sends nothing).
+  if (data.user && data.user.identities?.length === 0) return { error: "You already have an account with this email — sign in instead." };
   if (!data.session) return { message: "Check your email to confirm your account." };
   redirect("/");
 }
