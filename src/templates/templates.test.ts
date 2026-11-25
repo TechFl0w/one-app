@@ -53,7 +53,7 @@ describe.each(TEMPLATES.map((t) => [t.id, t] as const))("template %s", (_id, tem
 
 describe("template answers", () => {
   it("uses the owner's lists and options", () => {
-    const salon = TEMPLATES.find((t) => t.id === "nail_salon")!;
+    const salon = TEMPLATES.find((t) => t.id === "appointments")!;
     const built = salon.build(business, { team: ["Mai", " Priya ", "Mai", ""], extras: ["stations", "deposits"] });
     expect(built.seed.filter((s) => s.table === "tbl_team").map((s) => s.data.fld_name)).toEqual(["Mai", "Priya"]);
     expect(built.blueprint.tables.map((t) => t.id)).toContain("tbl_stations");
@@ -67,13 +67,13 @@ describe("template answers", () => {
   });
 });
 
-describe("nail salon booking", () => {
+describe("appointments booking", () => {
   it("is bookable right after onboarding", async () => {
     const { availableSlots, catalog } = await import("@/booking/service");
     const { memoryBackend } = await import("@/agent/memoryBackend");
-    const salon = TEMPLATES.find((t) => t.id === "nail_salon")!;
+    const salon = TEMPLATES.find((t) => t.id === "appointments")!;
     for (const extras of [[], ["stations"]]) {
-      const { blueprint, seed } = salon.build(business, { team: ["Mai", "Priya"], opening: "mon_fri", extras });
+      const { blueprint, seed } = salon.build(business, { team: ["Mai", "Priya"], opening: JSON.stringify({ mon: [["09:00", "17:00"]], tue: [["09:00", "17:00"]], wed: [["09:00", "17:00"]], thu: [["09:00", "17:00"]], fri: [["09:00", "17:00"]] }), extras });
       let n = 0;
       const records = seed.map((s) => ({ id: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, tableId: s.table, data: s.data, createdAt: "", updatedAt: "" }));
       const { backend } = memoryBackend({ blueprint, records });
@@ -83,5 +83,22 @@ describe("nail salon booking", () => {
       expect(slots.length).toBeGreaterThan(20); // Monday 9–5, 15-minute steps
       if (extras.length) expect(slots[0].resourceId).toBeDefined();
     }
+  });
+});
+
+describe("appointments questions", () => {
+  it("words questions and suggests services from the kind of appointments", async () => {
+    const { resolve, initialValue, hours } = await import("./types");
+    const t = TEMPLATES.find((x) => x.id === "appointments")!;
+    const [kind, team, services, opening] = t.questions;
+    expect(resolve(team.label, { kind: "hair" })).toBe("Who does the hair?");
+    expect(initialValue(services, { kind: "hair" })).toEqual(["Haircut", "Colour", "Blow-dry"]);
+    expect(t.build(business, { kind: "hair" }).seed.filter((s) => s.table === "tbl_services").map((s) => s.data.fld_name)).toEqual(["Haircut", "Colour", "Blow-dry"]);
+    expect(kind.kind).toBe("choice");
+    // Hours come from the editor as JSON; bad input falls back to the default.
+    if (opening.kind !== "hours") throw new Error("hours question");
+    expect(hours({ opening: JSON.stringify({ sun: [["10:00", "14:00"]] }) }, opening)).toEqual({ sun: [["10:00", "14:00"]] });
+    expect(hours({ opening: "{bad" }, opening)).toEqual(opening.default);
+    expect(hours({ opening: JSON.stringify({ funday: [["1", "2"]] }) }, opening)).toEqual(opening.default);
   });
 });

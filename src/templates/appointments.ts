@@ -1,11 +1,31 @@
-import type { Automation, Page, Table, WeeklyHours } from "@/schema/blueprint";
-import { choice, list, multi, type Question, type Seed, type Template } from "./types";
+import type { Automation, Page, Table } from "@/schema/blueprint";
+import { hours, list, multi, type Question, type Seed, type Template } from "./types";
 import { automation, block, COLORS, datetime, email, finish, link, longText, money, num, optId, page, phone, status, text, check } from "./kit";
+
+/** What kind of appointments: words the questions and suggests services. Everything stays editable. */
+const KINDS: Record<string, { label: string; who: string; services: string[] }> = {
+  hair: { label: "Hair", who: "Who does the hair?", services: ["Haircut", "Colour", "Blow-dry"] },
+  nails: { label: "Nails", who: "Who does the nails?", services: ["Gel manicure", "Classic pedicure", "Nail art"] },
+  beauty: { label: "Beauty & skin", who: "Who does the treatments?", services: ["Facial", "Lash lift", "Waxing"] },
+  wellness: { label: "Massage & wellness", who: "Who does the treatments?", services: ["60-min massage", "90-min massage"] },
+  health: { label: "Health & therapy", who: "Who sees clients?", services: ["First consultation", "Follow-up session"] },
+  coaching: { label: "Coaching & lessons", who: "Who teaches or coaches?", services: ["Private session", "Trial lesson"] },
+  other: { label: "Something else", who: "Who takes appointments?", services: ["Appointment"] },
+};
+
+const kind: Question & { kind: "choice" } = {
+  id: "kind",
+  kind: "choice",
+  label: "What kind of appointments?",
+  options: Object.entries(KINDS).map(([id, k]) => ({ id, label: k.label })),
+  default: "other",
+};
+const kindOf = (a: Record<string, unknown>) => KINDS[typeof a.kind === "string" && a.kind in KINDS ? a.kind : "other"];
 
 const team: Question & { kind: "list" } = {
   id: "team",
   kind: "list",
-  label: "Who does the nails?",
+  label: (a) => kindOf(a).who,
   placeholder: "A name",
   hint: "Just you is fine. You can add people later.",
   max: 12,
@@ -15,28 +35,19 @@ const services: Question & { kind: "list" } = {
   id: "services",
   kind: "list",
   label: "Your main services",
-  placeholder: "e.g. Gel manicure",
+  placeholder: (a) => `e.g. ${kindOf(a).services[0]}`,
+  hint: "Add or remove — durations and prices can be set after.",
   max: 20,
-  default: ["Gel manicure", "Classic pedicure", "Nail art"],
+  default: KINDS.other.services,
+  defaultFor: (a) => kindOf(a).services,
 };
-const opening: Question & { kind: "choice" } = {
+const nineToSix: [string, string][] = [["09:00", "18:00"]];
+const opening: Question & { kind: "hours" } = {
   id: "opening",
-  kind: "choice",
+  kind: "hours",
   label: "When are you open?",
-  options: [
-    { id: "tue_sat", label: "Tuesday–Saturday, 9–6" },
-    { id: "mon_fri", label: "Monday–Friday, 9–5" },
-    { id: "mon_sat", label: "Monday–Saturday, 10–7" },
-    { id: "every_day", label: "Every day, 10–6" },
-  ],
-  default: "tue_sat",
-};
-
-const OPENING: Record<string, WeeklyHours> = {
-  tue_sat: { tue: [["09:00", "18:00"]], wed: [["09:00", "18:00"]], thu: [["09:00", "18:00"]], fri: [["09:00", "18:00"]], sat: [["09:00", "18:00"]] },
-  mon_fri: { mon: [["09:00", "17:00"]], tue: [["09:00", "17:00"]], wed: [["09:00", "17:00"]], thu: [["09:00", "17:00"]], fri: [["09:00", "17:00"]] },
-  mon_sat: { mon: [["10:00", "19:00"]], tue: [["10:00", "19:00"]], wed: [["10:00", "19:00"]], thu: [["10:00", "19:00"]], fri: [["10:00", "19:00"]], sat: [["10:00", "19:00"]] },
-  every_day: { mon: [["10:00", "18:00"]], tue: [["10:00", "18:00"]], wed: [["10:00", "18:00"]], thu: [["10:00", "18:00"]], fri: [["10:00", "18:00"]], sat: [["10:00", "18:00"]], sun: [["10:00", "18:00"]] },
+  hint: "Online booking only offers times inside these hours. Each team member can have their own hours later.",
+  default: { tue: nineToSix, wed: nineToSix, thu: nineToSix, fri: nineToSix, sat: nineToSix },
 };
 
 const extras: Question & { kind: "multi" } = {
@@ -46,19 +57,19 @@ const extras: Question & { kind: "multi" } = {
   options: [
     { id: "reminders", label: "Appointment reminders", hint: "WhatsApp message the day before" },
     { id: "deposits", label: "Deposits & payments", hint: "Track what’s paid per booking" },
-    { id: "stations", label: "Stations / chairs", hint: "Plan who sits where" },
+    { id: "stations", label: "Rooms / stations", hint: "Plan which room or chair each booking uses" },
     { id: "rebook", label: "Rebooking nudges", hint: "Remind clients after 3 weeks" },
     { id: "reviews", label: "Review requests", hint: "Ask happy clients for a review after their visit" },
   ],
   default: ["reminders"],
 };
 
-export const nailSalon: Template = {
-  id: "nail_salon",
-  label: "Nail salon",
-  description: "Bookings by practitioner, clients, services, reminders and deposits.",
-  businessType: "nail_salon",
-  questions: [team, services, opening, extras],
+export const appointments: Template = {
+  id: "appointments",
+  label: "Book appointments",
+  description: "Clients book with you or your team: services, calendar, reminders, deposits.",
+  businessType: "appointments",
+  questions: [kind, team, services, opening, extras],
   build(business, answers) {
     const want = new Set(multi(answers, extras));
     const tables: Table[] = [
@@ -76,7 +87,7 @@ export const nailSalon: Template = {
           text("fld_name", "Name", true),
           phone("fld_whatsapp", "WhatsApp"),
           email("fld_email"),
-          link("fld_fav_tech", "Favourite tech", "tbl_team"),
+          link("fld_fav_tech", "Usually sees", "tbl_team"),
           longText("fld_notes", "Notes"),
           check("fld_vip", "VIP"),
         ],
@@ -94,7 +105,7 @@ export const nailSalon: Template = {
         fields: [
           link("fld_client", "Client", "tbl_clients", { required: true }),
           link("fld_service", "Service", "tbl_services"),
-          link("fld_practitioner", "Tech", "tbl_team"),
+          link("fld_practitioner", "With", "tbl_team"),
           datetime("fld_start", "Start", true),
           datetime("fld_end", "End"),
           status("fld_status", "Status", [["Requested", COLORS.AMBER], ["Booked", COLORS.GREEN], ["Done", COLORS.GREY], ["No-show", COLORS.RED], ["Cancelled", COLORS.GREY]]),
@@ -104,8 +115,8 @@ export const nailSalon: Template = {
       },
     ];
     if (want.has("stations")) {
-      tables.push({ id: "tbl_stations", label: "Stations", primaryField: "fld_name", fields: [text("fld_name", "Station", true)] });
-      tables[3].fields.push(link("fld_station", "Station", "tbl_stations"));
+      tables.push({ id: "tbl_stations", label: "Rooms & stations", primaryField: "fld_name", fields: [text("fld_name", "Name", true)] });
+      tables[3].fields.push(link("fld_station", "Room / station", "tbl_stations"));
     }
     if (want.has("deposits")) {
       tables[3].fields.push(money("fld_deposit", "Deposit"), status("fld_payment", "Payment", [["Unpaid", COLORS.AMBER], ["Deposit paid", COLORS.BLUE], ["Paid", COLORS.GREEN]]));
@@ -188,7 +199,7 @@ export const nailSalon: Template = {
     return {
       blueprint: finish({
         version: 1,
-        business: { ...business, type: "nail_salon" },
+        business: { ...business, type: "appointments" },
         tables,
         pages,
         automations,
@@ -204,7 +215,7 @@ export const nailSalon: Template = {
           practitioners: { table: "tbl_team", hours: "fld_hours", online: "fld_online" },
           ...(want.has("stations") ? { resources: { table: "tbl_stations" } } : {}),
           clients: { table: "tbl_clients", name: "fld_name", email: "fld_email", phone: "fld_whatsapp" },
-          hours: OPENING[choice(answers, opening)],
+          hours: hours(answers, opening),
           rules: { slotStepMin: 15, minNoticeMin: 120, horizonDays: 60, holdMin: 15, cancelWindowHours: 24, autoConfirm: false },
           ...(want.has("deposits") ? { deposit: { kind: "percent" as const, value: 20 } } : {}),
           statuses: {

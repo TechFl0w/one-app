@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Select } from "@/components/ui/Select";
 import type { LineStatus } from "@/whatsapp/core";
 
 type State = { ok?: boolean; message?: string };
@@ -122,10 +123,7 @@ export function WhatsAppSettings({
         <section className="card space-y-4 p-6">
           <h2 className="font-semibold">1. Get a number</h2>
           <div className="flex flex-wrap gap-2">
-            <select className="input w-auto" value={country} onChange={(e) => setCountry(e.target.value as "CA" | "US")} aria-label="Country">
-              <option value="CA">Canada</option>
-              <option value="US">United States</option>
-            </select>
+            <Select className="w-44" value={country} onChange={(v) => setCountry(v as "CA" | "US")} ariaLabel="Country" options={[{ value: "CA", label: "Canada" }, { value: "US", label: "United States" }]} />
             <input className="input w-32" inputMode="numeric" placeholder="Area code" value={area} onChange={(e) => setArea(e.target.value.replace(/\D/g, "").slice(0, 3))} aria-label="Area code" />
             <button type="button" className="btn-primary" disabled={busy} onClick={() => run(async () => setFound(await find(country, area ? Number(area) : undefined)))}>Find numbers</button>
           </div>

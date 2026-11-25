@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FlaskConical, Zap } from "lucide-react";
@@ -151,9 +152,7 @@ function TestDialog({ automation, samples, onClose }: { automation: Automation; 
         <div className="space-y-4">
           <div>
             <label className="label" htmlFor="test-record">Try it on</label>
-            <select id="test-record" className="input" value={recordId} onChange={(e) => setRecordId(e.target.value)}>
-              {samples.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
+            <Select id="test-record" value={recordId} onChange={(v) => setRecordId(v as string)} options={samples.map((s) => ({ value: s.id, label: s.label }))} />
           </div>
           {result && (
             <div className="rounded-2xl bg-ground p-4 text-sm">

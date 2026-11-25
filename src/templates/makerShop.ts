@@ -40,7 +40,7 @@ const CHANNEL_LABELS: Record<string, string> = { etsy: "Etsy", instagram: "Insta
 
 export const makerShop: Template = {
   id: "maker_shop",
-  label: "Maker shop (orders)",
+  label: "Sell products",
   description: "Products and stock, orders from every channel, customers, shipping.",
   businessType: "maker_shop",
   questions: [products, channels, extras],

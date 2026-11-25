@@ -1,10 +1,26 @@
 import type { Blueprint } from "@/schema/blueprint";
 
-/** An onboarding question. Answers are strings (choice/text) or string arrays (multi). */
+import { WeeklyHours } from "@/schema/blueprint";
+
+/**
+ * An onboarding question. Answers are strings (choice; hours as JSON) or string arrays (multi/list).
+ * `label`/`placeholder`/`defaultFor` may depend on earlier answers (e.g. the kind of appointments).
+ */
+type Dyn<T> = T | ((a: Answers) => T);
 export type Question =
-  | { id: string; kind: "choice"; label: string; options: { id: string; label: string; hint?: string }[]; default: string }
-  | { id: string; kind: "multi"; label: string; options: { id: string; label: string; hint?: string }[]; default: string[] }
-  | { id: string; kind: "list"; label: string; placeholder: string; hint?: string; max: number; default: string[] };
+  | { id: string; kind: "choice"; label: Dyn<string>; options: { id: string; label: string; hint?: string }[]; default: string }
+  | { id: string; kind: "multi"; label: Dyn<string>; options: { id: string; label: string; hint?: string }[]; default: string[] }
+  | { id: string; kind: "list"; label: Dyn<string>; placeholder: Dyn<string>; hint?: string; max: number; default: string[]; defaultFor?: (a: Answers) => string[] }
+  | { id: string; kind: "hours"; label: Dyn<string>; hint?: string; default: WeeklyHours };
+
+export const resolve = <T>(v: Dyn<T>, a: Answers): T => (typeof v === "function" ? (v as (a: Answers) => T)(a) : v);
+
+/** The value shown for a question before the owner touches it. */
+export function initialValue(q: Question, a: Answers): string | string[] {
+  if (q.kind === "hours") return JSON.stringify(q.default);
+  if (q.kind === "list" && q.defaultFor) return q.defaultFor(a);
+  return q.default;
+}
 
 export type Answers = Record<string, string | string[]>;
 
@@ -40,6 +56,18 @@ export const multi = (a: Answers, q: Question & { kind: "multi" }) => {
 };
 export const list = (a: Answers, q: Question & { kind: "list" }) => {
   const v = a[q.id];
-  const items = (Array.isArray(v) ? v : q.default).map((s) => String(s).trim().slice(0, 60)).filter(Boolean);
+  const items = (Array.isArray(v) ? v : (q.defaultFor?.(a) ?? q.default)).map((s) => String(s).trim().slice(0, 60)).filter(Boolean);
   return [...new Set(items)].slice(0, q.max);
+};
+
+/** Opening hours from the hours editor (JSON), validated; falls back to the default. */
+export const hours = (a: Answers, q: Question & { kind: "hours" }): WeeklyHours => {
+  const v = a[q.id];
+  if (typeof v !== "string") return q.default;
+  try {
+    const parsed = WeeklyHours.safeParse(JSON.parse(v));
+    return parsed.success && Object.keys(parsed.data).length ? parsed.data : q.default;
+  } catch {
+    return q.default;
+  }
 };

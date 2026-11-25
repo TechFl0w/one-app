@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Plus, Sparkles, X, Zap } from "lucide-react";
 import { TEMPLATES, templateById, type Answers, type Question } from "@/templates";
+import { initialValue, resolve } from "@/templates/types";
+import { HoursEditor } from "./HoursEditor";
 import { menuPages } from "@/engine/layout";
 import { PageIcon } from "@/components/shell/Icon";
 
@@ -24,10 +26,7 @@ export function Wizard({ build }: { build?: BuildAction }) {
   const template = templateId ? templateById(templateId) : undefined;
   const questions = template?.questions ?? [];
   const lastStep = questions.length + 1; // 0 = type+name, 1..n = questions, n+1 = preview
-  const preview = useMemo(
-    () => (template && step === lastStep ? template.build({ name: name.trim() || "Your business", timezone: "UTC" }, answers) : null),
-    [template, step, lastStep, name, answers],
-  );
+  const preview = template && step === lastStep ? template.build({ name: name.trim() || "Your business", timezone: "UTC" }, answers) : null;
 
   const next = () => {
     setError(null);
@@ -73,10 +72,10 @@ export function Wizard({ build }: { build?: BuildAction }) {
           </div>
           <div>
             <label className="label" htmlFor="biz-name">Business name</label>
-            <input id="biz-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Polished Nail Bar" maxLength={80} autoFocus />
+            <input id="biz-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Glorious Hair" maxLength={80} autoFocus />
           </div>
           <fieldset>
-            <legend className="label">What kind of business?</legend>
+            <legend className="label">What do you want to run with One App?</legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {TEMPLATES.map((t) => (
                 <label key={t.id} className={`cursor-pointer rounded-2xl border p-4 ${templateId === t.id ? "border-accent bg-accent-tint" : "border-line hover:bg-ground"}`}>
@@ -90,7 +89,7 @@ export function Wizard({ build }: { build?: BuildAction }) {
         </div>
       )}
 
-      {q && <QuestionStep question={q} value={answers[q.id] ?? q.default} onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))} />}
+      {q && <QuestionStep key={q.id} question={q} answers={answers} value={answers[q.id] ?? initialValue(q, answers)} onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))} />}
 
       {preview && (
         <div className="space-y-5">
@@ -153,7 +152,7 @@ export function Wizard({ build }: { build?: BuildAction }) {
   );
 }
 
-function QuestionStep({ question: q, value, onChange }: { question: Question; value: string | string[]; onChange: (v: string | string[]) => void }) {
+function QuestionStep({ question: q, answers, value, onChange }: { question: Question; answers: Answers; value: string | string[]; onChange: (v: string | string[]) => void }) {
   const [entry, setEntry] = useState("");
   const add = () => {
     const v = entry.trim();
@@ -162,8 +161,9 @@ function QuestionStep({ question: q, value, onChange }: { question: Question; va
   };
   return (
     <fieldset className="space-y-4">
-      <legend className="text-xl font-bold">{q.label}</legend>
-      {q.kind === "list" && q.hint && <p className="text-sm text-muted">{q.hint}</p>}
+      <legend className="text-xl font-bold">{resolve(q.label, answers)}</legend>
+      {(q.kind === "list" || q.kind === "hours") && q.hint && <p className="text-sm text-muted">{q.hint}</p>}
+      {q.kind === "hours" && typeof value === "string" && <HoursEditor value={value} onChange={onChange} />}
       {q.kind === "choice" && (
         <div className="space-y-2">
           {q.options.map((o) => (
@@ -216,7 +216,7 @@ function QuestionStep({ question: q, value, onChange }: { question: Question; va
             }}
           >
             {/* Leaving the field also adds what was typed, so Continue never drops it. */}
-            <input className="input" value={entry} onChange={(e) => setEntry(e.target.value)} onBlur={add} placeholder={q.placeholder} maxLength={60} aria-label={q.label} />
+            <input className="input" value={entry} onChange={(e) => setEntry(e.target.value)} onBlur={add} placeholder={resolve(q.placeholder, answers)} maxLength={60} aria-label={resolve(q.label, answers)} />
             <button className="btn-ghost shrink-0 px-4" aria-label="Add"><Plus className="h-4 w-4" /></button>
           </form>
         </div>

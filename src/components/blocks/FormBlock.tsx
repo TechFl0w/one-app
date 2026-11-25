@@ -1,6 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { Select } from "@/components/ui/Select";
+import { DatePicker } from "@/components/ui/DatePicker";
 import type { Field } from "@/schema/blueprint";
 
 export type FormState = { ok?: boolean; message?: string; fields?: Record<string, string>; nonce?: number };
@@ -61,9 +63,9 @@ function Input({ field: f, choices }: { field: Field; choices?: { id: string; la
     case "money":
       return <input {...common} type="number" step="0.01" min="0" inputMode="decimal" />;
     case "date":
-      return <input {...common} type="date" />;
+      return <DatePicker id={common.id} name={f.id} required={f.required} />;
     case "datetime":
-      return <input {...common} type="datetime-local" />;
+      return <DatePicker id={common.id} name={f.id} required={f.required} withTime />;
     case "email":
       return <input {...common} type="email" autoComplete="email" />;
     case "phone":
@@ -72,16 +74,25 @@ function Input({ field: f, choices }: { field: Field; choices?: { id: string; la
     case "choice":
     case "link": {
       const opts = f.type === "link" ? (choices ?? []) : f.options.map((o) => ({ id: o.id, label: o.label }));
-      return (
-        <select {...common} multiple={"multiple" in f && f.multiple} defaultValue={"multiple" in f && f.multiple ? [] : ""}>
-          {!("multiple" in f && f.multiple) && <option value="">{f.required ? "Choose…" : "—"}</option>}
-          {opts.map((o) => (
-            <option key={o.id} value={o.id}>{o.label}</option>
-          ))}
-        </select>
-      );
+      return <ChoiceInput id={common.id} name={f.id} required={f.required} multiple={"multiple" in f && !!f.multiple} options={opts} />;
     }
     default:
       return <input {...common} type="text" />;
   }
+}
+
+function ChoiceInput({ id, name, required, multiple, options }: { id: string; name: string; required?: boolean; multiple: boolean; options: { id: string; label: string }[] }) {
+  const [value, setValue] = useState<string | string[]>(multiple ? [] : "");
+  return (
+    <Select
+      id={id}
+      name={name}
+      required={required}
+      multiple={multiple}
+      value={value}
+      onChange={setValue}
+      placeholder={required ? "Choose…" : "—"}
+      options={[...(!multiple && !required && value ? [{ value: "", label: "—" }] : []), ...options.map((o) => ({ value: o.id, label: o.label }))]}
+    />
+  );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { Block, Field, LayoutKey, Table } from "@/schema/blueprint";
@@ -138,22 +139,13 @@ function AddField({ table }: { table: Table }) {
       <p className="text-sm font-semibold">Add a field</p>
       <div className="flex gap-2">
         <input className="input" placeholder="Name" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} aria-label="New field name" />
-        <select className="input w-40" value={type} onChange={(e) => setType(e.target.value as Field["type"])} aria-label="New field type">
-          {ADDABLE_FIELD_TYPES.map((t) => (
-            <option key={t.type} value={t.type}>{t.label}</option>
-          ))}
-        </select>
+        <Select className="w-44 shrink-0" value={type} onChange={(v) => setType(v as Field["type"])} ariaLabel="New field type" options={ADDABLE_FIELD_TYPES.map((t) => ({ value: t.type, label: t.label }))} />
       </div>
       {(type === "status" || type === "choice") && (
         <input className="input" placeholder="Options, separated by commas" value={options} onChange={(e) => setOptions(e.target.value)} aria-label="Options" />
       )}
       {type === "link" && (
-        <select className="input" value={linkTo} onChange={(e) => setLinkTo(e.target.value)} aria-label="Link to table">
-          <option value="">Link to…</option>
-          {blueprint.tables.map((t) => (
-            <option key={t.id} value={t.id}>{t.label}</option>
-          ))}
-        </select>
+        <Select value={linkTo} onChange={(v) => setLinkTo(v as string)} ariaLabel="Link to table" placeholder="Link to…" options={blueprint.tables.map((t) => ({ value: t.id, label: t.label }))} />
       )}
       {problem && <p className="text-sm text-red-700">{problem}</p>}
       <button type="button" className="btn-primary px-4 py-2" onClick={add}>Add field</button>
