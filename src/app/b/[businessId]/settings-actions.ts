@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { commitChangeSet, getCurrentBlueprint } from "@/server/blueprints";
+import { aiModelInfo, isAiModel } from "@/agent/models";
 
 export type FormResult = { ok?: boolean; message?: string };
 const fail = (e: unknown): FormResult => ({ ok: false, message: e instanceof Error ? e.message : "Couldn’t save." });
@@ -67,6 +68,22 @@ export async function saveBusiness(businessId: string, _prev: FormResult, form: 
     if (name !== bp.business.name) await supabase.from("businesses").update({ name }).eq("id", businessId);
     revalidatePath(`/b/${businessId}`, "layout");
     return { ok: true, message: "Saved." };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Which assistant model this business uses (owners and admins; RLS enforces it). */
+export async function saveAiModel(businessId: string, _prev: FormResult, form: FormData): Promise<FormResult> {
+  try {
+    const model = String(form.get("model") ?? "");
+    if (!isAiModel(model)) return { ok: false, message: "Pick a model." };
+    const supabase = await createClient();
+    const { data, error } = await supabase.from("businesses").update({ ai_model: model }).eq("id", businessId).select("id");
+    if (error) throw new Error(error.message);
+    if (!data?.length) return { ok: false, message: "Only owners and admins can change this." };
+    revalidatePath(`/b/${businessId}/settings`);
+    return { ok: true, message: `The assistant now uses ${aiModelInfo(model).label}.` };
   } catch (e) {
     return fail(e);
   }

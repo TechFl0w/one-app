@@ -86,3 +86,29 @@ export function BusinessForm({ business, save }: { business: { name: string; tim
     </form>
   );
 }
+
+/** The assistant's model: a better model costs more per message. */
+export function AiModelForm({ current, models, save }: { current: string; models: { id: string; label: string; hint: string; cost: string }[]; save: Action }) {
+  const [r, action, pending] = useActionState(save, {});
+  const [value, setValue] = useState(current);
+  return (
+    <form action={action} className="space-y-4">
+      <div role="radiogroup" aria-label="Assistant model" className="grid gap-3 sm:grid-cols-3">
+        {models.map((m) => (
+          <label key={m.id} className={`cursor-pointer rounded-2xl border p-4 transition-colors ${value === m.id ? "border-accent bg-accent-tint" : "border-line hover:border-ink/25"}`}>
+            <input type="radio" name="model" value={m.id} checked={value === m.id} onChange={() => setValue(m.id)} className="sr-only" />
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="font-semibold">{m.label}</span>
+              <span className="text-sm font-medium text-muted" aria-label={`cost ${m.cost.length} of 3`}>{m.cost}</span>
+            </span>
+            <span className="mt-1 block text-sm text-muted">{m.hint}</span>
+          </label>
+        ))}
+      </div>
+      <div className="flex items-center gap-3">
+        <button className="btn-primary" disabled={pending || value === current}>{pending ? "Saving…" : "Save"}</button>
+        {r.message && <p className={`text-sm ${r.ok ? "text-accent" : "text-red-700"}`}>{r.message}</p>}
+      </div>
+    </form>
+  );
+}

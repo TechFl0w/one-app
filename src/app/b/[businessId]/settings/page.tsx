@@ -2,10 +2,10 @@ import Link from "next/link";
 import { CalendarCheck, ChevronRight, Code2, CreditCard, FileSpreadsheet, LogOut, Mail, MessageCircle, Plug, Settings } from "lucide-react";
 import { getBusinessContext } from "@/server/context";
 import { usageThisMonth } from "@/server/ownerChat";
-import { OWNER_MODEL } from "@/agent/ownerAgent";
+import { AI_MODELS, aiModelInfo, resolveAiModel } from "@/agent/models";
 import { signOut } from "@/app/login/actions";
-import { AccountForms, BusinessForm } from "@/components/settings/SettingsForms";
-import { changeEmail, changePassword, saveBusiness, saveProfile } from "../settings-actions";
+import { AccountForms, AiModelForm, BusinessForm } from "@/components/settings/SettingsForms";
+import { changeEmail, changePassword, saveAiModel, saveBusiness, saveProfile } from "../settings-actions";
 
 /** Settings: your account, the business, and everything it's connected to. */
 export default async function SettingsPage({ params }: PageProps<"/b/[businessId]/settings">) {
@@ -16,6 +16,8 @@ export default async function SettingsPage({ params }: PageProps<"/b/[businessId
   const { data: role } = await supabase.from("memberships").select("role").eq("business_id", businessId).eq("user_id", user?.id ?? "").maybeSingle();
   const manager = role && ["owner", "admin"].includes(role.role);
   const usage = manager ? await usageThisMonth(supabase, businessId) : null;
+  const { data: biz } = manager ? await supabase.from("businesses").select("ai_model").eq("id", businessId).maybeSingle() : { data: null };
+  const model = resolveAiModel(biz?.ai_model);
   const base = `/b/${businessId}`;
   const links = [
     { href: `${base}/settings/booking`, icon: CalendarCheck, label: "Online booking", hint: "Your booking page, hours and rules", show: !!blueprint.scheduling },
@@ -52,10 +54,16 @@ export default async function SettingsPage({ params }: PageProps<"/b/[businessId
 
       {usage && (
         <section>
-          <h2 className="mb-4 text-lg font-semibold">Assistant usage</h2>
-          <div className="card flex flex-wrap items-baseline gap-x-8 gap-y-2 p-6">
-            <p><span className="text-2xl font-bold tabular-nums">${usage.cost.toFixed(2)}</span> <span className="text-sm text-muted">this month (estimate)</span></p>
-            <p className="text-sm text-muted">{usage.turns} assistant {usage.turns === 1 ? "reply" : "replies"} · model {OWNER_MODEL}</p>
+          <h2 className="mb-4 text-lg font-semibold">Assistant</h2>
+          <div className="card space-y-6 p-6">
+            <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2">
+              <p><span className="text-2xl font-bold tabular-nums">${usage.cost.toFixed(2)}</span> <span className="text-sm text-muted">used this month (estimate)</span></p>
+              <p className="text-sm text-muted">{usage.turns} assistant {usage.turns === 1 ? "reply" : "replies"} · {aiModelInfo(model).label}</p>
+            </div>
+            <div>
+              <p className="mb-3 text-sm font-medium">Model — a smarter model costs more per message</p>
+              <AiModelForm current={model} models={AI_MODELS.map((m, i) => ({ id: m.id, label: m.label, hint: m.hint, cost: "$".repeat(i + 1) }))} save={saveAiModel.bind(null, businessId)} />
+            </div>
           </div>
         </section>
       )}

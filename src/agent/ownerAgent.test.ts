@@ -55,6 +55,18 @@ describe("owner agent", () => {
     expect(r.history).toHaveLength(2);
   });
 
+  it("uses the business's chosen model (no refusal fallback on the fast model)", async () => {
+    const { backend } = setup();
+    const { model, requests } = scripted(say("Hi!"), say("Hi!"));
+    const r = await runOwnerTurn({ backend, history: [], message: "hi", model, modelId: "claude-sonnet-5-5" });
+    expect(requests[0].model).toBe("claude-sonnet-5-5");
+    expect(requests[0].fallbacks).toBe("default");
+    expect(r.usage.model).toBe("claude-sonnet-5-5");
+    await runOwnerTurn({ backend, history: [], message: "hi", model, modelId: "claude-haiku-5-5" });
+    expect(requests[1].model).toBe("claude-haiku-5-5");
+    expect(requests[1].fallbacks).toBeUndefined();
+  });
+
   it("runs read tools and feeds results back", async () => {
     const { backend } = setup();
     const { model, requests } = scripted(
