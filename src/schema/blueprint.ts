@@ -407,6 +407,8 @@ export const Theme = z.strictObject({
   /** Card corner radius in px (buttons stay pills unless squareButtons). */
   radius: z.int().min(0).max(32).optional(),
   squareButtons: z.boolean().optional(),
+  /** Where the page menu lives: a sidebar (default), a bar along the top, or only a menu button. */
+  menu: z.enum(["side", "top", "minimal"]).optional(),
 });
 export type Theme = z.infer<typeof Theme>;
 

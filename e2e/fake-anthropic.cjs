@@ -36,7 +36,7 @@ function script(body) {
   }
   const lastUser = [...msgs].reverse().find((m) => m.role === "user" && Array.isArray(m.content) && m.content.some((b) => b.type === "image"));
   if (lastUser && lastUser === msgs.at(-1)) {
-    return tool("change_setup", { summary: "Match the design", ops: [{ op: "setTheme", theme: { colors: { accent: "#B5482B", accentHover: "#93391F", accentTint: "#F6E4DD", ground: "#FBF7F2" }, font: "DM Sans", radius: 8 } }] });
+    return tool("change_setup", { summary: "Match the design", ops: [{ op: "setTheme", theme: { colors: { accent: "#B5482B", accentHover: "#93391F", accentTint: "#F6E4DD", ground: "#FBF7F2" }, font: "DM Sans", radius: 8, menu: "top" } }] });
   }
   if (/collapsible/i.test(ownerText)) {
     return tool("write_component", {

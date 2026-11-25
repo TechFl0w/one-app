@@ -28,6 +28,8 @@ export function Sidebar({ basePath, businesses = [], footer }: SidebarProps) {
   const pages = editing ? menuOrder(blueprint) : menuPages(blueprint);
   // Only page routes highlight a menu item (Automations / Activity are not pages).
   const activeId = pathname.match(/\/p\/([^/]+)/)?.[1];
+  // The theme can move the menu to a top bar, or hide it behind a menu button.
+  const menu = blueprint.theme?.menu ?? "side";
 
   const nav = (
     <>
@@ -115,15 +117,40 @@ export function Sidebar({ basePath, businesses = [], footer }: SidebarProps) {
 
   return (
     <>
-      {/* Phone top bar */}
-      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-card px-4 py-3 md:hidden">
+      {/* Phone top bar (and the only bar for the "minimal" menu) */}
+      <header className={`sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-card px-4 py-3 ${menu === "minimal" ? "" : "md:hidden"}`}>
         <button type="button" className="-ml-1 rounded-full p-1.5 hover:bg-ground" onClick={() => setOpen(true)} aria-label="Open menu">
           <Menu className="h-5 w-5" />
         </button>
         <span className="truncate font-semibold">{businessName}</span>
       </header>
+      {/* Desktop top bar for the "top" menu: pages inline, everything else behind More. */}
+      {menu === "top" && (
+        <header className="sticky top-0 z-30 hidden items-center gap-2 border-b border-line bg-card px-6 py-3 md:flex">
+          <span className="mr-4 flex items-center gap-2 font-semibold">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent text-sm font-bold text-white">{businessName.slice(0, 1).toUpperCase()}</span>
+            <span className="max-w-48 truncate">{businessName}</span>
+          </span>
+          <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto" aria-label="Pages">
+            {menuPages(blueprint).map((p) => (
+              <Link
+                key={p.id}
+                href={`${basePath}/p/${p.id}`}
+                aria-current={p.id === activeId ? "page" : undefined}
+                className={`flex shrink-0 items-center gap-2 rounded-full px-3.5 py-1.5 text-sm ${p.id === activeId ? "bg-accent-tint font-semibold text-accent" : "text-muted hover:bg-ground hover:text-ink"}`}
+              >
+                <PageIcon name={p.icon} className="h-4 w-4" />
+                {p.label}
+              </Link>
+            ))}
+          </nav>
+          <button type="button" className="btn-ghost px-4 py-1.5" onClick={() => setOpen(true)}>
+            <Menu className="h-4 w-4" /> More
+          </button>
+        </header>
+      )}
       {open && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className={`fixed inset-0 z-40 ${menu === "side" ? "md:hidden" : ""}`}>
           <div className="absolute inset-0 bg-ink/20" onClick={() => setOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-72 flex-col bg-card p-4 shadow-soft">
             <button
@@ -140,7 +167,7 @@ export function Sidebar({ basePath, businesses = [], footer }: SidebarProps) {
       )}
       <AddPageDialog open={addingPage} onClose={() => setAddingPage(false)} basePath={basePath} />
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-card p-4 md:flex">{nav}</aside>
+      {menu === "side" && <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-card p-4 md:flex">{nav}</aside>}
     </>
   );
 }
