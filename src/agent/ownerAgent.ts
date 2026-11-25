@@ -13,7 +13,9 @@ import type { AgentResponse, OwnerBackend, PendingAction } from "./types";
  */
 
 export const OWNER_MODEL = "claude-opus-5-5";
-const MAX_STEPS = 10;
+const MAX_STEPS = 16;
+/** Stop before the server action’s limit (300s); a build plan carries on in the next turn. */
+const TURN_BUDGET_MS = 230_000;
 const MAX_RESULT_CHARS = 12_000;
 
 export type Message = Anthropic.Beta.BetaMessageParam;
@@ -47,6 +49,12 @@ Custom UI (write_component):
 - If write_component returns compile errors, fix them and call it again before replying.
 - After you write a component, the app sends you an "[Automatic check]" message with a picture of how it actually renders (and the owner's design, if there was one). Compare carefully: layout, spacing, colours, sizes, missing or broken parts, empty states. If it's right, reply in one short sentence. If not, fix it with write_component (same id) — don't explain at length. The picture uses fallback fonts; ignore font differences.
 - When the owner shares a design (screenshot, mockup, photo of a sketch) and wants the app to look like it: match it. First change_setup with setTheme (colours as hex, the closest font from the allowed list, corner radius, squareButtons, and menu: "side" | "top" | "minimal" to match where the design puts navigation), then rebuild the pages they mean as components that follow the layout — use replaceBlocks or newPage. Say briefly what you matched and what you couldn't.
+
+Recreating an app from screenshots (the owner shows screens of an app they use or made and wants it here):
+1. Study every screenshot: the screens, what data they show (lists, records, fields, statuses, amounts, dates), navigation, colours, fonts, spacing.
+2. First turn: change_setup with the data model the screens need (tables, fields with the right types and choice options, links) plus setTheme (colours, closest font, radius, menu position matching the app's navigation). Add a few realistic sample records with create_record so screens aren't empty. Then plan_build with one step per screen.
+3. Each following step: build ONE screen as a full-width component on its own page (write_component with newPage, or replaceBlocks on an existing page) that reproduces the screenshot as closely as you can — same structure, hierarchy, density, colours, copy — wired to real data through the kit (useRecords, RecordForm, records.update…). Then plan_build marking it done.
+4. The automatic check shows your screen next to the screenshots: fix differences before moving on. Keep replies to one or two sentences while building.
 
 The kit (@one/kit) and the React subset you can use:
 ${KIT_DTS}
@@ -102,7 +110,7 @@ export function setupSummary(bp: Blueprint, now = new Date()): string {
   return lines.join("\n");
 }
 
-export const MAX_IMAGES = 3;
+export const MAX_IMAGES = 8;
 export interface ChatImage {
   mediaType: "image/jpeg" | "image/png" | "image/webp";
   data: string;
@@ -134,6 +142,8 @@ export interface OwnerTurnInput {
   pageId?: string;
   /** Images the owner attached (e.g. a design to match). Base64, already resized by the browser. */
   images?: ChatImage[];
+  /** Stop calling the model after this long (ms); defaults to TURN_BUDGET_MS. */
+  budgetMs?: number;
   model?: ModelCall;
   now?: Date;
   newId?: () => string;
@@ -153,25 +163,32 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
   const page = input.pageId ? bp.pages.find((p) => p.id === input.pageId) : undefined;
   const userText = page ? `[The owner is looking at page "${page.label}" (${page.id}).]\n\n${input.message}` : input.message;
   const images = (input.images ?? []).slice(0, MAX_IMAGES);
-  const messages: Message[] = [
-    ...input.history,
-    {
-      role: "user",
-      content: images.length
-        ? [...images.map((im) => ({ type: "image" as const, source: { type: "base64" as const, media_type: im.mediaType, data: im.data } })), { type: "text" as const, text: userText }]
-        : userText,
-    },
+  const newContent: Anthropic.Beta.BetaContentBlockParam[] = [
+    ...images.map((im) => ({ type: "image" as const, source: { type: "base64" as const, media_type: im.mediaType, data: im.data } })),
+    { type: "text" as const, text: userText },
   ];
+  // A turn that stopped right after tool results leaves a user message last; add to it (roles alternate).
+  const last = input.history.at(-1);
+  const messages: Message[] =
+    last?.role === "user"
+      ? [...input.history.slice(0, -1), { role: "user", content: [...(typeof last.content === "string" ? [{ type: "text" as const, text: last.content }] : last.content), ...newContent] }]
+      : [...input.history, { role: "user", content: images.length ? newContent : userText }];
+  const startedAt = Date.now();
 
   const effects: ToolEffects = {};
   const pending: PendingAction[] = [];
   let text = "";
 
   for (let step = 0; step < MAX_STEPS; step++) {
+    if (step > 0 && Date.now() - startedAt > (input.budgetMs ?? TURN_BUDGET_MS)) {
+      text = effects.plan ? "Still building — carrying on with the next part." : "That took a while — tell me to continue and I’ll pick up where I left off.";
+      break;
+    }
     const current = await backend.blueprint();
     const response = await model({
       model: OWNER_MODEL,
-      max_tokens: 16000,
+      // Under the SDK's non-streaming limit (~21k); enough for the biggest component (60k chars).
+      max_tokens: 21000,
       output_config: { effort: "medium" },
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
@@ -211,6 +228,7 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
 
   const response: AgentResponse = { text, changed: !!effects.changed };
   if (effects.verify?.length) response.verify = effects.verify;
+  if (effects.plan) response.plan = effects.plan;
   if (effects.preview) {
     response.preview = effects.preview;
     response.buttons = [

@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useRef, useState, useTransition } from "reac
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowUp, Check, ImagePlus, Sparkles, X } from "lucide-react";
 import type { ChatImage } from "@/agent/ownerAgent";
+import type { BuildPlan } from "@/agent/types";
 import { captureComponent } from "@/components/sandbox/captureRegistry";
 import type { ChatItem } from "@/agent/transcript";
 import type { Message } from "@/agent/ownerAgent";
@@ -37,7 +38,7 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
   const [error, setError] = useState<string | null>(null);
   const addFiles = async (files: FileList | File[]) => {
     const all = [...files];
-    const picked = all.filter((f) => f.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|heic|heif|bmp)$/i.test(f.name)).slice(0, Math.max(0, 3 - images.length));
+    const picked = all.filter((f) => f.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|heic|heif|bmp)$/i.test(f.name)).slice(0, Math.max(0, 8 - images.length));
     if (!picked.length) {
       if (all.length) setError("That isn’t an image. Attach a PNG or JPEG screenshot.");
       return;
@@ -45,7 +46,7 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
     const ready = await Promise.all(picked.map(shrinkImage));
     const ok = ready.filter((r): r is ChatImage & { url: string } => !!r);
     setError(ok.length < picked.length ? "Couldn’t read one of the images — try a PNG or JPEG screenshot." : null);
-    setImages((x) => [...x, ...ok].slice(0, 3));
+    setImages((x) => [...x, ...ok].slice(0, 8));
   };
   // Images from the clipboard: Chrome fills `files`, Safari only `items`.
   const fromClipboard = (data: DataTransfer) => {
@@ -95,27 +96,53 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
     setImages([]);
     // A new request from the owner: its images (if any) are the design to check against.
     round.current = 0;
-    designs.current = attached;
+    autoSteps.current = 0;
+    // New images start a new design reference; a plain message keeps the screenshots of a build.
+    if (attached.length) designs.current = attached;
     deliver(message, attached, attached.length ? `${message}${message ? "\n" : ""}[${attached.length} image${attached.length > 1 ? "s" : ""} attached]` : message);
   };
 
+  // Multi-step builds (recreating an app): keep going until every step of the plan is done.
+  const plan = useRef<BuildPlan | null>(null);
+  const autoSteps = useRef(0);
+  const stalled = useRef({ key: "", count: 0 });
+  const continuePlan = useEffectEvent(() => {
+    const next = plan.current?.steps.find((s) => !s.done);
+    if (!next || autoSteps.current >= 15) return;
+    // Stop if the same step keeps coming back without progress (the owner can say "continue").
+    const key = JSON.stringify(plan.current?.steps.map((s) => s.done));
+    stalled.current = stalled.current.key === key ? { key, count: stalled.current.count + 1 } : { key, count: 0 };
+    if (stalled.current.count >= 2) return;
+    autoSteps.current += 1;
+    round.current = 0;
+    deliver(
+      `[Automatic] Continue the plan "${plan.current!.goal}": do the next step now — ${next.title}.${designs.current.length ? " The screenshots are attached again." : ""}`,
+      designs.current,
+      `Next: ${next.title}…`,
+    );
+  });
+
+  // Self-check of the component just written; if it can't be pictured, the build simply moves on.
   const selfCheck = useEffectEvent(async (target: { componentId: string; pageId?: string }) => {
     if (target.pageId && target.pageId !== pageId) router.push(`${basePath}/p/${target.pageId}`);
     const shot = await captureComponent(target.componentId);
-    if (!shot) return;
+    if (!shot) return continuePlan();
     round.current += 1;
     const picture: ChatImage = { mediaType: "image/jpeg", data: shot.slice(shot.indexOf(",") + 1) };
-    const withDesign = designs.current.length ? " The owner's design follows it." : "";
-    deliver(`[Automatic check] The first image is how the component you just wrote (${target.componentId}) renders right now.${withDesign} Compare and fix anything that's off, or confirm briefly.`, [picture, ...designs.current].slice(0, 3), "Checking how it looks…");
+    const withDesign = designs.current.length ? ` The owner's design${designs.current.length > 1 ? "s follow" : " follows"} it.` : "";
+    deliver(`[Automatic check] The first image is how the component you just wrote (${target.componentId}) renders right now.${withDesign} Compare and fix anything that's off, or confirm briefly.`, [picture, ...designs.current].slice(0, 8), "Checking how it looks…");
   });
 
   useEffect(() => {
     if (busy) return;
     const last = transcript.at(-1);
-    const verify = last?.role === "assistant" ? last.response?.verify : undefined;
-    if (!last || !verify?.length || checked.current.has(last.id) || round.current >= 2) return;
+    if (!last || last.role !== "assistant" || checked.current.has(last.id)) return;
     checked.current.add(last.id);
-    void selfCheck(verify[0]);
+    if (last.response?.plan) plan.current = last.response.plan;
+    if (last.response?.confirm && !last.resolved) return; // waits for the owner
+    const verify = last.response?.verify;
+    if (verify?.length && round.current < 2) void selfCheck(verify[0]);
+    else continuePlan();
   }, [transcript, busy]);
 
   const setResolved = (id: string, resolved: ChatItem["resolved"]) =>
@@ -238,7 +265,7 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
         }}
       >
         <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ""; }} />
-        <button type="button" className="h-11 w-11 shrink-0 rounded-full p-0 text-muted hover:bg-ground hover:text-ink disabled:opacity-40" onClick={() => fileRef.current?.click()} disabled={busy || images.length >= 3} aria-label="Attach an image" title="Attach a design or screenshot">
+        <button type="button" className="h-11 w-11 shrink-0 rounded-full p-0 text-muted hover:bg-ground hover:text-ink disabled:opacity-40" onClick={() => fileRef.current?.click()} disabled={busy || images.length >= 8} aria-label="Attach an image" title="Attach a design or screenshot">
           <ImagePlus className="mx-auto h-5 w-5" />
         </button>
         <textarea
