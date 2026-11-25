@@ -6,12 +6,13 @@ import { isSupabaseConfigured } from "./env";
  * Service-role client for background work (automation worker). Bypasses RLS, so it's only used
  * by code that scopes every query by business_id itself. Writes are tagged with their source.
  */
-export function createAdminClient(source: "automation" | "public" | "mcp" = "automation") {
+export function createAdminClient(source: "automation" | "public" | "mcp" | "function" = "automation", opts: { depth?: number } = {}) {
   const key = process.env.SUPABASE_SECRET_KEY;
   if (!isSupabaseConfigured() || !key) throw new Error("Background jobs need NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY");
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key, {
     auth: { persistSession: false, autoRefreshToken: false },
     // "automation" writes don't trigger more automations; "public" (booking page) and "mcp" writes do.
-    global: { headers: { "x-one-source": source } },
+    // "function" writes (generated code) carry their chain depth so loops stop (MAX_CHAIN_DEPTH).
+    global: { headers: { "x-one-source": source, ...(opts.depth !== undefined ? { "x-one-depth": String(Math.min(opts.depth, 9)) } : {}) } },
   });
 }

@@ -12,3 +12,23 @@ describe("run_function steps", () => {
     expect(describeStep(bp, step)).toBe("Run Sync to Xero");
   });
 });
+
+describe("chain depth", () => {
+  it("passes one hop deeper to generated code, so loops can be cut off", async () => {
+    const { runJob } = await import("./runner");
+    const { memoryIO } = await import("./memory");
+    const { demoBlueprint, demoRecords } = await import("@/demo/salon");
+    const bp = {
+      ...demoBlueprint,
+      functions: [{ id: "fn_sync", label: "Sync", source: "x", compiled: "x", hosts: [] }],
+      automations: [{ id: "aut_sync", label: "Sync", enabled: true, trigger: { type: "record_updated" as const, table: "tbl_bookings" }, conditions: [], actions: [{ type: "run_function" as const, function: "fn_sync" }] }],
+    };
+    const m = memoryIO(bp, demoRecords());
+    const depths: number[] = [];
+    m.io.runFunction = async (_b, _f, _k, _r, depth) => (depths.push(depth), { ran: true });
+    const rec = demoRecords().find((r) => r.tableId === "tbl_bookings")!;
+    const queue = { enqueue: async () => true, claim: async () => [], finish: async () => {}, logRun: async () => {} };
+    await runJob({ id: "j1", businessId: "b", automationId: "aut_sync", tableId: "tbl_bookings", recordId: rec.id, key: "k1", runAt: new Date().toISOString(), step: 0, attempts: 0, depth: 2 }, m.io, queue as never, new Date());
+    expect(depths).toEqual([3]);
+  });
+});

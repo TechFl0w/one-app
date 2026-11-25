@@ -23,7 +23,8 @@ export async function runFunction(
   businessId: string,
   functionId: string,
   ctx: { trigger: "automation" | "webhook" | "test"; record?: unknown; request?: unknown; input?: unknown },
-  opts: { runner?: FunctionRunner | null; key?: string } = {},
+  /** depth: automation hops behind this run (webhooks and tests start at 1). */
+  opts: { runner?: FunctionRunner | null; key?: string; depth?: number } = {},
 ): Promise<FunctionOutcome & { runId?: string }> {
   const runner = opts.runner === undefined ? defaultRunner() : opts.runner;
   if (!runner || !appUrl()) return { ok: false, error: "Server code can’t run on this server yet", logs: [] };
@@ -35,14 +36,15 @@ export async function runFunction(
   const fn = bp.functions?.find((f) => f.id === functionId);
   if (!fn) return { ok: false, error: `No server code ${functionId}`, logs: [] };
 
-  const { data: rows } = await admin.from("business_secrets").select("name, host, header, prefix, value").eq("business_id", businessId);
-  // Only keys for hosts this function is allowed to reach.
-  const secrets = ((rows ?? []) as SecretRule[]).filter((s) => fn.hosts.includes(s.host));
+  // Only keys for hosts this function is allowed to reach (decrypted from Vault by the database).
+  const { data: rows, error: keysError } = fn.hosts.length ? await admin.rpc("business_secret_values", { bid: businessId, p_hosts: fn.hosts }) : { data: [], error: null };
+  if (keysError) return { ok: false, error: `Couldn’t load API keys: ${keysError.message}`, logs: [] };
+  const secrets = (rows ?? []) as SecretRule[];
 
   const token = randomBytes(32).toString("base64url");
   const { data: run, error } = await admin
     .from("function_runs")
-    .insert({ business_id: businessId, function_id: fn.id, trigger: ctx.trigger, key: opts.key ?? null, token_hash: hashRunToken(token), expires_at: new Date(Date.now() + RUN_TIMEOUT_MS + 60_000).toISOString() })
+    .insert({ business_id: businessId, function_id: fn.id, trigger: ctx.trigger, key: opts.key ?? null, depth: Math.min(opts.depth ?? 1, 10), token_hash: hashRunToken(token), expires_at: new Date(Date.now() + RUN_TIMEOUT_MS + 60_000).toISOString() })
     .select("id")
     .single();
   if (error || !run) return { ok: false, error: `Couldn’t start: ${error?.message}`, logs: [] };
@@ -74,13 +76,13 @@ export async function runFunction(
   return { ...outcome, runId: run.id };
 }
 
-/** The business a run token belongs to, while that run is still going. */
-export async function businessForRunToken(admin: SupabaseClient, token: string): Promise<string | null> {
+/** The business (and chain depth) a run token belongs to, while that run is still going. */
+export async function runForToken(admin: SupabaseClient, token: string): Promise<{ businessId: string; depth: number } | null> {
   const { data } = await admin
     .from("function_runs")
-    .select("business_id, expires_at, status")
+    .select("business_id, expires_at, status, depth")
     .eq("token_hash", hashRunToken(token))
     .maybeSingle();
   if (!data || data.status !== "running" || Date.parse(data.expires_at) < Date.now()) return null;
-  return data.business_id;
+  return { businessId: data.business_id, depth: data.depth ?? 1 };
 }

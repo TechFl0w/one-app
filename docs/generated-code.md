@@ -50,12 +50,17 @@ shown to the owner. Size limits keep bundles small.
   (`src/functions/harness.ts`). Its firewall allows only One App and the function's `hosts`.
 - **No secrets inside the VM.** Calls to One App's kit API (`/api/fn/kit`) get the run's one-time
   token added by the firewall; it maps to one business and expires with the run. API keys the
-  owner saved (`business_secrets`, never readable by users or code) are swapped in by the firewall:
+  owner saved are encrypted in Supabase Vault (`business_secrets` holds name/host/header/prefix and
+  the Vault id; `set_business_secret` / `business_secret_values` are service-role only) and swapped
+  in by the firewall:
   code sends `secret("SHIPPO")` (a placeholder) in a header, and only requests to that key's host
   get the real value.
 - Triggers: automation step `{ type: "run_function", function }` (queue, retries, run log; a step
   that succeeded isn't re-run), webhooks at `/api/hooks/<business>/<fn>` for functions with
-  `webhook: true`, and test runs from the assistant. Kit writes are tagged `automation` (no loops).
+  `webhook: true`, and test runs from the assistant. Kit writes trigger automations like any other
+  change (source `function`), carrying a chain depth (`x-one-depth` → `record_events.depth` →
+  `automation_jobs.depth` → `function_runs.depth`). From `MAX_CHAIN_DEPTH` (3) hops on, writes are
+  tagged `automation` and trigger nothing, so code → automation → code loops end.
 - Runs are logged in `function_runs` (owners see status, logs, errors under Settings → API keys & code).
 - Locally, `ONE_LOCAL_FUNCTION_RUNNER=1` runs functions in a plain Node process (no firewall) for dev/tests.
 

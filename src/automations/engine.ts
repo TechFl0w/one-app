@@ -15,7 +15,12 @@ export interface RecordEvent {
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
   at: string;
+  /** Automation hops behind this change (0 = a person; >0 = written by generated code run from an automation/webhook). */
+  depth?: number;
 }
+
+/** Generated code started this many hops deep no longer triggers automations (no endless loops). */
+export const MAX_CHAIN_DEPTH = 3;
 
 // ---------- durations ----------
 

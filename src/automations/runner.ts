@@ -30,6 +30,8 @@ export interface Job {
   /** Index of the next action to run (wait steps resume here). */
   step: number;
   attempts: number;
+  /** Chain depth of the change that queued it (see MAX_CHAIN_DEPTH). */
+  depth?: number;
 }
 
 export type NewJob = Omit<Job, "id" | "step" | "attempts">;
@@ -73,7 +75,7 @@ export interface AutomationIO {
   /** Returns a reason when the message can't be sent (e.g. channel not connected yet). */
   sendMessage(businessId: string, step: Extract<Step, { kind: "send_message" }>, key: string, record: { tableId: string; recordId: string; data: Record<string, unknown> }): Promise<{ sent: true } | { sent: false; reason: string }>;
   /** Runs a generated server function in its sandbox. Throws on failure (the job retries). */
-  runFunction?(businessId: string, functionId: string, key: string, record: { tableId: string; recordId: string; data: Record<string, unknown> }): Promise<{ ran: true; note?: string } | { ran: false; reason: string }>;
+  runFunction?(businessId: string, functionId: string, key: string, record: { tableId: string; recordId: string; data: Record<string, unknown> }, depth: number): Promise<{ ran: true; note?: string } | { ran: false; reason: string }>;
 }
 
 // ---------- scheduling ----------
@@ -83,7 +85,7 @@ export async function enqueueForEvent(e: RecordEvent, io: AutomationIO, queue: J
   const bp = await io.blueprint(e.businessId);
   let n = 0;
   for (const a of matchEvent(bp, e)) {
-    if (await queue.enqueue({ businessId: e.businessId, automationId: a.id, tableId: e.tableId, recordId: e.recordId, key: eventJobKey(a, e), runAt: e.at })) n++;
+    if (await queue.enqueue({ businessId: e.businessId, automationId: a.id, tableId: e.tableId, recordId: e.recordId, key: eventJobKey(a, e), runAt: e.at, depth: e.depth ?? 0 })) n++;
   }
   return n;
 }
@@ -186,7 +188,8 @@ export async function runJob(job: Job, io: AutomationIO, queue: JobQueue, now: D
             steps.push({ description, outcome: "skipped", note: "Server code can’t run here" });
             break;
           }
-          const r = await io.runFunction(job.businessId, step.function, key, { tableId: job.tableId, recordId: job.recordId, data });
+          // The code's own writes are one hop deeper than the change that started this job.
+          const r = await io.runFunction(job.businessId, step.function, key, { tableId: job.tableId, recordId: job.recordId, data }, (job.depth ?? 0) + 1);
           steps.push(r.ran ? { description, outcome: "done", ...(r.note ? { note: r.note } : {}) } : { description, outcome: "skipped", note: r.reason });
           break;
         }

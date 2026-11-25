@@ -28,7 +28,8 @@ export async function saveApiKey(businessId: string, _prev: KeyState, form: Form
     if (!/^[A-Za-z0-9-]{1,40}$/.test(header)) return { ok: false, message: "That header name doesn’t look right." };
     if (!value) return { ok: false, message: "Paste the key." };
     const prefix = prefixRaw === "none" ? "" : prefixRaw || "Bearer ";
-    const { error } = await createAdminClient().from("business_secrets").upsert({ business_id: businessId, name, host, header, prefix, value });
+    // The value goes straight into Supabase Vault (encrypted); only the server can read it back.
+    const { error } = await createAdminClient().rpc("set_business_secret", { bid: businessId, p_name: name, p_host: host, p_header: header, p_prefix: prefix, p_value: value });
     if (error) return { ok: false, message: error.message };
     revalidatePath(`/b/${businessId}/settings/code`);
     return { ok: true, message: `Saved ${name}.` };

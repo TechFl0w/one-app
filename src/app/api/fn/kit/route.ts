@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { businessForRunToken } from "@/server/functions";
+import { runForToken } from "@/server/functions";
+import { MAX_CHAIN_DEPTH } from "@/automations/engine";
 import { createRecord, getRecord, listRecords, updateRecord } from "@/server/records";
 import { RecordQuery } from "@/schema/records";
 
 /**
  * The kit API for generated server functions. The caller is identified only by the run token the
- * VM firewall adds (x-one-run); everything is scoped to that run's business. Writes are tagged
- * "automation", so they don't trigger more automations (no loops).
+ * VM firewall adds (x-one-run); everything is scoped to that run's business. Writes trigger
+ * automations like any other change, until the chain is MAX_CHAIN_DEPTH deep — after that they're
+ * tagged "automation" and trigger nothing (no endless loops).
  */
 export const maxDuration = 30;
 
@@ -24,9 +26,10 @@ const view = (r: { id: string; data: Record<string, unknown>; createdAt: string;
 export async function POST(req: Request) {
   const token = req.headers.get("x-one-run");
   if (!token) return NextResponse.json({ error: "Not allowed" }, { status: 401 });
-  const admin = createAdminClient();
-  const businessId = await businessForRunToken(admin, token);
-  if (!businessId) return NextResponse.json({ error: "This run has ended" }, { status: 401 });
+  const run = await runForToken(createAdminClient(), token);
+  if (!run) return NextResponse.json({ error: "This run has ended" }, { status: 401 });
+  const { businessId } = run;
+  const admin = run.depth < MAX_CHAIN_DEPTH ? createAdminClient("function", { depth: run.depth }) : createAdminClient("automation");
   try {
     const { method, args } = (await req.json()) as { method?: string; args?: unknown[] };
     const a = Array.isArray(args) ? args : [];
