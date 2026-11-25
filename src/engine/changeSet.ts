@@ -412,6 +412,26 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
       if (!bp.components!.length) delete bp.components;
       return [{ op: "putComponent", component }];
     }
+    case "putFunction": {
+      bp.functions ??= [];
+      const i = bp.functions.findIndex((f) => f.id === op.fn.id);
+      if (i >= 0) {
+        const old = bp.functions[i];
+        bp.functions[i] = structuredClone(op.fn);
+        return [{ op: "putFunction", fn: old }];
+      }
+      bp.functions.push(structuredClone(op.fn));
+      return [{ op: "removeFunction", functionId: op.fn.id }];
+    }
+    case "removeFunction": {
+      const i = (bp.functions ?? []).findIndex((f) => f.id === op.functionId);
+      if (i < 0) throw new ChangeSetError("not_found", `Function ${op.functionId} not found`);
+      const user = bp.automations.find((a) => a.actions.some((x) => x.type === "run_function" && x.function === op.functionId));
+      if (user) throw new ChangeSetError("invalid", `Function ${op.functionId} is still used by automation ${user.label}`);
+      const [fn] = bp.functions!.splice(i, 1);
+      if (!bp.functions!.length) delete bp.functions;
+      return [{ op: "putFunction", fn }];
+    }
     case "toggleAutomation": {
       const a = automationOf(bp, op.automationId);
       const old = a.enabled;
@@ -503,5 +523,11 @@ function describe(bp: Blueprint, op: Operation): string {
       return (bp.components ?? []).some((c) => c.id === op.component.id) ? `Update custom component ${q(op.component.label)}` : `Add custom component ${q(op.component.label)}`;
     case "removeComponent":
       return `Remove custom component ${labelOrId(bp.components ?? [], op.componentId)}`;
+    case "putFunction": {
+      const verb = (bp.functions ?? []).some((f) => f.id === op.fn.id) ? "Update" : "Add";
+      return `${verb} server code ${q(op.fn.label)}${op.fn.hosts.length ? ` (can reach ${op.fn.hosts.join(", ")})` : ""}${op.fn.webhook ? ", callable from outside" : ""}`;
+    }
+    case "removeFunction":
+      return `Remove server code ${labelOrId(bp.functions ?? [], op.functionId)}`;
   }
 }

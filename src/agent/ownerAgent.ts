@@ -3,6 +3,7 @@ import type { Blueprint } from "@/schema/blueprint";
 import { menuOrder } from "@/engine/editing";
 import { localToday, isoDate } from "@/engine/dates";
 import { KIT_DTS } from "@/codegen/kitTypes";
+import { SERVER_KIT_DTS } from "@/codegen/serverKitTypes";
 import { executeOwnerTool, OWNER_TOOLS, ownerToolDefinitions, type ToolEffects } from "./ownerTools";
 import type { AgentResponse, OwnerBackend, PendingAction } from "./types";
 
@@ -43,7 +44,16 @@ Custom UI (write_component):
 - If write_component returns compile errors, fix them and call it again before replying.
 
 The kit (@one/kit) and the React subset you can use:
-${KIT_DTS}`;
+${KIT_DTS}
+
+Server code (write_function):
+- For outside services and webhooks: \`export default async function run(ctx: RunContext) { … }\` importing only from "@one/server"; use fetch for HTTP. List every host it calls in hosts.
+- API keys: use secret("NAME") as the header value (list_api_keys shows what's saved; ask the owner to add missing ones). Never ask the owner to paste a key into the chat.
+- Run it from automations with an action {"type": "run_function", "function": "<id>"}; ctx.record is the record. Webhooks get ctx.request and return { status?, json? | text? }.
+- Saving and test runs wait for the owner's confirmation.
+
+The server kit (@one/server):
+${SERVER_KIT_DTS}`;
 
 /** Compact, id-annotated summary of the setup for the model. */
 export function setupSummary(bp: Blueprint, now = new Date()): string {
@@ -74,6 +84,10 @@ export function setupSummary(bp: Blueprint, now = new Date()): string {
   if (bp.automations.length) {
     lines.push("", "Automations:");
     for (const a of bp.automations) lines.push(`- ${a.id} "${a.label}" ${a.enabled ? "on" : "off"}, trigger ${a.trigger.type}${a.trigger.table ? ` on ${a.trigger.table}` : ""}`);
+  }
+  if (bp.functions?.length) {
+    lines.push("", "Server code (read_function for source):");
+    for (const f of bp.functions) lines.push(`- ${f.id} "${f.label}" hosts: ${f.hosts.join(", ") || "none"}${f.webhook ? ", webhook" : ""}`);
   }
   if (bp.components?.length) {
     lines.push("", "Custom components (read_component for source):");

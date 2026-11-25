@@ -44,11 +44,20 @@ shown to the owner. Size limits keep bundles small.
 
 ## Server sandbox (automations, API connections, webhooks)
 
-- Generated functions run in an isolated micro-VM (Vercel Sandbox), per business and run.
-- No platform secrets inside. They get a short-lived token scoped to one business and the kit's
-  API, the business's own saved API keys (only for their hosts), and an allow-list of hosts.
-- Our automation engine decides when they run (queue, retries, run log); inbound webhooks hit our
-  route, are verified, then handed to the business's function. Repeated failures switch it off.
+- `blueprint.functions[]`: `{ id: "fn_…", label, source, compiled, hosts[], webhook? }`. Saving one is
+  a risky change (needs the owner's confirmation); so is a test run.
+- Each run is a fresh Vercel Sandbox micro-VM (`src/functions/runner.ts`) running the harness
+  (`src/functions/harness.ts`). Its firewall allows only One App and the function's `hosts`.
+- **No secrets inside the VM.** Calls to One App's kit API (`/api/fn/kit`) get the run's one-time
+  token added by the firewall; it maps to one business and expires with the run. API keys the
+  owner saved (`business_secrets`, never readable by users or code) are swapped in by the firewall:
+  code sends `secret("SHIPPO")` (a placeholder) in a header, and only requests to that key's host
+  get the real value.
+- Triggers: automation step `{ type: "run_function", function }` (queue, retries, run log; a step
+  that succeeded isn't re-run), webhooks at `/api/hooks/<business>/<fn>` for functions with
+  `webhook: true`, and test runs from the assistant. Kit writes are tagged `automation` (no loops).
+- Runs are logged in `function_runs` (owners see status, logs, errors under Settings → API keys & code).
+- Locally, `ONE_LOCAL_FUNCTION_RUNNER=1` runs functions in a plain Node process (no firewall) for dev/tests.
 
 ## The kit (`@one/kit`)
 

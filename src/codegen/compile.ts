@@ -2,6 +2,7 @@ import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
 import { KIT_DTS } from "./kitTypes";
+import { SERVER_KIT_DTS } from "./serverKitTypes";
 import { MAX_COMPONENT_COMPILED, MAX_COMPONENT_SOURCE } from "@/schema/blueprint";
 
 /**
@@ -10,8 +11,11 @@ import { MAX_COMPONENT_COMPILED, MAX_COMPONENT_SOURCE } from "@/schema/blueprint
  */
 export type CompileResult = { ok: true; compiled: string } | { ok: false; errors: string[] };
 
-const ALLOWED_IMPORTS = new Set(["react", "@one/kit"]);
-const FILE = "/component.tsx";
+type Kind = "component" | "function";
+const KINDS: Record<Kind, { imports: Set<string>; dts: string; file: string; hint: string }> = {
+  component: { imports: new Set(["react", "@one/kit"]), dts: KIT_DTS, file: "/component.tsx", hint: 'only "react" and "@one/kit" can be imported' },
+  function: { imports: new Set(["@one/server"]), dts: SERVER_KIT_DTS, file: "/function.ts", hint: 'only "@one/server" can be imported (fetch is built in)' },
+};
 const KIT = "/kit.d.ts";
 
 const options: ts.CompilerOptions = {
@@ -38,30 +42,36 @@ function libFile(name: string): ts.SourceFile | undefined {
   libCache.set(name, sf);
   return sf;
 }
-let kitSource: ts.SourceFile | undefined;
+const kitSources = new Map<Kind, ts.SourceFile>();
 
-export function checkImports(source: string): string[] {
-  const sf = ts.createSourceFile(FILE, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
+export function checkImports(source: string, kind: Kind = "component"): string[] {
+  const { file: FILE, imports: ALLOWED_IMPORTS, hint } = KINDS[kind];
+  const sf = ts.createSourceFile(FILE, source, ts.ScriptTarget.ES2022, true, kind === "component" ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const errors: string[] = [];
   let hasDefault = false;
   sf.forEachChild((n) => {
     if (ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier) && !ALLOWED_IMPORTS.has(n.moduleSpecifier.text)) {
-      errors.push(`Line ${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1}: only "react" and "@one/kit" can be imported (not "${n.moduleSpecifier.text}")`);
+      errors.push(`Line ${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1}: ${hint} (not "${n.moduleSpecifier.text}")`);
     }
     if (ts.isExportAssignment(n)) hasDefault = true;
     if ((ts.isFunctionDeclaration(n) || ts.isClassDeclaration(n)) && n.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) hasDefault = true;
   });
-  if (!hasDefault) errors.push("The component must be the default export: export default function MyComponent() { … }");
+  if (!hasDefault) errors.push(kind === "component" ? "The component must be the default export: export default function MyComponent() { … }" : "The function must be the default export: export default async function run(ctx: RunContext) { … }");
   return errors;
 }
 
-export function compileComponent(source: string): CompileResult {
-  if (source.length > MAX_COMPONENT_SOURCE) return { ok: false, errors: [`Too long (${source.length} chars, max ${MAX_COMPONENT_SOURCE}). Split it into smaller components.`] };
-  const importErrors = checkImports(source);
+export const compileComponent = (source: string) => compileModule(source, "component");
+export const compileFunction = (source: string) => compileModule(source, "function");
+
+function compileModule(source: string, kind: Kind): CompileResult {
+  const { file: FILE, dts } = KINDS[kind];
+  if (source.length > MAX_COMPONENT_SOURCE) return { ok: false, errors: [`Too long (${source.length} chars, max ${MAX_COMPONENT_SOURCE}). Split it up.`] };
+  const importErrors = checkImports(source, kind);
   if (importErrors.length) return { ok: false, errors: importErrors };
 
-  kitSource ??= ts.createSourceFile(KIT, KIT_DTS, ts.ScriptTarget.ES2022, true);
-  const component = ts.createSourceFile(FILE, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
+  if (!kitSources.has(kind)) kitSources.set(kind, ts.createSourceFile(KIT, dts, ts.ScriptTarget.ES2022, true));
+  const kitSource = kitSources.get(kind);
+  const component = ts.createSourceFile(FILE, source, ts.ScriptTarget.ES2022, true, kind === "component" ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const host: ts.CompilerHost = {
     getSourceFile: (name) => (name === FILE ? component : name === KIT ? kitSource : libFile(path.basename(name))),
     getDefaultLibFileName: () => "lib.d.ts",
@@ -89,6 +99,6 @@ export function compileComponent(source: string): CompileResult {
 
   const out = ts.transpileModule(source, { compilerOptions: { ...options, noEmit: false, sourceMap: false, removeComments: true }, fileName: FILE });
   const compiled = out.outputText;
-  if (compiled.length > MAX_COMPONENT_COMPILED) return { ok: false, errors: [`Compiled code is too big (${compiled.length} chars). Split it into smaller components.`] };
+  if (compiled.length > MAX_COMPONENT_COMPILED) return { ok: false, errors: [`Compiled code is too big (${compiled.length} chars). Split it up.`] };
   return { ok: true, compiled };
 }

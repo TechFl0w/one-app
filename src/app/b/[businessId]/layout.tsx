@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck, CreditCard, History, Inbox, Mail, MessageCircle, Plug, ShieldCheck, Zap } from "lucide-react";
+import { CalendarCheck, Code2, CreditCard, History, Inbox, Mail, MessageCircle, Plug, ShieldCheck, Zap } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { getBusinessContext } from "@/server/context";
 import { signOut } from "@/app/login/actions";
@@ -72,6 +72,9 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
           </Link>
           <Link href={`/b/${businessId}/settings/connections`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
             <Plug className="h-4 w-4" /> Connect AI apps
+          </Link>
+          <Link href={`/b/${businessId}/settings/code`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
+            <Code2 className="h-4 w-4" /> API keys & code
           </Link>
           <Link href={`/b/${businessId}/activity`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
             <History className="h-4 w-4" /> Activity

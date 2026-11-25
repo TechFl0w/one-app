@@ -7,6 +7,8 @@ import {
   BusinessInfo,
   Component,
   ComponentId,
+  FunctionId,
+  ServerFunction,
   Field,
   FieldId,
   Label,
@@ -75,6 +77,10 @@ export const Operation = z.discriminatedUnion("op", [
   /** Remove a generated component; fails while a block still shows it. */
   z.strictObject({ op: z.literal("removeComponent"), componentId: ComponentId }),
 
+  /** Add or replace a generated server function (it can reach outside services: risky). */
+  z.strictObject({ op: z.literal("putFunction"), fn: ServerFunction }),
+  z.strictObject({ op: z.literal("removeFunction"), functionId: FunctionId }),
+
   /** Restore a whole layout override exactly (used by undo of removeLayoutOverride). */
   z.strictObject({
     op: z.literal("setLayoutOverride"),
@@ -130,4 +136,6 @@ export const OP_RISK: Record<OpName, "safe" | "risky"> = {
   setScheduling: "risky",
   putComponent: "safe",
   removeComponent: "safe",
+  putFunction: "risky",
+  removeFunction: "risky",
 };

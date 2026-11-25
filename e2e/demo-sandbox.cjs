@@ -39,9 +39,9 @@ const log = (...a) => console.log("•", ...a);
   const inner = await el.contentFrame();
   const probe = await inner.evaluate(async () => {
     const out = {};
-    try { out.cookie = document.cookie; } catch (e) { out.cookie = "blocked"; }
-    try { out.parent = window.parent.document.title; } catch (e) { out.parent = "blocked"; }
-    try { await fetch("/api/mcp", { method: "POST" }); out.fetch = "allowed"; } catch (e) { out.fetch = "blocked"; }
+    try { out.cookie = document.cookie; } catch { out.cookie = "blocked"; }
+    try { out.parent = window.parent.document.title; } catch { out.parent = "blocked"; }
+    try { await fetch("/api/mcp", { method: "POST" }); out.fetch = "allowed"; } catch { out.fetch = "blocked"; }
     out.origin = window.origin;
     return out;
   });
