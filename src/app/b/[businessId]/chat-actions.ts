@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { runConfirmedAction, runOwnerTurn } from "@/agent/ownerAgent";
+import { cleanImages, runConfirmedAction, runOwnerTurn, withoutImages } from "@/agent/ownerAgent";
 import { hasModelCredentials, markResolved, MISSING_KEY_TEXT, newItem, withNote } from "@/agent/chatFlow";
 import type { ChatItem } from "@/agent/transcript";
 import { supabaseOwnerBackend } from "@/server/ownerBackend";
@@ -26,22 +26,23 @@ const fail = (e: unknown): ChatResult => {
   return { ok: false, error: e instanceof Error ? e.message : "Something went wrong." };
 };
 
-export async function sendOwnerMessage(businessId: string, pageId: string | undefined, text: string): Promise<ChatResult> {
-  const message = text.trim().slice(0, 4000);
+export async function sendOwnerMessage(businessId: string, pageId: string | undefined, text: string, rawImages?: unknown): Promise<ChatResult> {
+  const images = cleanImages(rawImages);
+  const message = text.trim().slice(0, 4000) || (images.length ? "Here’s a design — make the app look like this." : "");
   if (!message) return { ok: false, error: "Type a message first." };
   try {
     const { supabase, userId, backend } = await session(businessId);
     const convo = await loadConversation(supabase, businessId, userId);
-    const transcript = [...convo.transcript, newItem("owner", message)];
+    const transcript = [...convo.transcript, newItem("owner", images.length ? `${message}\n[${images.length} image${images.length > 1 ? "s" : ""} attached]` : message)];
     if (!hasModelCredentials()) {
       transcript.push(newItem("assistant", MISSING_KEY_TEXT));
       await saveConversation(supabase, businessId, userId, convo.history, transcript);
       return { ok: true, transcript, changed: false };
     }
-    const turn = await runOwnerTurn({ backend, history: historyForNextTurn(convo.history), message, pageId });
+    const turn = await runOwnerTurn({ backend, history: historyForNextTurn(convo.history), message, pageId, images });
     await savePending(supabase, businessId, turn.pending);
     transcript.push(newItem("assistant", turn.response.text, { response: turn.response }));
-    await saveConversation(supabase, businessId, userId, turn.history, transcript);
+    await saveConversation(supabase, businessId, userId, withoutImages(turn.history), transcript);
     if (turn.response.changed) revalidatePath(`/b/${businessId}`, "layout");
     return { ok: true, transcript, changed: turn.response.changed };
   } catch (e) {

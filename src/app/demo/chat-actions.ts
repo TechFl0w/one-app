@@ -1,7 +1,7 @@
 "use server";
 
 import { Blueprint } from "@/schema/blueprint";
-import { runConfirmedAction, runOwnerTurn, type Message } from "@/agent/ownerAgent";
+import { cleanImages, runConfirmedAction, runOwnerTurn, withoutImages, type Message } from "@/agent/ownerAgent";
 import { memoryBackend } from "@/agent/memoryBackend";
 import { hasModelCredentials, MISSING_KEY_TEXT } from "@/agent/chatFlow";
 import type { AgentResponse, PendingAction } from "@/agent/types";
@@ -18,18 +18,19 @@ export type DemoChatResult =
 
 const MAX_DEMO_HISTORY = 40;
 
-export async function sendDemoMessage(blueprint: unknown, history: Message[], text: string, pageId?: string): Promise<DemoChatResult> {
+export async function sendDemoMessage(blueprint: unknown, history: Message[], text: string, pageId?: string, rawImages?: unknown): Promise<DemoChatResult> {
   const bp = Blueprint.safeParse(blueprint);
   if (!bp.success) return { ok: false, error: "The demo got out of sync. Reload the page." };
-  const message = text.trim().slice(0, 2000);
+  const images = cleanImages(rawImages);
+  const message = text.trim().slice(0, 2000) || (images.length ? "Here’s a design — make the app look like this." : "");
   if (!message) return { ok: false, error: "Type a message first." };
   if (!hasModelCredentials()) {
     return { ok: true, response: { text: MISSING_KEY_TEXT, changed: false }, history, pending: [], blueprint: bp.data };
   }
   try {
     const { backend, state } = memoryBackend({ blueprint: bp.data, records: demoRecords() });
-    const turn = await runOwnerTurn({ backend, history: Array.isArray(history) && history.length <= MAX_DEMO_HISTORY ? history : [], message, pageId });
-    return { ok: true, response: turn.response, history: turn.history, pending: turn.pending, blueprint: state.blueprint };
+    const turn = await runOwnerTurn({ backend, history: Array.isArray(history) && history.length <= MAX_DEMO_HISTORY ? history : [], message, pageId, images });
+    return { ok: true, response: turn.response, history: withoutImages(turn.history), pending: turn.pending, blueprint: state.blueprint };
   } catch (e) {
     console.error(e);
     return { ok: false, error: "The assistant couldn’t answer just now." };

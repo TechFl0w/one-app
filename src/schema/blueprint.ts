@@ -390,6 +390,26 @@ export const Component = z.strictObject({
 });
 export type Component = z.infer<typeof Component>;
 
+// ---------- theme ----------
+
+/** Google Fonts the app can switch to (loaded on demand). */
+export const THEME_FONTS = ["Plus Jakarta Sans", "Inter", "DM Sans", "Manrope", "Outfit", "Poppins", "Nunito", "Work Sans", "Space Grotesk", "Lora", "Playfair Display", "Fraunces", "DM Serif Display", "Libre Baskerville"] as const;
+const Hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, "a colour like #17694F");
+
+/** The business's look: colours, fonts and shape. Applies to the app and to generated components. */
+export const Theme = z.strictObject({
+  colors: z
+    .strictObject({ ground: Hex, card: Hex, ink: Hex, muted: Hex, line: Hex, accent: Hex, accentHover: Hex, accentTint: Hex })
+    .partial()
+    .optional(),
+  font: z.enum(THEME_FONTS).optional(),
+  headingFont: z.enum(THEME_FONTS).optional(),
+  /** Card corner radius in px (buttons stay pills unless squareButtons). */
+  radius: z.int().min(0).max(32).optional(),
+  squareButtons: z.boolean().optional(),
+});
+export type Theme = z.infer<typeof Theme>;
+
 export const FunctionId = z.string().regex(/^fn_[a-z0-9_]{1,60}$/);
 /** An outside host a function may call, e.g. "api.goshippo.com" (no wildcards except a leading "*."). */
 export const Host = z.string().regex(/^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$/).max(253);
@@ -421,6 +441,7 @@ const BlueprintShape = z.strictObject({
   scheduling: Scheduling.optional(),
   components: z.array(Component).max(200).optional(),
   functions: z.array(ServerFunction).max(100).optional(),
+  theme: Theme.optional(),
 });
 
 /** Full blueprint with referential-integrity checks. */

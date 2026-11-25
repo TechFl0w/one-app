@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowUp, Check, Sparkles, X } from "lucide-react";
+import { ArrowUp, Check, ImagePlus, Sparkles, X } from "lucide-react";
+import type { ChatImage } from "@/agent/ownerAgent";
 import type { ChatItem } from "@/agent/transcript";
 import type { Message } from "@/agent/ownerAgent";
 import type { PendingAction } from "@/agent/types";
@@ -30,6 +31,13 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
   const [open, setOpen] = useState(false);
   const [transcript, setTranscript] = useState<ChatItem[]>(initialTranscript);
   const [draft, setDraft] = useState("");
+  const [images, setImages] = useState<(ChatImage & { url: string })[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const addFiles = async (files: FileList | File[]) => {
+    const picked = [...files].filter((f) => f.type.startsWith("image/")).slice(0, 3 - images.length);
+    const ready = await Promise.all(picked.map(shrinkImage));
+    setImages((x) => [...x, ...ready.filter((r): r is ChatImage & { url: string } => !!r)].slice(0, 3));
+  };
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   // Demo only: the browser holds the model history and pending actions.
@@ -42,19 +50,21 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
 
   const send = (text: string) => {
     const message = text.trim();
-    if (!message || busy) return;
+    if ((!message && !images.length) || busy) return;
+    const attached = images.map(({ mediaType, data }) => ({ mediaType, data }));
     setDraft("");
+    setImages([]);
     setError(null);
-    setTranscript((t) => [...t, item("owner", message)]);
+    setTranscript((t) => [...t, item("owner", attached.length ? `${message}${message ? "\n" : ""}[${attached.length} image${attached.length > 1 ? "s" : ""} attached]` : message)]);
     startTransition(async () => {
       if (mode.kind === "server") {
-        const r = await sendOwnerMessage(mode.businessId, pageId, message);
+        const r = await sendOwnerMessage(mode.businessId, pageId, message, attached);
         if (!r.ok) return setError(r.error);
         setTranscript(r.transcript);
         if (r.changed) router.refresh();
         return;
       }
-      const r = await sendDemoMessage(blueprint, demo.current.history, message, pageId);
+      const r = await sendDemoMessage(blueprint, demo.current.history, message, pageId, attached);
       if (!r.ok) return setError(r.error);
       demo.current.history = r.history;
       r.pending.forEach((p) => demo.current.pending.set(p.id, p));
@@ -146,13 +156,41 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
         {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{error}</p>}
       </div>
 
+      {images.length > 0 && (
+        <ul className="flex gap-2 border-t border-line px-3 pt-3" aria-label="Attached images">
+          {images.map((im, i) => (
+            <li key={im.url} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element -- local preview of an attached image */}
+              <img src={im.url} alt="" className="h-14 w-14 rounded-xl border border-line object-cover" />
+              <button type="button" className="absolute -right-1.5 -top-1.5 rounded-full bg-ink p-0.5 text-white" onClick={() => setImages((x) => x.filter((_, j) => j !== i))} aria-label="Remove image">
+                <X className="h-3 w-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <form
         className="flex items-end gap-2 border-t border-line p-3"
+        onPaste={(e) => {
+          if (e.clipboardData.files.length) {
+            e.preventDefault();
+            void addFiles(e.clipboardData.files);
+          }
+        }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          void addFiles(e.dataTransfer.files);
+        }}
         onSubmit={(e) => {
           e.preventDefault();
           send(draft);
         }}
       >
+        <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ""; }} />
+        <button type="button" className="h-11 w-11 shrink-0 rounded-full p-0 text-muted hover:bg-ground hover:text-ink disabled:opacity-40" onClick={() => fileRef.current?.click()} disabled={busy || images.length >= 3} aria-label="Attach an image" title="Attach a design or screenshot">
+          <ImagePlus className="mx-auto h-5 w-5" />
+        </button>
         <textarea
           className="input max-h-40 min-h-11 resize-none"
           rows={1}
@@ -168,7 +206,7 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
           aria-label="Message"
           maxLength={4000}
         />
-        <button className="btn-primary h-11 w-11 shrink-0 p-0" disabled={busy || !draft.trim()} aria-label="Send">
+        <button className="btn-primary h-11 w-11 shrink-0 p-0" disabled={busy || (!draft.trim() && !images.length)} aria-label="Send">
           <ArrowUp className="h-4 w-4" />
         </button>
       </form>
@@ -231,4 +269,24 @@ function Resolved({ value }: { value: NonNullable<ChatItem["resolved"]> }) {
       <Check className="h-3.5 w-3.5" /> {RESOLVED_LABEL[value]}
     </p>
   );
+}
+
+/** Scales an image down (longest side 1280px, JPEG) so a few fit in one message. */
+async function shrinkImage(file: File): Promise<(ChatImage & { url: string }) | null> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const url = canvas.toDataURL("image/jpeg", 0.82);
+    return { mediaType: "image/jpeg", data: url.slice(url.indexOf(",") + 1), url };
+  } catch {
+    return null;
+  }
 }

@@ -42,6 +42,7 @@ Custom UI (write_component):
 - Read and write data only through the kit with table and field ids from the setup summary. Deleting goes through records.remove (the owner confirms in the app).
 - To replace standard blocks with a component, pass replaceBlocks. To change an existing component, read_component first, then write_component with the same id.
 - If write_component returns compile errors, fix them and call it again before replying.
+- When the owner shares a design (screenshot, mockup, photo of a sketch) and wants the app to look like it: match it. First change_setup with setTheme (colours as hex, the closest font from the allowed list, corner radius, squareButtons), then rebuild the pages they mean as components that follow the layout — use replaceBlocks or newPage. Say briefly what you matched and what you couldn't.
 
 The kit (@one/kit) and the React subset you can use:
 ${KIT_DTS}
@@ -97,6 +98,29 @@ export function setupSummary(bp: Blueprint, now = new Date()): string {
   return lines.join("\n");
 }
 
+export const MAX_IMAGES = 3;
+export interface ChatImage {
+  mediaType: "image/jpeg" | "image/png" | "image/webp";
+  data: string;
+}
+
+/** Validates images from the browser (type, size). */
+export function cleanImages(raw: unknown): ChatImage[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((x): x is ChatImage => !!x && typeof x === "object" && ["image/jpeg", "image/png", "image/webp"].includes((x as ChatImage).mediaType) && typeof (x as ChatImage).data === "string" && /^[A-Za-z0-9+/=]+$/.test((x as ChatImage).data) && (x as ChatImage).data.length < 2_500_000)
+    .slice(0, MAX_IMAGES);
+}
+
+/** Images are only needed for the turn they were sent in; stored history keeps a note instead. */
+export function withoutImages(history: Message[]): Message[] {
+  return history.map((m) =>
+    m.role === "user" && Array.isArray(m.content) && m.content.some((b) => b.type === "image")
+      ? { ...m, content: m.content.map((b) => (b.type === "image" ? { type: "text" as const, text: "[The owner attached an image here.]" } : b)) }
+      : m,
+  );
+}
+
 export interface OwnerTurnInput {
   backend: OwnerBackend;
   /** Earlier messages of this owner's conversation (as returned by previous turns). */
@@ -104,6 +128,8 @@ export interface OwnerTurnInput {
   message: string;
   /** Page the owner is looking at, so "make this bigger" works. */
   pageId?: string;
+  /** Images the owner attached (e.g. a design to match). Base64, already resized by the browser. */
+  images?: ChatImage[];
   model?: ModelCall;
   now?: Date;
   newId?: () => string;
@@ -122,7 +148,16 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
   const bp = await backend.blueprint();
   const page = input.pageId ? bp.pages.find((p) => p.id === input.pageId) : undefined;
   const userText = page ? `[The owner is looking at page "${page.label}" (${page.id}).]\n\n${input.message}` : input.message;
-  const messages: Message[] = [...input.history, { role: "user", content: userText }];
+  const images = (input.images ?? []).slice(0, MAX_IMAGES);
+  const messages: Message[] = [
+    ...input.history,
+    {
+      role: "user",
+      content: images.length
+        ? [...images.map((im) => ({ type: "image" as const, source: { type: "base64" as const, media_type: im.mediaType, data: im.data } })), { type: "text" as const, text: userText }]
+        : userText,
+    },
+  ];
 
   const effects: ToolEffects = {};
   const pending: PendingAction[] = [];

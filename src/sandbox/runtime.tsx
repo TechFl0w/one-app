@@ -149,7 +149,7 @@ type Kids = { children?: React.ReactNode; className?: string };
 
 function Card({ title, actions, className, children, padded = true }: Kids & { title?: React.ReactNode; actions?: React.ReactNode; padded?: boolean }) {
   return (
-    <section className={cx("rounded-2xl border border-line bg-card shadow-soft", className)}>
+    <section className={cx("rounded-[var(--card-radius)] border border-line bg-card shadow-soft", className)}>
       {(title || actions) && (
         <header className="flex items-center justify-between gap-2 px-5 pb-2 pt-4">
           {title && <h2 className="truncate text-sm font-semibold">{title}</h2>}
@@ -162,7 +162,7 @@ function Card({ title, actions, className, children, padded = true }: Kids & { t
 }
 
 function Button({ variant = "primary", size = "md", type = "button", disabled, onClick, className, children }: Kids & { variant?: "primary" | "ghost" | "danger" | "link"; size?: "sm" | "md"; type?: "button" | "submit"; disabled?: boolean; onClick?: () => void }) {
-  const base = variant === "link" ? "text-accent hover:underline" : cx("inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-colors disabled:opacity-50", size === "sm" ? "px-3.5 py-1.5 text-xs" : "px-5 py-2.5 text-sm");
+  const base = variant === "link" ? "text-accent hover:underline" : cx("inline-flex items-center justify-center gap-2 rounded-[var(--button-radius)] font-semibold transition-colors disabled:opacity-50", size === "sm" ? "px-3.5 py-1.5 text-xs" : "px-5 py-2.5 text-sm");
   const look = variant === "primary" ? "bg-accent text-white hover:bg-accent-hover" : variant === "danger" ? "bg-red-700 text-white hover:bg-red-800" : variant === "ghost" ? "border border-line bg-card text-ink hover:bg-ground" : "";
   return (
     <button type={type} disabled={disabled} onClick={onClick} className={cx(base, look, className)}>
@@ -189,7 +189,7 @@ const Chevron = ({ open, className }: { open?: boolean; className?: string }) =>
 function Collapsible({ title, defaultOpen = true, actions, className, children }: Kids & { title: React.ReactNode; defaultOpen?: boolean; actions?: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className={cx("rounded-2xl border border-line bg-card shadow-soft", className)}>
+    <section className={cx("rounded-[var(--card-radius)] border border-line bg-card shadow-soft", className)}>
       <header className="flex items-center gap-3 px-5 py-3.5">
         <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
           <span className="truncate text-sm font-semibold">{title}</span>

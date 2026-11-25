@@ -60,6 +60,21 @@ const log = (...a) => console.log("•", ...a);
   assert.equal(probe.fetch, "blocked");
   assert.equal(probe.origin, "null");
 
+  // A design image → the assistant changes the theme → the app and the frame pick it up.
+  await p.getByRole("button", { name: "Ask the assistant" }).click().catch(() => {});
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  await p.locator('input[type=file][accept="image/*"]').setInputFiles({ name: "design.png", mimeType: "image/png", buffer: png });
+  await p.waitForSelector('ul[aria-label="Attached images"] img');
+  await p.getByLabel("Message").fill("make it look like this");
+  await p.getByLabel("Message").press("Enter");
+  await p.waitForSelector("text=Change the look (colours, fonts, shape)");
+  await p.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim().toLowerCase() === "#b5482b");
+  await p.frameLocator('iframe[title="Bookings hub"]').getByText("New booking").waitFor();
+  const innerFont = await (await (await p.locator('iframe[title="Bookings hub"]').elementHandle()).contentFrame()).evaluate(() => getComputedStyle(document.body).fontFamily);
+  log("theme applied: app accent #b5482b, frame font", innerFont);
+  assert.match(innerFont, /DM Sans/);
+  await p.screenshot({ path: `${S}/sandbox-themed.png` });
+
   assert.deepEqual(errors, []);
   log("ok");
   await b.close();
