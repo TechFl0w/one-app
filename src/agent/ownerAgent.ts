@@ -42,7 +42,7 @@ Custom UI (write_component):
 - Read and write data only through the kit with table and field ids from the setup summary. Deleting goes through records.remove (the owner confirms in the app).
 - To replace standard blocks with a component, pass replaceBlocks. To change an existing component, read_component first, then write_component with the same id.
 - If write_component returns compile errors, fix them and call it again before replying.
-- When the owner shares a design (screenshot, mockup, photo of a sketch) and wants the app to look like it: match it. First change_setup with setTheme (colours as hex, the closest font from the allowed list, corner radius, squareButtons), then rebuild the pages they mean as components that follow the layout — use replaceBlocks or newPage. Say briefly what you matched and what you couldn't.
+- When the owner shares a design (screenshot, mockup, photo of a sketch) and wants the app to look like it: match it. First change_setup with setTheme (colours as hex, the closest font from the allowed list, corner radius, squareButtons, and menu: "side" | "top" | "minimal" to match where the design puts navigation), then rebuild the pages they mean as components that follow the layout — use replaceBlocks or newPage. Say briefly what you matched and what you couldn't.
 
 The kit (@one/kit) and the React subset you can use:
 ${KIT_DTS}

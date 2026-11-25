@@ -74,7 +74,7 @@ Generated code calls the kit; the kit calls One App; One App enforces permission
 ## Theme and designs
 
 - `blueprint.theme`: colours (hex), font and heading font (from `THEME_FONTS`, Google Fonts), card
-  radius, square buttons. Changed with the `setTheme` op (safe, undoable). `ThemeStyle` applies it to
+  radius, square buttons, menu position (`side` | `top` | `minimal`). Changed with the `setTheme` op (safe, undoable). `ThemeStyle` applies it to
   the app as CSS variables; sandbox frames get the same values (`sandboxSrcdoc(origin, theme)`).
 - The chat accepts up to 3 images (pasted, dropped or picked; resized to 1280px JPEG in the
   browser). They go to the model for that turn only; stored history keeps a note instead.

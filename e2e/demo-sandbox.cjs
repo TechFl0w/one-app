@@ -73,6 +73,11 @@ const log = (...a) => console.log("•", ...a);
   const innerFont = await (await (await p.locator('iframe[title="Bookings hub"]').elementHandle()).contentFrame()).evaluate(() => getComputedStyle(document.body).fontFamily);
   log("theme applied: app accent #b5482b, frame font", innerFont);
   assert.match(innerFont, /DM Sans/);
+  // The design also moved the menu to a top bar.
+  await p.waitForSelector('header nav[aria-label="Pages"] >> text=Bookings');
+  assert.equal(await p.locator("aside.md\\:flex").count(), 0, "no sidebar with a top menu");
+  log("menu moved to the top bar");
+  await p.getByLabel("Close assistant").click().catch(() => {});
   await p.screenshot({ path: `${S}/sandbox-themed.png` });
 
   assert.deepEqual(errors, []);
