@@ -4,6 +4,7 @@ import { Sidebar } from "./Sidebar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import type { ChatItem } from "@/agent/transcript";
 import { SandboxProvider } from "@/components/sandbox/SandboxProvider";
+import { RecordOpenerProvider } from "@/components/blocks/RecordOpener";
 import { ThemeStyle } from "@/theme/ThemeStyle";
 import { ShellFrame } from "./ShellFrame";
 import type { SandboxBridge } from "@/sandbox/protocol";
@@ -35,6 +36,7 @@ export function AppShell({
     <EditProvider blueprint={blueprint} mode={mode}>
     <SandboxProvider value={{ bridge: sandbox, basePath }}>
     <ThemeStyle />
+    <RecordOpenerProvider>
     <ShellFrame>
       <Sidebar basePath={basePath} businesses={businesses} footer={footer} />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -42,6 +44,7 @@ export function AppShell({
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
       </div>
     </ShellFrame>
+    </RecordOpenerProvider>
     <ChatPanel mode={mode} initialTranscript={transcript} />
     </SandboxProvider>
     </EditProvider>

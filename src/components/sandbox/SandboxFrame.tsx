@@ -66,7 +66,9 @@ export function SandboxFrame({
   }, [crash]);
   const [toast, setToast] = useState<string | null>(null);
   const [form, setForm] = useState<{ request: RecordFormRequest; resolve: (r: SandboxRecord | null) => void } | null>(null);
-  const [confirm, setConfirm] = useState<{ label: string; resolve: (ok: boolean) => void } | null>(null);
+  // One App's own confirmation dialog (deleting, changing amounts): the frame can't draw or skip it.
+  const [confirm, setConfirm] = useState<{ title: string; body: string; yes: string; danger?: boolean; resolve: (ok: boolean) => void } | null>(null);
+  const ask = (c: Omit<NonNullable<typeof confirm>, "resolve">) => new Promise<boolean>((resolve) => setConfirm({ ...c, resolve }));
   const themeKey = JSON.stringify(theme ?? null);
   const srcDoc = useMemo(() => (origin ? sandboxSrcdoc(origin, JSON.parse(themeKey) ?? undefined, css) : undefined), [origin, themeKey, css]);
   const init = useRef<HostToFrame>({ type: "init", compiled, props, schema, autoHeight });
@@ -103,13 +105,24 @@ export function SandboxFrame({
           case "records.create":
             value = unwrap(await bridge.create(str(a[0], "table"), obj(a[1])));
             break;
-          case "records.update":
-            value = unwrap(await bridge.update(str(a[0], "table"), str(a[1], "id"), obj(a[2])));
+          case "records.update": {
+            const table = str(a[0], "table");
+            const id = str(a[1], "id");
+            const data = obj(a[2]);
+            let r = await bridge.update(table, id, data);
+            // Price/amount changes need the owner's OK: asked here, never by the screen.
+            if (!r.ok && r.code === "needs_confirmation") {
+              const ok = await ask({ title: "Change this amount?", body: changeText(schema, table, data), yes: "Yes, save" });
+              if (!ok) throw new Error("cancelled: The change wasn't saved.");
+              r = await bridge.update(table, id, data, true);
+            }
+            value = unwrap(r);
             break;
+          }
           case "records.remove": {
             const table = str(a[0], "table");
             const id = str(a[1], "id");
-            const ok = await new Promise<boolean>((resolve) => setConfirm({ label: tableLabel(table), resolve }));
+            const ok = await ask({ title: "Delete this record?", body: `This removes one ${tableLabel(table).toLowerCase()} record. It’s kept in the activity log.`, yes: "Delete", danger: true });
             if (ok) unwrap(await bridge.remove(table, id));
             value = ok;
             break;
@@ -136,7 +149,10 @@ export function SandboxFrame({
         }
         send({ type: "result", id: m.id, ok: true, value });
       } catch (err) {
-        send({ type: "result", id: m.id, ok: false, error: err instanceof Error ? err.message.slice(0, 300) : "Failed" });
+        const message = err instanceof Error ? err.message.slice(0, 300) : "Failed";
+        // A failed save is never silent, whether or not the screen handles it.
+        if (["records.create", "records.update", "records.remove"].includes(m.method) && !message.startsWith("cancelled:")) setToast(`Couldn’t save: ${message.replace(/^[a-z_]+: /, "")}`);
+        send({ type: "result", id: m.id, ok: false, error: message });
       }
     };
     window.addEventListener("message", onMessage);
@@ -175,7 +191,9 @@ export function SandboxFrame({
           key={compiled + themeKey}
           ref={frame}
           title={title}
-          sandbox="allow-scripts"
+          // allow-forms only lets submit events fire (forms in screens work); the frame's CSP
+          // (form-action 'none') still stops any form from sending anything anywhere.
+          sandbox="allow-scripts allow-forms"
           srcDoc={srcDoc}
           className="block w-full border-0 bg-transparent"
           style={autoHeight ? { height: height ?? 48 } : { height: "100%" }}
@@ -191,19 +209,31 @@ export function SandboxFrame({
         request={form?.request ?? null}
         schema={schema}
         bridge={bridge}
-        onDone={(saved) => {
+        onDone={(saved, deleted) => {
           form?.resolve(saved);
           setForm(null);
           if (saved) setToast(form?.request.recordId ? "Saved" : "Added");
+          if (deleted) setToast("Deleted");
         }}
       />
-      <Dialog open={!!confirm} onClose={() => { confirm?.resolve(false); setConfirm(null); }} title="Delete this record?">
-        <p className="text-sm text-muted">This removes one {confirm?.label.toLowerCase()} record. It’s kept in the activity log.</p>
+      <Dialog open={!!confirm} onClose={() => { confirm?.resolve(false); setConfirm(null); }} title={confirm?.title ?? ""}>
+        <p className="whitespace-pre-line text-sm text-muted">{confirm?.body}</p>
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={() => { confirm?.resolve(false); setConfirm(null); }}>Cancel</button>
-          <button type="button" className="btn bg-red-700 text-white hover:bg-red-800" onClick={() => { confirm?.resolve(true); setConfirm(null); }}>Delete</button>
+          <button type="button" className={confirm?.danger ? "btn bg-red-700 text-white hover:bg-red-800" : "btn-primary"} onClick={() => { confirm?.resolve(true); setConfirm(null); }}>{confirm?.yes}</button>
         </div>
       </Dialog>
     </div>
   );
+}
+
+/** What an update changes, in words, for the confirmation dialog. */
+export function changeText(schema: SandboxSchema, table: string, data: Record<string, unknown>): string {
+  const t = schema.tables.find((x) => x.id === table);
+  const money = (v: unknown) => (typeof v === "number" ? new Intl.NumberFormat(undefined, { style: "currency", currency: schema.business.currency }).format(v) : String(v ?? "—"));
+  const lines = Object.entries(data).flatMap(([id, v]) => {
+    const f = t?.fields.find((x) => x.id === id);
+    return f && (f.type === "money" || f.type === "number") ? [`${f.label}: ${f.type === "money" ? money(v) : String(v ?? "—")}`] : [];
+  });
+  return `This changes an amount on a ${(t?.label ?? "record").replace(/s$/, "").toLowerCase()}.${lines.length ? `\n${lines.join("\n")}` : ""}`;
 }

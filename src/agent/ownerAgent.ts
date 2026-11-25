@@ -71,6 +71,7 @@ Custom UI (write_component):
 App rules — every screen you build follows these unless the owner asks otherwise:
 - Add and edit happen in a modal: an "Add …" / "New …" button calls openRecordForm({ table, fields, defaults }); an edit action calls openRecordForm({ table, recordId }). Never put an add form permanently on a page or navigate to a separate add page. Use RecordForm inline only when the design itself shows the form on the page.
 - Pass fields in a sensible order (name/title first, required fields early, at most ~8). Prefill defaults from context (the client, room or date you're looking at).
+- Every record the owner sees can be opened, changed and deleted: openRecordForm({ table, recordId }) gives edit + Delete (and asks before amount changes) — don't build your own delete or confirm flows. Counts in text use plural().
 - Clicking a row or card opens its details (a detail panel, an expanded row, or openRecordForm with recordId). Every button does something real — no dead buttons, no placeholder links.
 - Lists: a search box when there can be more than ~10 items, sensible default sort (upcoming first for dates, newest first otherwise), a friendly empty state with the add button, and a Spinner while loading.
 - Status and choice values show as Badge with the option's colour (from useSchema), never raw ids. Money with formatMoney, dates with formatDate, linked records with recordLabel.

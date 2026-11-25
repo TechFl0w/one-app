@@ -47,22 +47,33 @@ const log = (...a) => console.log("•", ...a);
   const opened = await height();
   log("chevron opens the form; frame height", closed, "→", opened);
   assert.ok(opened > closed + 150, "frame grows when the section opens");
+  // The inline form really submits inside the sandbox: an empty save names what's missing.
+  await frame.getByRole("button", { name: "Save" }).click();
+  await frame.getByText(/Please fill in .*Client/).waitFor({ timeout: 5000 });
+  log("inline form submits (required fields are checked)");
   // Kit dropdowns close when you pick, and only one popover is open at a time.
   const lists = () => frame.locator('[role="listbox"]').count();
   await frame.getByRole("button", { name: /Choose…/ }).first().click();
   assert.equal(await lists(), 1);
+  const client = (await frame.locator('[role="option"]').first().textContent()).trim();
   await frame.locator('[role="option"]').first().click();
   await p.waitForTimeout(200);
   assert.equal(await lists(), 0, "dropdown closes on pick");
   await frame.getByRole("button", { name: /Pick a date/ }).click();
   await frame.getByText("Mo", { exact: true }).waitFor();
-  await frame.getByRole("button", { name: /Choose…/ }).first().click();
+  await frame.getByRole("button", { name: client }).first().click();
   await p.waitForTimeout(200);
   assert.equal(await frame.getByText("Mo", { exact: true }).count(), 0, "calendar closes when another dropdown opens");
   await frame.locator("body").press("Escape");
   await p.waitForTimeout(200);
   assert.equal(await lists(), 0, "Escape closes");
   log("dropdowns close on pick, outside click and Escape");
+  // With a client and a date, the form saves.
+  await frame.getByRole("button", { name: /Pick a date/ }).click();
+  await frame.getByRole("button", { name: "15", exact: true }).click();
+  await frame.getByRole("button", { name: "Save" }).click();
+  await p.getByRole("status").filter({ hasText: /added/i }).waitFor({ timeout: 10000 });
+  log("inline form saved a booking");
   await frame.getByRole("button", { name: /New booking/ }).click();
   await p.waitForTimeout(800);
   assert.equal(await height(), closed, "and shrinks back when it closes");
@@ -114,6 +125,18 @@ const log = (...a) => console.log("•", ...a);
   log("menu moved to the top bar");
   await p.getByLabel("Close assistant").click().catch(() => {});
   await p.screenshot({ path: `${S}/sandbox-themed.png` });
+
+  // Standard tables: a row opens the record pop-up with Delete; Add opens a new one.
+  await p.getByLabel("Close assistant").click().catch(() => {});
+  await p.goto(BASE + "/demo/p/pg_clients");
+  await p.locator("table tbody tr").first().click();
+  const pop = p.locator("dialog[open]");
+  await pop.getByRole("button", { name: "Delete" }).waitFor();
+  await pop.getByRole("button", { name: "Cancel" }).click();
+  await p.getByRole("button", { name: /^Add / }).first().click();
+  await p.locator("dialog[open]").getByText(/^New /).waitFor();
+  await p.locator("dialog[open]").getByRole("button", { name: "Cancel" }).click();
+  log("table rows open the record pop-up (edit + delete), Add opens a new one");
 
   // A screen that crashes goes back to the assistant automatically and gets fixed.
   await p.getByRole("button", { name: "Ask the assistant" }).click().catch(() => {});
