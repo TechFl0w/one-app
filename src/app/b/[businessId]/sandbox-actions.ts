@@ -28,10 +28,11 @@ export async function sandboxCreate(businessId: string, table: string, data: Rec
     return view(await createRecord(await createClient(), businessId, table, data));
   });
 }
-export async function sandboxUpdate(businessId: string, table: string, id: string, data: Record<string, unknown>) {
+export async function sandboxUpdate(businessId: string, table: string, id: string, data: Record<string, unknown>, confirmed = false) {
   return bridged(async () => {
-    // Price changes etc. still need confirmation (engine/risk.ts); generated UI can't confirm them.
-    return view(await updateRecord(await createClient(), businessId, table, id, data));
+    // Amount changes need confirmation (engine/risk.ts); `confirmed` is only sent by One App's own
+    // dialog in the host page after the owner said yes, never by the screen's code.
+    return view(await updateRecord(await createClient(), businessId, table, id, data, { confirmed: confirmed === true }));
   });
 }
 /** The host only calls this after the owner pressed Delete in One App's own dialog. */

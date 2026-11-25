@@ -160,10 +160,13 @@ function optionLabel(table: string, field: string, optionId: unknown) {
   return f?.options?.find((o) => o.id === optionId)?.label ?? (optionId == null ? "" : String(optionId));
 }
 const navigate = (pageId: string) => void call("navigate", pageId);
+/** "1 tenant", "3 tenants" (or a given plural: plural(n, "person", "people")). */
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /** Add/edit screen as a modal drawn by One App over the whole page. Resolves the saved record, or null if cancelled. */
 async function openRecordForm(opts: { table: string; recordId?: string; fields?: string[]; title?: string; submitLabel?: string; defaults?: Record<string, unknown> }) {
   const r = await call<SandboxRecord | null>("form.open", opts);
-  if (r) changed();
+  // Refresh even when nothing came back: the record may have been deleted from the form.
+  changed();
   return r;
 }
 const toast = (message: string) => void call("toast", message);
@@ -430,7 +433,9 @@ function RecordForm({ table, fields, recordId, submitLabel = "Save", onSaved, cl
   const schema = useSchema();
   const t = schema.tables.find((x) => x.id === table);
   const { record } = useRecord(table, recordId);
-  const [values, setValues] = useState<Record<string, unknown>>({});
+  // A new record starts with each status at its first option (so it shows up on boards).
+  const fresh = () => (recordId ? {} : Object.fromEntries((t?.fields ?? []).filter((f) => f.type === "status" && f.options?.length).map((f) => [f.id, f.options![0].id])));
+  const [values, setValues] = useState<Record<string, unknown>>(fresh);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -438,17 +443,19 @@ function RecordForm({ table, fields, recordId, submitLabel = "Save", onSaved, cl
   }, [record]);
   const shown = useMemo(() => {
     const all = (t?.fields ?? []).filter((f) => !["rollup", "formula", "file", "hours"].includes(f.type));
-    return fields ? fields.map((id) => all.find((f) => f.id === id)).filter((f): f is NonNullable<typeof f> => !!f) : all.slice(0, 8);
+    return fields ? fields.map((id) => all.find((f) => f.id === id)).filter((f): f is NonNullable<typeof f> => !!f) : all;
   }, [t, fields]);
   if (!t) return <Empty>Unknown table {table}</Empty>;
   const set = (id: string, v: unknown) => setValues((x) => ({ ...x, [id]: v }));
   const submit = async () => {
+    const missing = shown.filter((f) => f.required && f.type !== "checkbox" && (values[f.id] == null || values[f.id] === "" || (Array.isArray(values[f.id]) && !(values[f.id] as unknown[]).length)));
+    if (missing.length) return setError(`Please fill in ${missing.map((f) => f.label).join(", ")}.`);
     setBusy(true);
     setError(null);
     try {
       const data = Object.fromEntries(shown.map((f) => [f.id, values[f.id] === "" ? null : (values[f.id] ?? null)]).filter(([, v]) => v !== null || recordId));
       const saved = recordId ? await records.update(table, recordId, data) : await records.create(table, data);
-      if (!recordId) setValues({});
+      if (!recordId) setValues(fresh());
       toast(recordId ? "Saved" : `${t.label}: added`);
       onSaved?.(saved);
     } catch (e) {
@@ -458,7 +465,7 @@ function RecordForm({ table, fields, recordId, submitLabel = "Save", onSaved, cl
     }
   };
   return (
-    <form className={cx("grid gap-3", className)} onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+    <form className={cx("grid gap-3", className)} noValidate onSubmit={(e) => { e.preventDefault(); if (!busy) void submit(); }}>
       {shown.map((f) => (
         <FieldInput key={f.id} field={f} value={values[f.id]} onChange={(v) => set(f.id, v)} />
       ))}
@@ -514,7 +521,7 @@ function toLocalInput(iso: string) {
 }
 
 const kit = {
-  useRecords, useRecord, useSchema, useProps, records, recordLabel, optionLabel, navigate, openRecordForm, toast, formatMoney, formatDate,
+  useRecords, useRecord, useSchema, useProps, records, recordLabel, optionLabel, navigate, openRecordForm, toast, plural, formatMoney, formatDate,
   Card, Button, Badge, Collapsible, Tabs, Input, Textarea, Select, DateTimeInput, RecordForm, Spinner, Empty, Icon,
 };
 

@@ -3,6 +3,7 @@ import type { RecordStore } from "@/engine/store";
 import { loadBlockData } from "@/engine/blockData";
 import { BlockFrame } from "./BlockFrame";
 import { BoardBlock, Empty, ListBlock, NotesBlock, NumberBlock, TableBlock } from "./RecordBlocks";
+import { AddRecordButton } from "./RecordOpener";
 import { CalendarBlock } from "./CalendarBlock";
 import { FormBlock, type FormAction } from "./FormBlock";
 import type { FormatCtx } from "./format";
@@ -103,7 +104,7 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
     case "records": {
       const props = { block, table: data.table, records: data.records, total: data.total, labels: data.labels, ctx };
       return (
-        <BlockFrame title={title} action={<span className="text-xs text-muted">{data.total}</span>}>
+        <BlockFrame title={title} action={<span className="flex items-center gap-2 text-xs text-muted">{data.total}<AddRecordButton table={data.table.id} label={data.table.label.toLowerCase()} /></span>}>
           {block.type === "table" && <TableBlock {...props} />}
           {block.type === "list" && <ListBlock {...props} />}
           {block.type === "board" && <BoardBlock {...props} groups={data.groups} />}

@@ -73,8 +73,11 @@ declare module "@one/kit" {
    * THE way to add or edit a record: One App opens a modal form over the whole page (validated,
    * right input per field, linked-record pickers). Resolves the saved record, or null if cancelled.
    * Lists refresh by themselves. defaults prefills a new record (e.g. { fld_client: clientId }).
+   * When editing (recordId), the form also offers Delete, and asks before saving an amount change.
    */
   export function openRecordForm(opts: { table: string; recordId?: string; fields?: string[]; title?: string; submitLabel?: string; defaults?: RecordData }): Promise<RecordRow | null>;
+  /** Count with the right word: plural(1, "tenant") → "1 tenant", plural(3, "person", "people") → "3 people". Use it for every count in text. */
+  export function plural(n: number, one: string, many?: string): string;
   /** Short message at the bottom of the screen. */
   export function toast(message: string): void;
   export function formatMoney(amount: number | null | undefined): string;

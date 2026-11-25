@@ -2,6 +2,7 @@ import type { Block, Field, Table } from "@/schema/blueprint";
 import type { RecordRow } from "@/schema/records";
 import { groupField, recordLabel, type Group, type LinkLabels } from "@/engine/blockData";
 import { FieldValue, formatMoney, valueText, type FormatCtx } from "./format";
+import { RecordRowLink } from "./RecordOpener";
 
 type RecordsProps = {
   block: Block;
@@ -47,13 +48,13 @@ export function TableBlock({ block, table, records, total, labels, ctx }: Record
         </thead>
         <tbody>
           {records.map((r) => (
-            <tr key={r.id} className="hover:bg-ground/60">
+            <RecordRowLink key={r.id} table={table.id} recordId={r.id}>
               {cols.map((f, i) => (
                 <td key={f.id} className={`border-b border-line/60 px-5 py-2.5 ${i === 0 ? "font-medium" : ""}`}>
                   <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
                 </td>
               ))}
-            </tr>
+            </RecordRowLink>
           ))}
         </tbody>
       </table>

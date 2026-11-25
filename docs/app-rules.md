@@ -9,6 +9,8 @@ The owner can ask for something else; the rules are in the owner agent's prompt
   screenshot being recreated shows one. Inline `RecordForm` only when the design is the form.
 - **Sensible forms:** name/title first, required fields early, at most ~8 fields, prefilled from
   context (the client/room/date being viewed).
+- **Edit and delete everywhere:** every record shown can be opened, changed and deleted (the
+  record pop-up has Delete; amount changes are confirmed by One App). Standard tables too.
 - **Rows open details.** Clicking a row or card shows the record. No dead buttons or links.
 - **Lists:** search when there can be more than ~10 items, a sensible default sort, a friendly
   empty state with the add button, a spinner while loading.

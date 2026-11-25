@@ -49,7 +49,7 @@ export function parseFormRequest(v: unknown, schema: SandboxSchema): RecordFormR
  * The add/edit form a generated component opens with openRecordForm(): drawn by One App as a
  * real modal over the whole page (a frame can only draw inside its own box).
  */
-export function RecordDialog({ request, schema, bridge, onDone }: { request: RecordFormRequest | null; schema: SandboxSchema; bridge: SandboxBridge; onDone: (saved: SandboxRecord | null) => void }) {
+export function RecordDialog({ request, schema, bridge, onDone }: { request: RecordFormRequest | null; schema: SandboxSchema; bridge: SandboxBridge; onDone: (saved: SandboxRecord | null, deleted?: boolean) => void }) {
   const t = schema.tables.find((x) => x.id === request?.table);
   const title = request?.title ?? (t ? (request?.recordId ? `Edit ${t.label.toLowerCase()}` : `New ${t.label.toLowerCase()}`) : "");
   return (
@@ -59,14 +59,25 @@ export function RecordDialog({ request, schema, bridge, onDone }: { request: Rec
   );
 }
 
-function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFormRequest; table: Table; schema: SandboxSchema; bridge: SandboxBridge; onDone: (saved: SandboxRecord | null) => void }) {
+function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFormRequest; table: Table; schema: SandboxSchema; bridge: SandboxBridge; onDone: (saved: SandboxRecord | null, deleted?: boolean) => void }) {
   const editing = !!request.recordId;
-  const [values, setValues] = useState<Record<string, unknown> | null>(editing ? null : { ...(request.defaults ?? {}) });
+  // New records: each status starts at its first option, then whatever the screen prefilled.
+  const statusDefaults = Object.fromEntries(t.fields.filter((f) => f.type === "status" && f.options?.length).map((f) => [f.id, f.options![0].id]));
+  const [values, setValues] = useState<Record<string, unknown> | null>(editing ? null : { ...statusDefaults, ...(request.defaults ?? {}) });
   const [links, setLinks] = useState<Record<string, { value: string; label: string }[]>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmAmount, setConfirmAmount] = useState<"no" | "asking" | "yes">("no");
+  const [deleting, setDeleting] = useState<"no" | "asking" | "busy">("no");
+  const remove = async () => {
+    setDeleting("busy");
+    const r = await bridge.remove(t.id, request.recordId!);
+    if (r.ok) return onDone(null, true);
+    setError(r.error);
+    setDeleting("no");
+  };
   const all = t.fields.filter((f) => !SKIP.has(f.type));
-  const shown = request.fields ? request.fields.map((id) => all.find((f) => f.id === id)).filter((f): f is Field => !!f) : all.slice(0, 10);
+  const shown = request.fields ? request.fields.map((id) => all.find((f) => f.id === id)).filter((f): f is Field => !!f) : all;
 
   useEffect(() => {
     let live = true;
@@ -105,10 +116,16 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
       else v = s;
       if (v !== null || editing) data[f.id] = v;
     }
-    if (!editing) for (const [k, v] of Object.entries(request.defaults ?? {})) if (!(k in data) && t.fields.some((f) => f.id === k)) data[k] = v;
+    if (!editing) for (const [k, v] of Object.entries({ ...statusDefaults, ...(request.defaults ?? {}) })) if (!(k in data) && t.fields.some((f) => f.id === k)) data[k] = v;
     try {
-      const saved = unwrap(editing ? await bridge.update(t.id, request.recordId!, data) : await bridge.create(t.id, data));
-      onDone(saved);
+      if (!editing) return onDone(unwrap(await bridge.create(t.id, data)));
+      const r = await bridge.update(t.id, request.recordId!, data, confirmAmount === "yes");
+      // Amount changes: ask once, inline, then save with the owner's OK.
+      if (!r.ok && r.code === "needs_confirmation") {
+        setConfirmAmount("asking");
+        return setBusy(false);
+      }
+      onDone(unwrap(r));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn’t save");
       setBusy(false);
@@ -137,7 +154,24 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
         </div>
       ))}
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      <div className="flex justify-end gap-2 pt-1">
+      {confirmAmount === "asking" && (
+        <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          This changes an amount. Save it?{" "}
+          <button type="submit" className="font-semibold underline" onClick={() => setConfirmAmount("yes")}>Yes, save</button>
+        </p>
+      )}
+      {deleting === "asking" && (
+        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">
+          Delete this {t.label.replace(/s$/, "").toLowerCase()}? It’s kept in the activity log.{" "}
+          <button type="button" className="font-semibold underline" onClick={() => void remove()}>Yes, delete</button>
+        </p>
+      )}
+      <div className="flex items-center justify-end gap-2 pt-1">
+        {editing && (
+          <button type="button" className="mr-auto text-sm font-medium text-red-700 hover:underline" disabled={deleting === "busy"} onClick={() => setDeleting("asking")}>
+            {deleting === "busy" ? "Deleting…" : "Delete"}
+          </button>
+        )}
         <button type="button" className="btn-ghost" onClick={() => onDone(null)}>Cancel</button>
         <button className="btn-primary" disabled={busy}>{busy ? "Saving…" : (request.submitLabel ?? (editing ? "Save" : "Add"))}</button>
       </div>

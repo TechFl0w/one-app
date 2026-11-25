@@ -35,7 +35,8 @@ export interface SandboxBridge {
   list(q: RecordQuery): Promise<BridgeResult<{ records: SandboxRecord[]; total: number }>>;
   get(table: string, id: string): Promise<BridgeResult<SandboxRecord>>;
   create(table: string, data: Record<string, unknown>): Promise<BridgeResult<SandboxRecord>>;
-  update(table: string, id: string, data: Record<string, unknown>): Promise<BridgeResult<SandboxRecord>>;
+  /** `confirmed` only after the owner said yes in One App's own dialog (amount changes). */
+  update(table: string, id: string, data: Record<string, unknown>, confirmed?: boolean): Promise<BridgeResult<SandboxRecord>>;
   /** Only called after the owner confirmed in One App's own dialog. */
   remove(table: string, id: string): Promise<BridgeResult<void>>;
 }
