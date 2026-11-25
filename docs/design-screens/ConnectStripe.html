@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Connect Stripe during setup</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F5F0}
+a{color:#17694F}a:hover{color:#0F5640}
+</style>
+</helmet>
+<div style="font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: #1C1B19; background: #F7F5F0; min-height: 860px; display: flex; flex-wrap: wrap; align-items: stretch">
+
+<nav aria-label="Workspace" style="flex: 1 1 220px; max-width: 260px; background: #FFFFFF; border-right: 1px solid #E8E4DA; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid #E8E4DA; border-radius: 12px; background: #FFFFFF; color: #1C1B19">
+<span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 8px; background: #C2410C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px">CH</span>
+<span style="display: flex; flex-direction: column; flex: 1"><span style="font-weight: 600; font-size: 14px">Coastline Hair</span><span style="font-size: 12px; color: #6B6862">Hair salon</span></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<a href="#" style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; background: #E4F2EA; color: #0F5640; text-decoration: none; font-weight: 600; font-size: 14px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z"/></svg>Assistant</a>
+<a href="#" style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; color: #3A3833; text-decoration: none; font-size: 14px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</a>
+<a href="#" style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; color: #3A3833; text-decoration: none; font-size: 14px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-7 7-7s7 3 7 7"/></svg>Clients</a>
+<span style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; color: #8A5A00; font-size: 14px; border: 1px dashed #E2B65A; background: #FFF8E8"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 11h14v4H5zM7 15v6M17 15v6"/></svg>Chair rental <span style="margin-left: auto; font-size: 11px; font-weight: 600">DRAFT</span></span>
+</div>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+<header>
+<h1 style="margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.02em">Almost ready to switch on</h1>
+<p style="margin: 6px 0 0; color: #5E5E66; font-size: 15px">Chair rental is built. One connection is left so renters can pay you.</p>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+
+<section aria-label="Setup checklist" style="flex: 1 1 360px; min-width: 0; background: #FFFFFF; border: 1px solid #E8E6E0; border-radius: 20px; box-shadow: 0 1px 2px rgba(20,20,30,0.04), 0 10px 30px rgba(20,20,30,0.05); padding: 8px">
+<ol style="margin: 0; padding: 0; list-style: none">
+<li style="display: flex; gap: 14px; align-items: flex-start; padding: 14px">
+<span aria-hidden="true" style="flex: none; width: 28px; height: 28px; border-radius: 999px; background: #DCFCE7; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg></span>
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 15px">Pages, fields and automations</span><span style="font-size: 13px; color: #5E5E66">5 pages · 5 automations, saved as a draft</span></span>
+</li>
+<li style="display: flex; gap: 14px; align-items: flex-start; padding: 14px; border-top: 1px solid #F1EFEA">
+<span aria-hidden="true" style="flex: none; width: 28px; height: 28px; border-radius: 999px; background: #DCFCE7; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg></span>
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 15px">WhatsApp number</span><span style="font-size: 13px; color: #5E5E66">Already connected — renters can message it</span></span>
+</li>
+<li style="display: flex; gap: 14px; align-items: flex-start; padding: 14px; border-top: 1px solid #F1EFEA">
+<span aria-hidden="true" style="flex: none; width: 28px; height: 28px; border-radius: 999px; background: #DCFCE7; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg></span>
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 15px">Email</span><span style="font-size: 13px; color: #5E5E66">Built in — sends as "Coastline Hair", replies go to your inbox</span></span>
+</li>
+<li style="display: flex; gap: 14px; align-items: flex-start; padding: 16px 14px; border-top: 1px solid #F1EFEA; background: #F6FBF8; border-radius: 0 0 14px 14px">
+<span aria-hidden="true" style="flex: none; width: 28px; height: 28px; border-radius: 999px; background: #17694F; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700">4</span>
+<span style="display: flex; flex-direction: column; gap: 10px; flex: 1">
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600; font-size: 15px">Get paid with Stripe</span><span style="font-size: 13px; color: #5E5E66; line-height: 1.5">Needed to auto-charge weekly rent. About 5 minutes. Already use Stripe? Sign in and you're done.</span></span>
+<span style="display: flex; gap: 8px; flex-wrap: wrap">
+<button type="button" style="font: inherit; font-size: 14px; font-weight: 600; padding: 11px 18px; border: none; border-radius: 999px; background: #17694F; color: #FFFFFF; cursor: pointer">Connect Stripe</button>
+<button type="button" style="font: inherit; font-size: 14px; padding: 11px 18px; border: 1px solid #D9D6CE; border-radius: 999px; background: #FFFFFF; cursor: pointer">Use payment links for now</button>
+</span>
+</span>
+</li>
+</ol>
+</section>
+
+<section aria-label="Payments setup" style="flex: 1 1 360px; min-width: 0; background: #FFFFFF; border: 1px solid #E8E6E0; border-radius: 20px; box-shadow: 0 1px 2px rgba(20,20,30,0.04), 0 10px 30px rgba(20,20,30,0.05); padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+<h2 style="margin: 0; font-size: 17px; font-weight: 600">Payments setup</h2>
+<span style="font-size: 12px; color: #5E5E66">Step 1 of 3</span>
+</div>
+<div style="display: flex; gap: 6px" aria-hidden="true">
+<span style="flex: 1; height: 6px; border-radius: 999px; background: #17694F"></span>
+<span style="flex: 1; height: 6px; border-radius: 999px; background: #E8E6E0"></span>
+<span style="flex: 1; height: 6px; border-radius: 999px; background: #E8E6E0"></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; font-size: 14px">
+<div style="display: flex; justify-content: space-between; padding: 10px 12px; border-radius: 12px; background: #EAF5EF; color: #0F5640; font-weight: 600"><span>1. Business details</span><span>Pre-filled</span></div>
+<div style="display: flex; justify-content: space-between; padding: 10px 12px; border-radius: 12px; background: #F7F5F0"><span>2. Verify your identity</span><span style="color: #5E5E66">~2 min</span></div>
+<div style="display: flex; justify-content: space-between; padding: 10px 12px; border-radius: 12px; background: #F7F5F0"><span>3. Bank account for payouts</span><span style="color: #5E5E66">~1 min</span></div>
+</div>
+<div style="min-height: 150px; border: 2px dashed #D9D6CE; border-radius: 16px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px; font-size: 13px; color: #5E5E66; line-height: 1.5">Stripe's secure setup form appears here, inside the app.<br>No new tab, no separate Stripe dashboard.</div>
+<p style="margin: 0; display: flex; gap: 8px; font-size: 12px; color: #3A3A40; line-height: 1.5"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3A3A40" stroke-width="2" style="flex: none; margin-top: 1px"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>Your ID and bank details go straight to Stripe. We never see or store them.</p>
+</section>
+</div>
+
+<div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+<button type="button" disabled style="font: inherit; font-size: 15px; font-weight: 600; padding: 13px 22px; border: none; border-radius: 999px; background: #D9D6CE; color: #4A4950; cursor: not-allowed">Switch on chair rental</button>
+<span style="font-size: 13px; color: #5E5E66">Available once Stripe is connected, or choose payment links for now.</span>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

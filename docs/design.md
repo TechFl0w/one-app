@@ -1,6 +1,11 @@
 # Design
 
-Reference screens (design canvas): https://claude.ai/artifact/7CAiESbpQLdbc7wc6msQmU
+Reference screens: HTML mockups in `docs/design-screens/` (source of truth for layout, copy and styling;
+they use a canvas runtime, so read the markup rather than opening them in a browser).
+Original canvas (owner only): https://claude.ai/artifact/7CAiESbpQLdbc7wc6msQmU
+
+Files: Main (AI builder) · Salon (nail salon calendar) · Mechanic (bay board) · Ornaments (orders) ·
+EditMode · NewBoard (new page) · ConnectStripe · Connections · LayoutEditor · LayoutVariants
 1 AI builder · 2 Nail salon calendar · 3 Mechanic bay board · 4 Ornament orders · 5 Edit mode ·
 6 New page · 7 Connect Stripe · 8 Connections · 9 Layout editor · 10 Same data, three layouts
 
