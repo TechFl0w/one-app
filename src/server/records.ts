@@ -11,6 +11,8 @@ import {
   validateRecordInput,
 } from "@/engine/records";
 import { getCurrentBlueprint } from "./blueprints";
+import { addComputed, loadAllVia } from "@/engine/computed";
+import { supabaseStore } from "./store";
 import { recordUpdateIsRisky } from "@/engine/risk";
 
 /**
@@ -44,8 +46,9 @@ export async function listRecords(
   const { data, error } = await supabase.rpc("query_records", { p_business_id: businessId, ...params });
   if (error) throw new Error(`Could not load records: ${error.message}`);
   const rows = (data ?? []) as (Row & { total: number })[];
+  const records = rows.map((r) => toView(bp, params.p_table_id, r));
   return {
-    records: rows.map((r) => toView(bp, params.p_table_id, r)),
+    records: await addComputed(bp, params.p_table_id, records, loadAllVia(supabaseStore(supabase, businessId), bp)),
     total: rows.length ? Number(rows[0].total) : 0,
   };
 }
@@ -69,7 +72,8 @@ export async function getRecord(
     .maybeSingle();
   if (error) throw new Error(`Could not load record: ${error.message}`);
   if (!data) throw new RecordError("not_found", "Record not found");
-  return toView(bp, tableId, data as Row);
+  const [one] = await addComputed(bp, tableId, [toView(bp, tableId, data as Row)], loadAllVia(supabaseStore(supabase, businessId), bp));
+  return one;
 }
 
 export async function createRecord(

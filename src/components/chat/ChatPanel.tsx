@@ -103,64 +103,8 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
     deliver(message, attached, attached.length ? `${message}${message ? "\n" : ""}[${attached.length} image${attached.length > 1 ? "s" : ""} attached]` : message);
   };
 
-  // Multi-step builds (recreating an app): keep going until every step of the plan is done.
-  const plan = useRef<BuildPlan | null>(null);
-  const autoSteps = useRef(0);
-  const stalled = useRef({ key: "", count: 0 });
-  // Only the screenshots the step being built needs (saves tokens); all of them when it doesn't say.
-  const building = useRef<BuildPlan["steps"][number] | null>(null);
-  const designsFor = (step: BuildPlan["steps"][number] | null | undefined) => {
-    const picked = step?.images?.map((n) => designs.current[n - 1]).filter((x): x is ChatImage => !!x) ?? [];
-    return picked.length ? picked : designs.current;
-  };
-  const continuePlan = useEffectEvent(() => {
-    const next = plan.current?.steps.find((s) => !s.done);
-    if (!next || autoSteps.current >= 15) return;
-    // Stop if the same step keeps coming back without progress (the owner can say "continue").
-    const key = JSON.stringify(plan.current?.steps.map((s) => s.done));
-    stalled.current = stalled.current.key === key ? { key, count: stalled.current.count + 1 } : { key, count: 0 };
-    if (stalled.current.count >= 2) return;
-    autoSteps.current += 1;
-    round.current = 0;
-    building.current = next;
-    const shots = designsFor(next);
-    deliver(
-      `[Automatic] Continue the plan "${plan.current!.goal}": do the next step now — ${next.title}.${shots.length ? ` The screenshot${shots.length > 1 ? "s for this step are" : " for this step is"} attached again.` : ""}`,
-      shots,
-      `Next: ${next.title}…`,
-    );
-  });
-
-  // Self-check of the component just written; if it can't be pictured, the build simply moves on.
-  const selfCheck = useEffectEvent(async (target: { componentId: string; pageId?: string }) => {
-    if (target.pageId && target.pageId !== pageId) router.push(`${basePath}/p/${target.pageId}`);
-    const shot = await captureComponent(target.componentId);
-    if (!shot) return continuePlan();
-    round.current += 1;
-    const picture: ChatImage = { mediaType: "image/jpeg", data: shot.slice(shot.indexOf(",") + 1) };
-    const shots = designsFor(building.current ?? plan.current?.steps.find((s) => !s.done));
-    const withDesign = shots.length ? ` The owner's design${shots.length > 1 ? "s follow" : " follows"} it.` : "";
-    deliver(`[Automatic check] The first image is how the component you just wrote (${target.componentId}) renders right now.${withDesign} Compare and fix anything that's off, or confirm briefly.`, [picture, ...shots].slice(0, 8), "Checking how it looks…");
-  });
-
   // After the owner confirms, work that waited on it carries on by itself (the plan's next step).
   const resume = useRef(false);
-  useEffect(() => {
-    if (busy) return;
-    const last = transcript.at(-1);
-    if (resume.current && last?.resolved === "confirmed") {
-      resume.current = false;
-      return continuePlan();
-    }
-    if (!last || last.role !== "assistant" || checked.current.has(last.id)) return;
-    checked.current.add(last.id);
-    if (last.response?.plan) plan.current = last.response.plan;
-    if (last.response?.confirm && !last.resolved) return; // waits for the owner
-    const verify = last.response?.verify;
-    if (verify?.length && round.current < 2) void selfCheck(verify[0]);
-    else continuePlan();
-  }, [transcript, busy]);
-
   const setResolved = (id: string, resolved: ChatItem["resolved"]) =>
     setTranscript((t) => t.map((i) => (i.id === id ? { ...i, resolved } : i)));
 
@@ -208,6 +152,81 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
       setResolved(chat.id, r.notes.some((n) => n.includes("failed")) ? "failed" : "confirmed");
     });
   };
+
+  // Multi-step builds (recreating an app): keep going until every step of the plan is done.
+  const plan = useRef<BuildPlan | null>(null);
+  const autoSteps = useRef(0);
+  const stalled = useRef({ key: "", count: 0 });
+  // Only the screenshots the step being built needs (saves tokens); all of them when it doesn't say.
+  const building = useRef<BuildPlan["steps"][number] | null>(null);
+  const designsFor = (step: BuildPlan["steps"][number] | null | undefined) => {
+    const picked = step?.images?.map((n) => designs.current[n - 1]).filter((x): x is ChatImage => !!x) ?? [];
+    return picked.length ? picked : designs.current;
+  };
+  const continuePlan = useEffectEvent(() => {
+    const next = plan.current?.steps.find((s) => !s.done);
+    if (!next || autoSteps.current >= 15) return;
+    // Stop if the same step keeps coming back without progress (the owner can say "continue").
+    const key = JSON.stringify(plan.current?.steps.map((s) => s.done));
+    stalled.current = stalled.current.key === key ? { key, count: stalled.current.count + 1 } : { key, count: 0 };
+    if (stalled.current.count >= 2) return;
+    autoSteps.current += 1;
+    round.current = 0;
+    building.current = next;
+    const shots = designsFor(next);
+    deliver(
+      `[Automatic] Continue the plan "${plan.current!.goal}": do the next step now — ${next.title}.${shots.length ? ` The screenshot${shots.length > 1 ? "s for this step are" : " for this step is"} attached again.` : ""}`,
+      shots,
+      `Next: ${next.title}…`,
+    );
+  });
+
+  const undoBrokenChange = useEffectEvent(() => {
+    const change = [...transcript].reverse().find((i) => i.role === "assistant" && i.response?.preview && !i.resolved);
+    if (change) act(change, "undo");
+    setError("The new screen kept failing to load, so I undid that change. Try asking again, maybe with a bit more detail.");
+  });
+
+  // Self-check of the component just written; if it can't be pictured, the build simply moves on.
+  const selfCheck = useEffectEvent(async (target: { componentId: string; pageId?: string }) => {
+    if (target.pageId && target.pageId !== pageId) router.push(`${basePath}/p/${target.pageId}`);
+    const shot = await captureComponent(target.componentId);
+    if (!shot) return continuePlan();
+    const picture: ChatImage | null = shot.image ? { mediaType: "image/jpeg", data: shot.image.slice(shot.image.indexOf(",") + 1) } : null;
+    if (shot.crash) {
+      // A screen that crashes is never left in place: the assistant gets two tries, then it's undone.
+      if (round.current >= 2) return undoBrokenChange();
+      round.current += 1;
+      return deliver(
+        `[Automatic check] The component you just wrote (${target.componentId}) crashed when it rendered: "${shot.crash}". Fix it now with write_component (same id); make it handle empty data and missing values.`,
+        picture ? [picture] : [],
+        "Fixing an error in the new screen…",
+      );
+    }
+    if (round.current >= 2 || !picture) return continuePlan();
+    round.current += 1;
+    const shots = designsFor(building.current ?? plan.current?.steps.find((s) => !s.done));
+    const withDesign = shots.length ? ` The owner's design${shots.length > 1 ? "s follow" : " follows"} it.` : "";
+    deliver(`[Automatic check] The first image is how the component you just wrote (${target.componentId}) renders right now.${withDesign} Compare and fix anything that's off, or confirm briefly.`, [picture, ...shots].slice(0, 8), "Checking how it looks…");
+  });
+
+
+  useEffect(() => {
+    if (busy) return;
+    const last = transcript.at(-1);
+    if (resume.current && last?.resolved === "confirmed") {
+      resume.current = false;
+      return continuePlan();
+    }
+    if (!last || last.role !== "assistant" || checked.current.has(last.id)) return;
+    checked.current.add(last.id);
+    if (last.response?.plan) plan.current = last.response.plan;
+    if (last.response?.confirm && !last.resolved) return; // waits for the owner
+    const verify = last.response?.verify;
+    if (verify?.length) void selfCheck(verify[0]);
+    else continuePlan();
+  }, [transcript, busy]);
+
 
   if (!open) {
     return (

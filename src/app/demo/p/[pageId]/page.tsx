@@ -1,3 +1,4 @@
+import { withComputed } from "@/engine/computed";
 import { getDevice } from "@/server/context";
 import { PageView } from "@/components/page/PageView";
 import { EditablePage } from "@/components/page/EditablePage";
@@ -16,7 +17,7 @@ export default async function DemoPage({ params }: PageProps<"/demo/p/[pageId]">
       device={await getDevice()}
       env={{
         blueprint: demoBlueprint,
-        store: memoryStore(demoRecords()),
+        store: withComputed(memoryStore(demoRecords()), demoBlueprint),
         formAction: (tableId, fields) => submitDemoForm.bind(null, tableId, fields),
         sandbox: { basePath: "/demo", bridge: { list: demoSandboxList, get: demoSandboxGet, create: demoSandboxCreate, update: demoSandboxUpdate, remove: demoSandboxRemove } },
       }}

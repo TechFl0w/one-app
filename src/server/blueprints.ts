@@ -1,4 +1,6 @@
 import "server-only";
+import { componentsOn, restorePageOps, touchesPage } from "@/engine/pageHistory";
+import { checkReferences } from "@/codegen/references";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Blueprint, emptyBlueprint } from "@/schema/blueprint";
 import { ChangeSet } from "@/schema/changeSet";
@@ -107,4 +109,41 @@ async function commit(
     throw new Error(`Could not save change: ${error.message}`);
   }
   return data as string;
+}
+
+/** Earlier versions of one page, newest first (from the setup history). */
+export async function pageVersions(supabase: SupabaseClient, businessId: string, pageId: string) {
+  const current = await getCurrentBlueprint(supabase, businessId);
+  const { data, error } = await supabase
+    .from("blueprint_history")
+    .select("id, from_version, to_version, source, summary, change_set, created_at")
+    .eq("business_id", businessId)
+    .order("to_version", { ascending: false })
+    .limit(300);
+  if (error) throw new Error(`Could not load history: ${error.message}`);
+  const screens = componentsOn(current.pages.find((p) => p.id === pageId));
+  return (data ?? [])
+    .filter((h) => touchesPage(((h.change_set as { ops?: unknown[] })?.ops ?? []) as unknown[], pageId, screens))
+    .slice(0, 50)
+    .map((h) => ({ id: h.id as string, version: h.to_version as number, before: h.from_version as number, source: h.source as string, summary: h.summary as string, at: h.created_at as string }));
+}
+
+/** Puts a page back the way it was in `version` (as a new, undoable change). */
+export async function restorePage(supabase: SupabaseClient, businessId: string, pageId: string, version: number) {
+  const current = await getCurrentBlueprint(supabase, businessId);
+  const { data, error } = await supabase.from("blueprints").select("json, created_at").eq("business_id", businessId).eq("version", version).maybeSingle();
+  if (error) throw new Error(`Could not load that version: ${error.message}`);
+  if (!data) throw new ChangeSetError("not_found", "That version is no longer available");
+  const old = Blueprint.parse(data.json);
+  const ops = restorePageOps(current, old, pageId);
+  if (!ops.length) return null;
+  // A screen from back then may use fields removed since; don't restore something that would break.
+  for (const op of ops) {
+    if (op.op !== "putComponent") continue;
+    const missing = checkReferences(op.component.source, current);
+    if (missing.length) throw new ChangeSetError("invalid", `That version of “${op.component.label}” uses things that have been removed since, so it can't come back as it was.`);
+  }
+  const label = old.pages.find((p) => p.id === pageId)?.label ?? "page";
+  const when = new Date(data.created_at as string).toISOString().slice(0, 16).replace("T", " ");
+  return commitChangeSet(supabase, businessId, { baseVersion: current.version, source: "ui", summary: `Restore “${label}” to the version of ${when}`, ops });
 }

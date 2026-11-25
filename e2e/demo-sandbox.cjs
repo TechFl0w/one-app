@@ -115,6 +115,14 @@ const log = (...a) => console.log("•", ...a);
   await p.getByLabel("Close assistant").click().catch(() => {});
   await p.screenshot({ path: `${S}/sandbox-themed.png` });
 
+  // A screen that crashes goes back to the assistant automatically and gets fixed.
+  await p.getByRole("button", { name: "Ask the assistant" }).click().catch(() => {});
+  await p.getByLabel("Message").fill("make a broken screen");
+  await p.getByLabel("Message").press("Enter");
+  await p.waitForSelector("text=Fixing an error in the new screen…", { timeout: 60000 });
+  await p.frameLocator('iframe[title="Flaky"]').getByText("Fixed screen").waitFor({ timeout: 60000 });
+  log("crashing screen was sent back and fixed automatically");
+
   assert.deepEqual(errors, []);
   log("ok");
   await b.close();

@@ -63,7 +63,10 @@ export function Sidebar({ basePath, businesses = [], footer }: SidebarProps) {
         {editing &&
           pages.map((p, i) => (
             <div key={p.id} className={`group flex items-center gap-1 rounded-2xl px-1.5 py-1 ${p.hidden ? "opacity-50" : ""} ${p.id === activeId ? "bg-accent-tint" : ""}`}>
-              <PageIcon name={p.icon} className="h-[18px] w-[18px] shrink-0 text-muted" />
+              {/* Jump to another page while editing; the unsaved draft stays. */}
+              <Link href={`${basePath}/p/${p.id}`} aria-label={`Open ${p.label}`} title={`Open ${p.label}`} className="rounded-full p-1 text-muted hover:bg-card hover:text-accent">
+                <PageIcon name={p.icon} className="h-[18px] w-[18px] shrink-0" />
+              </Link>
               <input
                 key={`${p.id}:${p.label}`}
                 aria-label={`Rename ${p.label}`}

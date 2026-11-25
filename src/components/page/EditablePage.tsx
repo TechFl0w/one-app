@@ -4,7 +4,8 @@ import { isFullPageComponent, sandboxSchema } from "@/sandbox/schema";
 import { SandboxFrame } from "@/components/sandbox/SandboxFrame";
 import { useSandbox } from "@/components/sandbox/SandboxProvider";
 import { useRef, useState } from "react";
-import { GripVertical, Plus, Settings2, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { GripVertical, History, Plus, Settings2, Trash2 } from "lucide-react";
 import { GRID_COLUMNS, type Block, type LayoutKey } from "@/schema/blueprint";
 import { gridRows, layoutBlocks, layoutTargets, readingOrder, resolveLayout, stackForPhone, type Device, type LayoutTarget } from "@/engine/layout";
 import { clampMove, clampSize, layoutOps } from "@/engine/editing";
@@ -38,13 +39,15 @@ export function EditablePage({
 }) {
   const { blueprint, editing, push } = useEdit();
   const sandbox = useSandbox();
+  // Page history lives on the server (not in the demo); new, unsaved pages have none yet.
+  const historyHref = sandbox && sandbox.basePath !== "/demo" ? `${sandbox.basePath}/p/${pageId}/history` : null;
   // Custom blocks the server hasn't rendered (a draft, or the demo's local changes) render here.
   const view = (b: Block, fullPage = false) => {
     if (rendered[b.id]) return rendered[b.id];
     const c = b.type === "custom" ? blueprint.components?.find((x) => x.id === b.options?.component) : undefined;
     if (!c || !sandbox) return null;
     const props = b.options?.props && typeof b.options.props === "object" ? (b.options.props as Record<string, unknown>) : {};
-    const frame = <SandboxFrame title={c.label} componentId={c.id} theme={blueprint.theme} compiled={c.compiled} props={props} schema={sandboxSchema(blueprint)} bridge={sandbox.bridge} basePath={sandbox.basePath} autoHeight />;
+    const frame = <SandboxFrame title={c.label} componentId={c.id} theme={blueprint.theme} compiled={c.compiled} css={c.css} props={props} schema={sandboxSchema(blueprint)} bridge={sandbox.bridge} basePath={sandbox.basePath} autoHeight />;
     return fullPage ? frame : <div className="h-full overflow-hidden rounded-card">{frame}</div>;
   };
   const gridRef = useRef<HTMLDivElement>(null);
@@ -126,9 +129,16 @@ export function EditablePage({
     <div className="mx-auto max-w-[1400px]">
       <EditChrome
         extra={
-          <button type="button" className="btn-ghost px-4 py-2" onClick={() => setAdding(true)}>
-            <Plus className="h-4 w-4" /> Block
-          </button>
+          <>
+            {historyHref && (
+              <Link href={historyHref} className="btn-ghost px-4 py-2">
+                <History className="h-4 w-4" /> History
+              </Link>
+            )}
+            <button type="button" className="btn-ghost px-4 py-2" onClick={() => setAdding(true)}>
+              <Plus className="h-4 w-4" /> Block
+            </button>
+          </>
         }
       />
       {/* A page that is one full-screen component owns its design: no app title, just Edit. */}
