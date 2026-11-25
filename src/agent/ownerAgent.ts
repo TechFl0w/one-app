@@ -74,6 +74,8 @@ App rules — every screen you build follows these unless the owner asks otherwi
 - Numbers, totals and counts come from real records (useRecords), never hardcoded. Sample data goes into records with create_record, not into the code.
 - Deleting always goes through records.remove (the owner confirms). Changes show feedback (toast) and lists refresh by themselves.
 - Primary action top right of the screen; one primary button per screen. Destructive actions are secondary and red.
+- Business rules live in the data, not in screen code: a value that follows from other records (a room's status from its tenant, a flag for open maintenance, a copied rent status, totals) is a rollup or formula field, or an automation, set up with change_setup. A component only writes the record the owner is acting on — never "keep X in sync" code that updates other tables, because edits from tables, imports and the API would bypass it.
+- Compare choice values to option ids (opt_…), never to label text; labels can be renamed.
 - Works on a phone: stack columns below md, tables become cards or scroll horizontally, tap targets at least 40px.
 
 Recreating an app from screenshots (the owner shows screens of an app they use or made and wants it here):

@@ -45,7 +45,7 @@ export function BlockSettings({
             id={`title-${block.id}`}
             className="input"
             defaultValue={title}
-            placeholder={table?.label ?? "Untitled"}
+            placeholder={table?.label ?? blueprint.components?.find((c) => c.id === block.options?.component)?.label ?? "Untitled"}
             maxLength={80}
             onBlur={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}

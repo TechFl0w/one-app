@@ -1,5 +1,6 @@
 /** Messages between One App (host) and a sandboxed component frame. Shared by both sides. */
 import type { RecordQuery } from "@/schema/records";
+import type { BridgeResult } from "./result";
 
 export interface SandboxSchema {
   business: { name: string; timezone: string; currency: string };
@@ -29,12 +30,12 @@ export type FrameToHost =
   | { type: "crash"; message: string }
   | { type: "captured"; id: number; dataUrl: string | null };
 
-/** What the host lets a frame do. Implementations run as the signed-in user (or the demo). */
+/** What the host lets a frame do. Implementations run as the signed-in user (or the demo); failures come back as data (typed codes). */
 export interface SandboxBridge {
-  list(q: RecordQuery): Promise<{ records: SandboxRecord[]; total: number }>;
-  get(table: string, id: string): Promise<SandboxRecord>;
-  create(table: string, data: Record<string, unknown>): Promise<SandboxRecord>;
-  update(table: string, id: string, data: Record<string, unknown>): Promise<SandboxRecord>;
+  list(q: RecordQuery): Promise<BridgeResult<{ records: SandboxRecord[]; total: number }>>;
+  get(table: string, id: string): Promise<BridgeResult<SandboxRecord>>;
+  create(table: string, data: Record<string, unknown>): Promise<BridgeResult<SandboxRecord>>;
+  update(table: string, id: string, data: Record<string, unknown>): Promise<BridgeResult<SandboxRecord>>;
   /** Only called after the owner confirmed in One App's own dialog. */
-  remove(table: string, id: string): Promise<void>;
+  remove(table: string, id: string): Promise<BridgeResult<void>>;
 }

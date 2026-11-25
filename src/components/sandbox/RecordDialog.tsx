@@ -5,6 +5,7 @@ import { Dialog } from "@/components/edit/Dialog";
 import { Select } from "@/components/ui/Select";
 import { DatePicker } from "@/components/ui/DatePicker";
 import type { SandboxBridge, SandboxRecord, SandboxSchema } from "@/sandbox/protocol";
+import { unwrap } from "@/sandbox/result";
 
 type Table = SandboxSchema["tables"][number];
 type Field = Table["fields"][number];
@@ -70,13 +71,13 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
   useEffect(() => {
     let live = true;
     if (request.recordId)
-      bridge.get(t.id, request.recordId).then(
+      bridge.get(t.id, request.recordId).then(unwrap).then(
         (r) => live && setValues(r.data),
         (e) => live && setError(e instanceof Error ? e.message : "Couldn’t load"),
       );
     const linked = [...new Set(shown.filter((f) => f.type === "link" && f.to).map((f) => f.to!))];
     for (const to of linked)
-      bridge.list({ table: to, limit: 200 }).then((res) => {
+      bridge.list({ table: to, limit: 500 }).then(unwrap).then((res) => {
         if (!live) return;
         const lt = schema.tables.find((x) => x.id === to);
         const opts = res.records.map((r) => ({ value: r.id, label: labelOf(lt, r) })).sort((a, b) => a.label.localeCompare(b.label));
@@ -106,7 +107,7 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
     }
     if (!editing) for (const [k, v] of Object.entries(request.defaults ?? {})) if (!(k in data) && t.fields.some((f) => f.id === k)) data[k] = v;
     try {
-      const saved = editing ? await bridge.update(t.id, request.recordId!, data) : await bridge.create(t.id, data);
+      const saved = unwrap(editing ? await bridge.update(t.id, request.recordId!, data) : await bridge.create(t.id, data));
       onDone(saved);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn’t save");

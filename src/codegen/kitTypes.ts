@@ -41,7 +41,11 @@ declare module "@one/kit" {
   export interface TableInfo { id: string; label: string; primaryField?: string; fields: FieldInfo[] }
   export interface BusinessInfo { name: string; timezone: string; currency: string }
 
-  /** Live records for a query. Re-runs when the query changes; reload() after your own writes. */
+  /**
+   * Live records for a query. Re-runs when the query changes and after any write. limit defaults
+   * to 50; up to 5000 rows are fetched page by page. If loading fails and you don't read "error",
+   * the part shows a standard error card with Retry (never a silent empty list).
+   */
   export function useRecords(query: Query): { records: RecordRow[]; total: number; loading: boolean; error: string | null; reload(): void };
   /** One record (null while loading or if missing). */
   export function useRecord(table: string, id: string | null | undefined): { record: RecordRow | null; loading: boolean; error: string | null; reload(): void };
