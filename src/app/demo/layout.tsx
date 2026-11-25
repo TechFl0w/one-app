@@ -5,6 +5,9 @@ import { demoBlueprint } from "@/demo/salon";
 import { demoSandboxCreate, demoSandboxGet, demoSandboxList, demoSandboxRemove, demoSandboxUpdate } from "./sandbox-actions";
 
 /** Sample salon running on in-memory data — no account or Supabase needed. */
+// The assistant's server actions run here: rebuilding pages from a design can take a few minutes.
+export const maxDuration = 300;
+
 export default function DemoLayout({ children }: LayoutProps<"/demo">) {
   return (
     <AppShell
