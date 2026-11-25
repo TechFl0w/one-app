@@ -40,10 +40,12 @@ export async function resolveApproval(businessId: string, id: string, approve: b
   const { supabase } = await requireManager(businessId);
   const [action] = await loadPending(supabase, businessId, [id]);
   if (!action) return { ok: false, message: "Already handled." };
+  let report: string | undefined;
   if (!approve) {
     await resolvePending(supabase, [id], "cancelled");
   } else {
     const r = await runConfirmedAction(supabaseOwnerBackend(supabase, businessId), action);
+    report = r.report;
     await resolvePending(supabase, [id], r.ok ? "confirmed" : "failed");
     if (!r.ok) {
       revalidatePath(`/b/${businessId}`, "layout");
@@ -51,5 +53,5 @@ export async function resolveApproval(businessId: string, id: string, approve: b
     }
   }
   revalidatePath(`/b/${businessId}`, "layout");
-  return { ok: true };
+  return { ok: true, ...(approve && report ? { message: report } : {}) };
 }

@@ -214,14 +214,15 @@ async function runTool(
  * Runs a confirmed PendingAction. Called by app code when the owner presses Confirm, never by
  * the model. Returns effects for the UI and a note to append to the conversation.
  */
-export async function runConfirmedAction(backend: OwnerBackend, action: PendingAction): Promise<{ ok: boolean; effects: ToolEffects; note: string }> {
+export async function runConfirmedAction(backend: OwnerBackend, action: PendingAction): Promise<{ ok: boolean; effects: ToolEffects; note: string; report?: string }> {
   const t = OWNER_TOOLS.find((x) => x.name === action.tool);
   if (!t) throw new Error(`Unknown tool ${action.tool}`);
   const input = t.input.parse(action.input);
   const effects: ToolEffects = {};
   try {
-    await t.run(backend, input, effects, { confirmed: true });
-    return { ok: true, effects, note: `[The owner confirmed and it is done: ${action.items.join("; ")}]` };
+    const result = await t.run(backend, input, effects, { confirmed: true });
+    const report = t.report?.(result) ?? undefined;
+    return { ok: true, effects, note: `[The owner confirmed and it is done: ${action.items.join("; ")}]${report ? `\n[${report}]` : ""}`, ...(report ? { report } : {}) };
   } catch (e) {
     return { ok: false, effects, note: `[The owner confirmed, but it failed: ${e instanceof Error ? e.message : String(e)}]` };
   }

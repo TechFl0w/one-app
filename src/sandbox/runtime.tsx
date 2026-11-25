@@ -467,15 +467,18 @@ function load(compiled: string): React.ComponentType {
 
 function watchHeight() {
   let last = 0;
+  // The content's own height (the document is never shorter than the frame, so it can't shrink).
+  // scrollHeight includes open dropdowns positioned inside the component.
+  const root = document.getElementById("root")!;
   const send = () => {
-    const h = Math.ceil(document.documentElement.scrollHeight);
+    const h = Math.ceil(Math.max(root.scrollHeight, root.getBoundingClientRect().height));
     if (h !== last) {
       last = h;
       post({ type: "resize", height: h });
     }
   };
-  new ResizeObserver(send).observe(document.body);
-  new MutationObserver(send).observe(document.body, { subtree: true, childList: true, attributes: true });
+  new ResizeObserver(send).observe(root);
+  new MutationObserver(send).observe(root, { subtree: true, childList: true, attributes: true });
   send();
 }
 

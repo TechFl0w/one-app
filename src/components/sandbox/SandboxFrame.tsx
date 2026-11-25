@@ -129,7 +129,7 @@ export function SandboxFrame({
           sandbox="allow-scripts"
           srcDoc={srcDoc}
           className="block w-full border-0 bg-transparent"
-          style={autoHeight ? { height: height ?? 120 } : { height: "100%" }}
+          style={autoHeight ? { height: height ?? 48 } : { height: "100%" }}
         />
       )}
       {crash && (

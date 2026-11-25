@@ -29,9 +29,18 @@ const log = (...a) => console.log("•", ...a);
   log("rows from the bridge:", rows, `(${Date.now() - t0} ms)`);
   assert.ok(rows > 0);
   assert.equal(await frame.getByText("Client").count(), 0, "collapsed by default");
+  const height = () => p.locator('iframe[title="Bookings hub"]').evaluate((e) => Math.round(e.getBoundingClientRect().height));
+  await p.waitForTimeout(800);
+  const closed = await height();
   await frame.getByRole("button", { name: /New booking/ }).click();
   await frame.getByText("Client").first().waitFor();
-  log("chevron opens the form");
+  await p.waitForTimeout(800);
+  const opened = await height();
+  log("chevron opens the form; frame height", closed, "→", opened);
+  assert.ok(opened > closed + 150, "frame grows when the section opens");
+  await frame.getByRole("button", { name: /New booking/ }).click();
+  await p.waitForTimeout(800);
+  assert.equal(await height(), closed, "and shrinks back when it closes");
   await p.screenshot({ path: `${S}/sandbox-hub.png` });
 
   // The frame is a stranger to the app: opaque origin, no cookies, no parent DOM, no network.
