@@ -79,3 +79,21 @@ describe.skipIf(!testDbUrl)("generated-code writes and automations", () => {
     }
   });
 });
+
+describe.skipIf(!testDbUrl)("imports", () => {
+  it("are audited as imports and don't trigger automations", async () => {
+    const t3 = await setupTestDb();
+    try {
+      const u = await t3.newUser();
+      const b = await t3.createBusiness(u, "Shop");
+      await t3.db.query("begin");
+      await t3.db.query(`select set_config('request.headers', '{"x-one-source":"import"}', true)`);
+      await t3.db.query("insert into public.records (business_id, table_id, data) values ($1, 'tbl_clients', '{}'), ($1, 'tbl_clients', '{}')", [b]);
+      await t3.db.query("commit");
+      expect((await t3.db.query("select count(*)::int n from public.record_events where business_id = $1", [b])).rows[0].n).toBe(0);
+      expect((await t3.db.query("select source from public.audit_log where business_id = $1 and action = 'record.created'", [b])).rows).toEqual([{ source: "import" }, { source: "import" }]);
+    } finally {
+      await t3.close();
+    }
+  });
+});
