@@ -79,3 +79,12 @@ Generated code calls the kit; the kit calls One App; One App enforces permission
 - The chat accepts up to 3 images (pasted, dropped or picked; resized to 1280px JPEG in the
   browser). They go to the model for that turn only; stored history keeps a note instead.
   Given a design, the assistant sets the theme, then rebuilds pages as components.
+
+## Self-check
+
+After the assistant writes a component (`AgentResponse.verify`), the chat panel opens the page that
+shows it, asks the frame for a picture (`capture` message; the runtime renders itself to JPEG with
+html-to-image — inside the sandbox, so nothing else leaves it) and sends it back as an
+"[Automatic check]" message, with the owner's design images if the request had any. The assistant
+compares and fixes (same component id) or confirms. At most 2 rounds per owner request. Pictures use
+fallback fonts (the frame can't fetch web fonts for the capture).

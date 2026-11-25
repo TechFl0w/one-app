@@ -34,6 +34,13 @@ function script(body) {
   if (/rename/i.test(ownerText)) {
     return tool("change_setup", { summary: "Rename Clients to Guests", ops: [{ op: "rename", target: { kind: "page", pageId: "pg_clients" }, label: "Guests" }] });
   }
+  const lastMsg = msgs.at(-1);
+  if (lastMsg.role === "user" && Array.isArray(lastMsg.content) && lastMsg.content.some((b) => b.type === "text" && b.text.includes("[Automatic check]"))) {
+    const pic = lastMsg.content.find((b) => b.type === "image");
+    const jpeg = pic && pic.source.data.startsWith("/9j/");
+    if (jpeg && process.env.FAKE_SAVE_DIR) require("node:fs").writeFileSync(`${process.env.FAKE_SAVE_DIR}/self-check.jpg`, Buffer.from(pic.source.data, "base64"));
+    return text(jpeg ? `Checked the picture (${Math.round(pic.source.data.length / 1024)} KB): it looks right.` : "Checked: no picture arrived.");
+  }
   const lastUser = [...msgs].reverse().find((m) => m.role === "user" && Array.isArray(m.content) && m.content.some((b) => b.type === "image"));
   if (lastUser && lastUser === msgs.at(-1)) {
     return tool("change_setup", { summary: "Match the design", ops: [{ op: "setTheme", theme: { colors: { accent: "#B5482B", accentHover: "#93391F", accentTint: "#F6E4DD", ground: "#FBF7F2" }, font: "DM Sans", radius: 8, menu: "top" } }] });

@@ -6,6 +6,7 @@
 import * as React from "react";
 import * as jsxRuntime from "react/jsx-runtime";
 import { createRoot } from "react-dom/client";
+import { toJpeg } from "html-to-image";
 import type { CallMethod, FrameToHost, HostToFrame, SandboxRecord, SandboxSchema } from "./protocol";
 
 const { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } = React;
@@ -491,6 +492,13 @@ window.addEventListener("message", (e: MessageEvent<HostToFrame>) => {
     pending.delete(m.id);
     if (m.ok) p.resolve(m.value);
     else p.reject(new Error(m.error));
+  } else if (m?.type === "capture") {
+    // A picture of the component for the assistant's self-check. Web fonts can't be fetched from
+    // in here (no network), so the picture uses fallback fonts; layout and colours are exact.
+    const root = document.getElementById("root")!;
+    toJpeg(root, { quality: 0.82, backgroundColor: getComputedStyle(document.body).backgroundColor === "rgba(0, 0, 0, 0)" ? "#ffffff" : undefined, skipFonts: true, pixelRatio: 1, cacheBust: false })
+      .then((dataUrl) => post({ type: "captured", id: m.id, dataUrl }))
+      .catch(() => post({ type: "captured", id: m.id, dataUrl: null }));
   } else if (m?.type === "init") {
     currentSchema = m.schema;
     const root = document.getElementById("root")!;

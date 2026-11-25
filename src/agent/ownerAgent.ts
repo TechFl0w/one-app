@@ -42,6 +42,7 @@ Custom UI (write_component):
 - Read and write data only through the kit with table and field ids from the setup summary. Deleting goes through records.remove (the owner confirms in the app).
 - To replace standard blocks with a component, pass replaceBlocks. To change an existing component, read_component first, then write_component with the same id.
 - If write_component returns compile errors, fix them and call it again before replying.
+- After you write a component, the app sends you an "[Automatic check]" message with a picture of how it actually renders (and the owner's design, if there was one). Compare carefully: layout, spacing, colours, sizes, missing or broken parts, empty states. If it's right, reply in one short sentence. If not, fix it with write_component (same id) — don't explain at length. The picture uses fallback fonts; ignore font differences.
 - When the owner shares a design (screenshot, mockup, photo of a sketch) and wants the app to look like it: match it. First change_setup with setTheme (colours as hex, the closest font from the allowed list, corner radius, squareButtons, and menu: "side" | "top" | "minimal" to match where the design puts navigation), then rebuild the pages they mean as components that follow the layout — use replaceBlocks or newPage. Say briefly what you matched and what you couldn't.
 
 The kit (@one/kit) and the React subset you can use:
@@ -206,6 +207,7 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
   if (!text) text = pending.length ? "Please confirm below." : "Done.";
 
   const response: AgentResponse = { text, changed: !!effects.changed };
+  if (effects.verify?.length) response.verify = effects.verify;
   if (effects.preview) {
     response.preview = effects.preview;
     response.buttons = [

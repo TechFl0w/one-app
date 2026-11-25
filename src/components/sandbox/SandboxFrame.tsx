@@ -8,6 +8,7 @@ import { Dialog } from "@/components/edit/Dialog";
 import type { FrameToHost, HostToFrame, SandboxBridge, SandboxSchema } from "@/sandbox/protocol";
 import type { Theme } from "@/schema/blueprint";
 import { sandboxSrcdoc } from "./srcdoc";
+import { registerCapture } from "./captureRegistry";
 
 const noop = () => () => {};
 const str = (v: unknown, what: string) => {
@@ -33,8 +34,11 @@ export function SandboxFrame({
   autoHeight = false,
   title,
   theme,
+  componentId,
 }: {
   theme?: Theme;
+  /** Lets the chat ask this frame for a picture of itself (self-check). */
+  componentId?: string;
   compiled: string;
   props: Record<string, unknown>;
   schema: SandboxSchema;
@@ -68,6 +72,11 @@ export function SandboxFrame({
       if (m?.type === "ready") return send(init.current);
       if (m?.type === "resize") return autoHeight && setHeight(Math.min(Math.max(m.height, 40), 20_000));
       if (m?.type === "crash") return setCrash(String(m.message).slice(0, 300));
+      if (m?.type === "captured") {
+        const done = captures.current.get(m.id);
+        captures.current.delete(m.id);
+        return done?.(typeof m.dataUrl === "string" && m.dataUrl.startsWith("data:image/jpeg;base64,") ? m.dataUrl : null);
+      }
       if (m?.type !== "call" || typeof m.id !== "number") return;
       const a = Array.isArray(m.args) ? m.args : [];
       try {
@@ -115,6 +124,23 @@ export function SandboxFrame({
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [bridge, schema, basePath, router, autoHeight]);
+
+  // Self-check pictures: the frame renders itself to a JPEG on request.
+  const captures = useRef(new Map<number, (url: string | null) => void>());
+  useEffect(() => {
+    if (!componentId) return;
+    let next = 1;
+    return registerCapture(componentId, () =>
+      new Promise<string | null>((resolve) => {
+        const id = next++;
+        captures.current.set(id, resolve);
+        frame.current?.contentWindow?.postMessage({ type: "capture", id } satisfies HostToFrame, "*");
+        setTimeout(() => {
+          if (captures.current.delete(id)) resolve(null);
+        }, 8000);
+      }),
+    );
+  }, [componentId, srcDoc]);
 
   useEffect(() => {
     if (!toast) return;

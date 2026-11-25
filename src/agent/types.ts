@@ -61,4 +61,6 @@ export interface AgentResponse {
   buttons?: { label: string; action: "keep" | "undo" | "confirm" | "cancel" }[];
   /** Data or setup changed: the UI should refresh. */
   changed: boolean;
+  /** Components to picture and send back for a self-check (in-app chat only). */
+  verify?: { componentId: string; pageId?: string }[];
 }

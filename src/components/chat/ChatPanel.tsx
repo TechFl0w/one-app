@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowUp, Check, ImagePlus, Sparkles, X } from "lucide-react";
 import type { ChatImage } from "@/agent/ownerAgent";
+import { captureComponent } from "@/components/sandbox/captureRegistry";
 import type { ChatItem } from "@/agent/transcript";
 import type { Message } from "@/agent/ownerAgent";
 import type { PendingAction } from "@/agent/types";
@@ -48,17 +49,18 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [transcript, busy, open]);
 
-  const send = (text: string) => {
-    const message = text.trim();
-    if ((!message && !images.length) || busy) return;
-    const attached = images.map(({ mediaType, data }) => ({ mediaType, data }));
-    setDraft("");
-    setImages([]);
+  // Self-check: after the assistant writes a component, picture it and send it back (max 2 rounds).
+  const round = useRef(0);
+  const designs = useRef<ChatImage[]>([]);
+  const checked = useRef(new Set<string>());
+  const basePath = mode.kind === "server" ? `/b/${mode.businessId}` : "/demo";
+
+  const deliver = (message: string, attached: ChatImage[], shown: string) => {
     setError(null);
-    setTranscript((t) => [...t, item("owner", attached.length ? `${message}${message ? "\n" : ""}[${attached.length} image${attached.length > 1 ? "s" : ""} attached]` : message)]);
+    setTranscript((t) => [...t, item("owner", shown)]);
     startTransition(async () => {
       if (mode.kind === "server") {
-        const r = await sendOwnerMessage(mode.businessId, pageId, message, attached);
+        const r = await sendOwnerMessage(mode.businessId, pageId, message, attached, shown);
         if (!r.ok) return setError(r.error);
         setTranscript(r.transcript);
         if (r.changed) router.refresh();
@@ -72,6 +74,37 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
       if (r.response.changed) adoptBlueprint(r.blueprint);
     });
   };
+
+  const send = (text: string) => {
+    const message = text.trim();
+    if ((!message && !images.length) || busy) return;
+    const attached = images.map(({ mediaType, data }) => ({ mediaType, data }));
+    setDraft("");
+    setImages([]);
+    // A new request from the owner: its images (if any) are the design to check against.
+    round.current = 0;
+    designs.current = attached;
+    deliver(message, attached, attached.length ? `${message}${message ? "\n" : ""}[${attached.length} image${attached.length > 1 ? "s" : ""} attached]` : message);
+  };
+
+  const selfCheck = useEffectEvent(async (target: { componentId: string; pageId?: string }) => {
+    if (target.pageId && target.pageId !== pageId) router.push(`${basePath}/p/${target.pageId}`);
+    const shot = await captureComponent(target.componentId);
+    if (!shot) return;
+    round.current += 1;
+    const picture: ChatImage = { mediaType: "image/jpeg", data: shot.slice(shot.indexOf(",") + 1) };
+    const withDesign = designs.current.length ? " The owner's design follows it." : "";
+    deliver(`[Automatic check] The first image is how the component you just wrote (${target.componentId}) renders right now.${withDesign} Compare and fix anything that's off, or confirm briefly.`, [picture, ...designs.current].slice(0, 3), "Checking how it looks…");
+  });
+
+  useEffect(() => {
+    if (busy) return;
+    const last = transcript.at(-1);
+    const verify = last?.role === "assistant" ? last.response?.verify : undefined;
+    if (!last || !verify?.length || checked.current.has(last.id) || round.current >= 2) return;
+    checked.current.add(last.id);
+    void selfCheck(verify[0]);
+  }, [transcript, busy]);
 
   const setResolved = (id: string, resolved: ChatItem["resolved"]) =>
     setTranscript((t) => t.map((i) => (i.id === id ? { ...i, resolved } : i)));

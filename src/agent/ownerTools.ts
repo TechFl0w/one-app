@@ -24,6 +24,8 @@ export type Risk = "read" | "safe" | "risky";
 export interface ToolEffects {
   changed?: boolean;
   preview?: { summary: string; ops: OpPreview[]; undo: UndoToken };
+  /** Components written this turn: the browser sends back a picture so the assistant can check them. */
+  verify?: { componentId: string; pageId?: string }[];
 }
 
 export interface OwnerTool<I = unknown> {
@@ -191,6 +193,8 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const p = previewChangeSet(bp, { baseVersion: bp.version, source: "ai", ops });
       fx.changed = true;
       fx.preview = { summary: i.summary, ops: p.ok ? p.ops : [], undo: r.undo };
+      const shownOn = i.newPage?.id ?? i.page ?? bp.pages.find((pg) => pg.layout.blocks.some((x) => x.type === "custom" && x.options?.component === i.id))?.id;
+      (fx.verify ??= []).push({ componentId: i.id, ...(shownOn ? { pageId: shownOn } : {}) });
       return { applied: i.summary, component: i.id, ...(i.newPage ? { page: i.newPage.id } : i.page ? { page: i.page, block: blockId } : {}) };
     },
   }),

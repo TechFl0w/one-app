@@ -48,6 +48,7 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
       <div className={fullPage ? "" : "h-full overflow-hidden rounded-card"}>
         <SandboxFrame
           title={component.label}
+          componentId={component.id}
           theme={blueprint.theme}
           compiled={component.compiled}
           props={props}

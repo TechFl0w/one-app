@@ -19,8 +19,12 @@ const log = (...a) => console.log("•", ...a);
   await p.getByLabel("Message").fill("make the new booking form collapsible with a chevron");
   await p.getByLabel("Message").press("Enter");
   await p.waitForSelector("text=Add custom component “Bookings hub”");
-  await p.getByLabel("Close assistant").click().catch(() => {});
 
+  // Self-check: the app pictures the new component and sends it back; the assistant confirms.
+  await p.waitForSelector("text=Checking how it looks…", { timeout: 60000 });
+  const check = await p.waitForSelector("text=/Checked the picture \\(\\d+ KB\\): it looks right/", { timeout: 60000 });
+  log("self-check:", await check.textContent());
+  await p.getByLabel("Close assistant").click().catch(() => {});
   const frame = p.frameLocator('iframe[title="Bookings hub"]');
   await frame.getByText("New booking").waitFor();
   const t0 = Date.now();

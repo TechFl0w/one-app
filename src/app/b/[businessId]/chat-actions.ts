@@ -26,14 +26,16 @@ const fail = (e: unknown): ChatResult => {
   return { ok: false, error: e instanceof Error ? e.message : "Something went wrong." };
 };
 
-export async function sendOwnerMessage(businessId: string, pageId: string | undefined, text: string, rawImages?: unknown): Promise<ChatResult> {
+export async function sendOwnerMessage(businessId: string, pageId: string | undefined, text: string, rawImages?: unknown, shown?: string): Promise<ChatResult> {
   const images = cleanImages(rawImages);
   const message = text.trim().slice(0, 4000) || (images.length ? "Here’s a design — make the app look like this." : "");
   if (!message) return { ok: false, error: "Type a message first." };
   try {
     const { supabase, userId, backend } = await session(businessId);
     const convo = await loadConversation(supabase, businessId, userId);
-    const transcript = [...convo.transcript, newItem("owner", images.length ? `${message}\n[${images.length} image${images.length > 1 ? "s" : ""} attached]` : message)];
+    // `shown`: what the chat displays for this message (e.g. "Checking how it looks…" for the self-check).
+    const display = shown ? shown.slice(0, 200) : images.length ? `${message}\n[${images.length} image${images.length > 1 ? "s" : ""} attached]` : message;
+    const transcript = [...convo.transcript, newItem("owner", display)];
     if (!hasModelCredentials()) {
       transcript.push(newItem("assistant", MISSING_KEY_TEXT));
       await saveConversation(supabase, businessId, userId, convo.history, transcript);
