@@ -44,6 +44,7 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
     }
     const props = block.options?.props && typeof block.options.props === "object" ? (block.options.props as Record<string, unknown>) : {};
     return (
+      // Sized to its content: outside Edit mode the page lets rows shrink and grow around it.
       <div className={fullPage ? "" : "h-full overflow-hidden rounded-card"}>
         <SandboxFrame
           title={component.label}
@@ -52,7 +53,7 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
           schema={sandboxSchema(blueprint)}
           bridge={env.sandbox.bridge}
           basePath={env.sandbox.basePath}
-          autoHeight={fullPage}
+          autoHeight
         />
       </div>
     );

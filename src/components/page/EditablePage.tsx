@@ -44,7 +44,7 @@ export function EditablePage({
     const c = b.type === "custom" ? blueprint.components?.find((x) => x.id === b.options?.component) : undefined;
     if (!c || !sandbox) return null;
     const props = b.options?.props && typeof b.options.props === "object" ? (b.options.props as Record<string, unknown>) : {};
-    const frame = <SandboxFrame title={c.label} compiled={c.compiled} props={props} schema={sandboxSchema(blueprint)} bridge={sandbox.bridge} basePath={sandbox.basePath} autoHeight={fullPage} />;
+    const frame = <SandboxFrame title={c.label} compiled={c.compiled} props={props} schema={sandboxSchema(blueprint)} bridge={sandbox.bridge} basePath={sandbox.basePath} autoHeight />;
     return fullPage ? frame : <div className="h-full overflow-hidden rounded-card">{frame}</div>;
   };
   const gridRef = useRef<HTMLDivElement>(null);
@@ -117,6 +117,10 @@ export function EditablePage({
   };
 
   const rows = Math.max(gridRows(blocks), editing ? gridRows(blocks) + 2 : 0);
+  // With generated components on the page (and not editing), rows fit their content: a custom
+  // block is as tall as it renders (e.g. a collapsed section), standard blocks keep their size.
+  const flow = !editing && blocks.some((b) => b.type === "custom");
+  const fixedHeight = (h: number) => h * ROW_HEIGHT + (h - 1) * GAP;
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -200,7 +204,7 @@ export function EditablePage({
         <div
           ref={gridRef}
           className={`relative mx-auto gap-4 ${canvas} ${alwaysGrid ? "grid" : "flex flex-col md:grid"} ${editing ? "rounded-card md:bg-[linear-gradient(to_right,var(--line)_1px,transparent_1px)] md:[background-size:calc((100%+16px)/12)_100%]" : ""}`}
-          style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, ${ROW_HEIGHT}px)` }}
+          style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))`, gridTemplateRows: flow ? `repeat(${rows}, auto)` : `repeat(${rows}, ${ROW_HEIGHT}px)` }}
           onPointerMove={move}
           onPointerUp={end}
           onPointerCancel={() => setDrag(null)}
@@ -209,8 +213,8 @@ export function EditablePage({
           {blocks.map((b) => (
             <div
               key={b.id}
-              className={`relative min-h-0 min-w-0 max-md:min-h-[calc(var(--h)*60px)] ${drag?.id === b.id ? "z-10 opacity-90" : ""}`}
-              style={{ gridColumn: `${b.x + 1} / span ${b.w}`, gridRow: `${b.y + 1} / span ${b.h}`, "--h": b.h } as React.CSSProperties}
+              className={`relative min-h-0 min-w-0 ${flow && b.type === "custom" ? "self-start" : "max-md:min-h-[calc(var(--h)*60px)]"} ${flow && b.type !== "custom" ? "md:h-[var(--fixed)]" : ""} ${drag?.id === b.id ? "z-10 opacity-90" : ""}`}
+              style={{ gridColumn: `${b.x + 1} / span ${b.w}`, gridRow: `${b.y + 1} / span ${b.h}`, "--h": b.h, "--fixed": `${fixedHeight(b.h)}px` } as React.CSSProperties}
               data-block={b.id}
             >
               <div className={`h-full ${editing ? "pointer-events-none select-none" : ""}`} aria-hidden={editing || undefined}>
