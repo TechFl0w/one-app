@@ -43,6 +43,18 @@ export async function loadDays(slug: string, serviceId: string, practitionerId: 
   }
 }
 
+/** Every free time for a service over the next `days` days (one call powers the whole calendar). */
+export async function loadAvailability(slug: string, serviceId: string, practitionerId: string | null, days = 35) {
+  try {
+    const r = await resolve(slug);
+    if (!r) return fail(new RecordError("not_found", "Not found"));
+    const slots = await availableSlots(r.blueprint, r.backend, { serviceId, practitionerId: practitionerId ?? undefined, days: Math.min(Math.max(days, 1), 60) });
+    return { slots: slots.map((s) => ({ start: s.start, end: s.end, practitionerId: s.practitionerId })) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 export async function loadSlots(slug: string, serviceId: string, practitionerId: string | null, date: string) {
   try {
     const r = await resolve(slug);
