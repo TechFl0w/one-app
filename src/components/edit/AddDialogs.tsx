@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Block, BlockType, LayoutKey, Page } from "@/schema/blueprint";
 import { ADDABLE_BLOCKS, PAGE_TEMPLATES, newBlockOp, newPageOp, type PageTemplate } from "@/engine/editing";
 import { Dialog } from "./Dialog";
+import { Select } from "@/components/ui/Select";
 import { useEdit } from "./EditProvider";
 
 function TablePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -12,12 +13,7 @@ function TablePicker({ value, onChange }: { value: string; onChange: (v: string)
   return (
     <div>
       <label className="label" htmlFor="pick-table">Data from</label>
-      <select id="pick-table" className="input" value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">Choose a table…</option>
-        {blueprint.tables.map((t) => (
-          <option key={t.id} value={t.id}>{t.label}</option>
-        ))}
-      </select>
+      <Select id="pick-table" value={value} onChange={(v) => onChange(v as string)} placeholder="Choose a table…" options={blueprint.tables.map((t) => ({ value: t.id, label: t.label }))} />
     </div>
   );
 }

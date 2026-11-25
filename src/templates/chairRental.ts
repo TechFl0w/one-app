@@ -34,8 +34,8 @@ const extras: Question & { kind: "multi" } = {
 
 export const chairRental: Template = {
   id: "chair_rental",
-  label: "Chair / booth rental",
-  description: "Chairs, renters, rent payments, documents with expiry, applicants.",
+  label: "Rent out chairs or booths",
+  description: "Renters, rent due, payments, documents with expiry, applicants.",
   businessType: "chair_rental",
   questions: [chairs, period, extras],
   build(business, answers) {
