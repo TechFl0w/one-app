@@ -31,8 +31,24 @@ export async function signUp(_prev: AuthState, form: FormData): Promise<AuthStat
     options: { emailRedirectTo: `${origin}/auth/callback` },
   });
   if (error) return { error: error.message };
+  // Supabase answers a sign-up for an existing email with a user that has no identities (and sends nothing).
+  if (data.user && data.user.identities?.length === 0) return { error: "You already have an account with this email — sign in instead." };
   if (!data.session) return { message: "Check your email to confirm your account." };
   redirect("/");
+}
+
+/** Passwordless: emails a one-time sign-in link (also the way back in after a forgotten password). */
+export async function sendSignInLink(_prev: AuthState, form: FormData): Promise<AuthState> {
+  const supabase = await createClient();
+  const origin = (process.env.NEXT_PUBLIC_APP_URL || (await headers()).get("origin") || "").replace(/\/$/, "");
+  const next = safeNext(form.get("next"));
+  const { error } = await supabase.auth.signInWithOtp({
+    email: String(form.get("email") ?? ""),
+    options: { shouldCreateUser: false, emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}` },
+  });
+  // Same answer whether or not the account exists, so this can't be used to probe emails.
+  if (error && !/signups not allowed|user not found/i.test(error.message)) return { error: error.message };
+  return { message: "If there’s an account for that email, a sign-in link is on its way." };
 }
 
 export async function signOut() {
