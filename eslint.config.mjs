@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Built sandbox runtime (scripts/build-sandbox.mjs).
+    "public/sandbox/**",
   ]),
 ]);
 

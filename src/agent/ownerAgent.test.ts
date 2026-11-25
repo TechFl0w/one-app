@@ -45,7 +45,7 @@ describe("owner agent", () => {
     expect(system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(system[1].text).toContain('blk_cal calendar "Today’s calendar" from tbl_bookings');
     expect(req.tools!.map((t) => (t as Anthropic.Beta.BetaTool).name)).toEqual([
-      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
+      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "write_component", "read_component", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
     ]);
     expect(req.messages[0].content).toContain('looking at page "Today" (pg_today)');
     expect(r.response).toEqual({ text: "Hi!", changed: false });
@@ -196,5 +196,32 @@ describe("booking tools", () => {
     const r = await runOwnerTurn({ backend, history: [], message: "book zoe", model: m2 });
     expect(r.response.changed).toBe(true);
     expect(state.records.some((x) => x.tableId === "tbl_bookings" && x.data.fld_start === free.slots[0].start)).toBe(true);
+  });
+});
+
+describe("writing custom components", () => {
+  const good = `import { Collapsible, RecordForm } from "@one/kit";\nexport default function Hub() {\n  return <Collapsible title="New booking"><RecordForm table="tbl_bookings" /></Collapsible>;\n}`;
+  const bad = `import { Collapsible } from "@one/kit";\nexport default function Hub() {\n  return <Collapsible>oops</Collapsible>;\n}`;
+
+  it("sends compile errors back, then places the fixed component over the replaced blocks", async () => {
+    const { backend, state } = setup();
+    const page = state.blueprint.pages.find((p) => p.id === "pg_bookings")!;
+    const replaced = page.layout.blocks.map((b) => b.id);
+    const input = (source: string) => ({ id: "cmp_booking_hub", label: "Bookings hub", source, summary: "Collapsible new-booking form above the board", page: "pg_bookings", replaceBlocks: replaced.slice(0, 1), position: { x: 0, y: 0, w: 12, h: 4 } });
+    const { model, requests } = scripted(call("write_component", input(bad), "t1"), call("write_component", input(good), "t2"), say("Done."));
+    const r = await runOwnerTurn({ backend, history: [], message: "make the new booking form collapsible with a chevron", model });
+
+    const first = lastToolResult(requests[1]);
+    expect(first.isError).toBe(true);
+    expect(first.content).toMatch(/didn't compile[\s\S]*Line 3:.*title/);
+    expect(JSON.parse(lastToolResult(requests[2]).content).component).toBe("cmp_booking_hub");
+
+    expect(state.blueprint.components?.[0]).toMatchObject({ id: "cmp_booking_hub", source: good });
+    expect(state.blueprint.components?.[0].compiled).toContain("require(\"@one/kit\")");
+    const blocks = state.blueprint.pages.find((p) => p.id === "pg_bookings")!.layout.blocks;
+    expect(blocks.map((b) => b.id)).not.toContain(replaced[0]);
+    expect(blocks.find((b) => b.type === "custom")).toMatchObject({ id: "blk_booking_hub", options: { component: "cmp_booking_hub" } });
+    expect(r.response.buttons?.map((b) => b.action)).toEqual(["keep", "undo"]);
+    expect(setupSummary(state.blueprint)).toContain('cmp_booking_hub "Bookings hub"');
   });
 });

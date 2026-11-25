@@ -8,12 +8,17 @@ Read `docs/` before building a feature. Build order: `docs/roadmap.md`.
 
 ## Non-negotiable architecture rules
 
-1. **Everything configurable is data, not code.** A business's setup is a *blueprint* (JSON, versioned)
-   describing tables, fields, pages, layouts, automations and connections. The engine renders and runs it.
-   The AI never writes per-business code. See `docs/architecture.md`.
+1. **Configuration is data; generated code is sandboxed data too.** A business's setup is a *blueprint*
+   (JSON, versioned): tables, fields, pages, layouts, automations, connections — and code the AI wrote
+   for that business (custom components/pages, websites, server functions). Generated code is stored in
+   the blueprint (source + server-compiled output), goes through change sets, and only ever runs in a
+   sandbox: browser code in an opaque-origin iframe talking to us via postMessage, server code in an
+   isolated VM with a business-scoped token. It never gets platform secrets or direct DB access.
+   See `docs/architecture.md` and `docs/generated-code.md`.
 2. **Labels are separate from identities.** Every table/field/page/menu item has a stable `id` and an
    editable `label`. Automations, reports and the AI reference ids, so renaming never breaks anything.
-3. **Layouts are blocks on a 12-column grid.** Each page = list of blocks `{type, dataSource, position, size, options}`.
+3. **Layouts are blocks on a 12-column grid.** Each page = list of blocks `{type, dataSource, position, size, options}`;
+   a `custom` block shows a generated component.
    Drag-and-drop and AI edits change the same config. Layouts can be per user and per device.
 4. **Two edit paths, one history.** UI edits (Edit mode) and AI edits both produce a blueprint *change set*
    → preview → apply. Every change is logged and undoable.

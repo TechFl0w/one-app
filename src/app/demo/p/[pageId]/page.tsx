@@ -4,6 +4,7 @@ import { EditablePage } from "@/components/page/EditablePage";
 import { demoBlueprint, demoRecords } from "@/demo/salon";
 import { memoryStore } from "@/engine/store";
 import { submitDemoForm } from "../../actions";
+import { demoSandboxCreate, demoSandboxGet, demoSandboxList, demoSandboxRemove, demoSandboxUpdate } from "../../sandbox-actions";
 
 export default async function DemoPage({ params }: PageProps<"/demo/p/[pageId]">) {
   const { pageId } = await params;
@@ -17,6 +18,7 @@ export default async function DemoPage({ params }: PageProps<"/demo/p/[pageId]">
         blueprint: demoBlueprint,
         store: memoryStore(demoRecords()),
         formAction: (tableId, fields) => submitDemoForm.bind(null, tableId, fields),
+        sandbox: { basePath: "/demo", bridge: { list: demoSandboxList, get: demoSandboxGet, create: demoSandboxCreate, update: demoSandboxUpdate, remove: demoSandboxRemove } },
       }}
     />
   );

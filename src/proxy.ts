@@ -11,6 +11,8 @@ export async function proxy(request: NextRequest) {
   if (path === "/demo" || path.startsWith("/demo/") || path === "/start" || path.startsWith("/book/") || path === "/paid") return NextResponse.next();
   // Cron routes (CRON_SECRET) and webhooks (signatures) authenticate themselves, not with a session.
   if (path.startsWith("/api/cron/") || path.startsWith("/api/webhooks/")) return NextResponse.next(); // signed, no session
+  // Sandbox runtime files for generated components (static, public).
+  if (path.startsWith("/sandbox/")) return NextResponse.next();
   // The MCP server checks its own bearer tokens; discovery documents are public.
   if (path === "/api/mcp" || path.startsWith("/api/mcp/") || path.startsWith("/api/oauth-metadata") || path.startsWith("/.well-known/")) return NextResponse.next();
   // Supabase falls back to the Site URL (/?code=…) for confirmation links: finish sign-in there too.
@@ -52,5 +54,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|sandbox/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
 };

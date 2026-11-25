@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Blueprint } from "@/schema/blueprint";
 import { menuOrder } from "@/engine/editing";
 import { localToday, isoDate } from "@/engine/dates";
+import { KIT_DTS } from "@/codegen/kitTypes";
 import { executeOwnerTool, OWNER_TOOLS, ownerToolDefinitions, type ToolEffects } from "./ownerTools";
 import type { AgentResponse, OwnerBackend, PendingAction } from "./types";
 
@@ -32,7 +33,17 @@ How to work:
 - Setup changes go through change_setup in one call per request. Keep labels short and in the owner's language.
 - Removing data, changing prices or amounts, and changing automations wait for the owner's confirmation. When a tool tells you it is waiting, say plainly what will happen and that they can confirm below. Never claim it is done.
 - If a request is unclear, ask one short question with concrete options.
-- Keep replies short and warm. Plain sentences; a short list only when listing records.`;
+- Keep replies short and warm. Plain sentences; a short list only when listing records.
+
+Custom UI (write_component):
+- Standard blocks (table, board, calendar, list, number, form, notes) are quickest. When the owner wants something they can't do — collapsible or tabbed sections, a different look, combined views, a custom page or flow — write a component instead of saying no.
+- A component is one TSX module: \`export default function Name() { … }\`. Import only from "react" and "@one/kit" (API below). Style with Tailwind classes; theme colors: bg-ground, bg-card, text-ink, text-muted, border-line, bg-accent, text-accent, bg-accent-tint, shadow-soft, rounded-2xl. Use the kit's Card, Collapsible, Tabs, Select, DateTimeInput and RecordForm instead of building inputs; never use <select> or native date inputs.
+- Read and write data only through the kit with table and field ids from the setup summary. Deleting goes through records.remove (the owner confirms in the app).
+- To replace standard blocks with a component, pass replaceBlocks. To change an existing component, read_component first, then write_component with the same id.
+- If write_component returns compile errors, fix them and call it again before replying.
+
+The kit (@one/kit) and the React subset you can use:
+${KIT_DTS}`;
 
 /** Compact, id-annotated summary of the setup for the model. */
 export function setupSummary(bp: Blueprint, now = new Date()): string {
@@ -54,7 +65,8 @@ export function setupSummary(bp: Blueprint, now = new Date()): string {
     lines.push(`- ${p.id} "${p.label}"${p.hidden ? " (hidden)" : ""}`);
     for (const b of p.layout.blocks) {
       const title = typeof b.options?.title === "string" ? ` "${b.options.title}"` : "";
-      lines.push(`    ${b.id} ${b.type}${title}${b.source ? ` from ${b.source.table}` : ""} at x${b.x} y${b.y} w${b.w} h${b.h}`);
+      const comp = b.type === "custom" ? ` component ${String(b.options?.component)}` : "";
+      lines.push(`    ${b.id} ${b.type}${title}${comp}${b.source ? ` from ${b.source.table}` : ""} at x${b.x} y${b.y} w${b.w} h${b.h}`);
     }
     const overrides = Object.keys(p.layoutOverrides ?? {});
     if (overrides.length) lines.push(`    separate layouts: ${overrides.join(", ")}`);
@@ -62,6 +74,10 @@ export function setupSummary(bp: Blueprint, now = new Date()): string {
   if (bp.automations.length) {
     lines.push("", "Automations:");
     for (const a of bp.automations) lines.push(`- ${a.id} "${a.label}" ${a.enabled ? "on" : "off"}, trigger ${a.trigger.type}${a.trigger.table ? ` on ${a.trigger.table}` : ""}`);
+  }
+  if (bp.components?.length) {
+    lines.push("", "Custom components (read_component for source):");
+    for (const c of bp.components) lines.push(`- ${c.id} "${c.label}"`);
   }
   lines.push("", "The grid has 12 columns; blocks have x, y, w (width in columns) and h (height in rows).");
   return lines.join("\n");

@@ -4,6 +4,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { getBusinessContext } from "@/server/context";
 import { signOut } from "@/app/login/actions";
 import { loadConversation } from "@/server/ownerChat";
+import { sandboxCreate, sandboxGet, sandboxList, sandboxRemove, sandboxUpdate } from "./sandbox-actions";
 
 export default async function BusinessLayout({ children, params }: LayoutProps<"/b/[businessId]">) {
   const { businessId } = await params;
@@ -28,6 +29,13 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
   const { transcript } = userId ? await loadConversation(supabase, businessId, userId).catch(() => ({ transcript: [] })) : { transcript: [] };
   return (
     <AppShell
+      sandbox={{
+        list: sandboxList.bind(null, businessId),
+        get: sandboxGet.bind(null, businessId),
+        create: sandboxCreate.bind(null, businessId),
+        update: sandboxUpdate.bind(null, businessId),
+        remove: sandboxRemove.bind(null, businessId),
+      }}
       blueprint={blueprint}
       mode={{ kind: "server", businessId }}
       basePath={`/b/${businessId}`}

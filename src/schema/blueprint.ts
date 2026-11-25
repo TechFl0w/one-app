@@ -145,6 +145,8 @@ export const BLOCK_TYPES = [
   "messages",
   "buttons",
   "notes",
+  /** A generated component (blueprint.components), rendered in the browser sandbox. */
+  "custom",
 ] as const;
 export const BlockType = z.enum(BLOCK_TYPES);
 export type BlockType = z.infer<typeof BlockType>;
@@ -368,6 +370,24 @@ export const Scheduling = z.strictObject({
 });
 export type Scheduling = z.infer<typeof Scheduling>;
 
+// ---------- generated code ----------
+
+export const ComponentId = z.string().regex(/^cmp_[a-z0-9_]{1,60}$/);
+export const MAX_COMPONENT_SOURCE = 60_000;
+export const MAX_COMPONENT_COMPILED = 120_000;
+
+/**
+ * A component the AI wrote for this business (docs/generated-code.md). `source` is the TSX the AI
+ * wrote; `compiled` is what our server produced from it (never supplied by the AI).
+ */
+export const Component = z.strictObject({
+  id: ComponentId,
+  label: Label,
+  source: z.string().min(1).max(MAX_COMPONENT_SOURCE),
+  compiled: z.string().min(1).max(MAX_COMPONENT_COMPILED),
+});
+export type Component = z.infer<typeof Component>;
+
 const BlueprintShape = z.strictObject({
   version: z.int().min(1),
   business: BusinessInfo,
@@ -377,6 +397,7 @@ const BlueprintShape = z.strictObject({
   connections: z.array(Connection),
   modules: z.array(Module),
   scheduling: Scheduling.optional(),
+  components: z.array(Component).max(200).optional(),
 });
 
 /** Full blueprint with referential-integrity checks. */
@@ -392,6 +413,8 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
   };
 
   const tables = new Map(bp.tables.map((t) => [t.id, t]));
+  const components = new Set((bp.components ?? []).map((c) => c.id));
+  (bp.components ?? []).forEach((c, ci) => claim(c.id, ["components", ci, "id"]));
   const fieldsOf = (tableId: string) => new Set(tables.get(tableId)?.fields.map((f) => f.id) ?? []);
 
   bp.tables.forEach((t, ti) => {
@@ -439,6 +462,10 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
       else if (local.has(b.id)) issue([...path, bi, "id"], `duplicate block id ${b.id}`);
       local.add(b.id);
       checkSource(b.source, [...path, bi, "source"]);
+      if (b.type === "custom") {
+        const c = b.options?.component;
+        if (typeof c !== "string" || !components.has(c)) issue([...path, bi, "options", "component"], `unknown component ${String(c)}`);
+      }
     });
   };
 
