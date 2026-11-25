@@ -6,7 +6,7 @@ import { hashToken, newToken } from "@/mcp/tokens";
 /** Token storage and approvals for the business MCP server (service role; role checked here). */
 
 const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
-export const mcpUrl = () => `${appUrl()}/api/mcp`;
+export const mcpUrl = (businessId?: string) => `${appUrl()}/api/mcp${businessId ? `/${businessId}` : ""}`;
 export const approvalsUrl = (businessId: string) => `${appUrl()}/b/${businessId}/approvals`;
 
 export interface TokenOwner {

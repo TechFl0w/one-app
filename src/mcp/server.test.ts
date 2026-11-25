@@ -84,3 +84,16 @@ describe("stateless HTTP", () => {
     expect(JSON.parse(call.result.content[0].text).records).toHaveLength(1);
   });
 });
+
+describe("OAuth discovery", () => {
+  it("points AI apps at Supabase Auth for this business's server", async () => {
+    const { protectedResourceMetadata, resourceMetadataUrl } = await import("./urls");
+    expect(resourceMetadataUrl("https://app.one", "b1")).toBe("https://app.one/.well-known/oauth-protected-resource/api/mcp/b1");
+    expect(protectedResourceMetadata("https://app.one", "/api/mcp/b1", "https://ref.supabase.co/")).toEqual({
+      resource: "https://app.one/api/mcp/b1",
+      authorization_servers: ["https://ref.supabase.co/auth/v1"],
+      bearer_methods_supported: ["header"],
+      resource_name: "One App",
+    });
+  });
+});
