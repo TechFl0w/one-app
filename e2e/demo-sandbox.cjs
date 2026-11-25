@@ -18,7 +18,7 @@ const log = (...a) => console.log("•", ...a);
   await p.getByRole("button", { name: "Ask the assistant" }).click();
   await p.getByLabel("Message").fill("make the new booking form collapsible with a chevron");
   await p.getByLabel("Message").press("Enter");
-  await p.waitForSelector("text=Add custom component “Bookings hub”");
+  await p.waitForSelector("text=Add screen “Bookings hub”");
 
   // Self-check: the app pictures the new component and sends it back; the assistant confirms.
   await p.waitForSelector("text=Checking how it looks…", { timeout: 60000 });

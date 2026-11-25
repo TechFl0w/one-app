@@ -13,6 +13,7 @@ import { overlapFixOps } from "@/engine/editing";
 import { applyChangeSet } from "@/engine/changeSet";
 import { compileComponent, compileFunction } from "@/codegen/compile";
 import { checkReferences } from "@/codegen/references";
+import { checkStandards } from "@/codegen/standards";
 import { ComponentId, FunctionId, GRID_COLUMNS, Host, Label, PageId } from "@/schema/blueprint";
 import type { Operation as Op } from "@/schema/changeSet";
 
@@ -183,6 +184,7 @@ export const OWNER_TOOLS: OwnerTool[] = [
       position: z.strictObject({ x: z.int().min(0).max(GRID_COLUMNS - 1), y: z.int().min(0), w: z.int().min(1).max(GRID_COLUMNS), h: z.int().min(1).max(50) }).optional(),
       newPage: z.strictObject({ id: PageId, label: Label, icon: z.string().max(40).optional() }).optional(),
       props: z.record(z.string(), z.unknown()).optional().describe("Values the component reads with useProps()"),
+      inlineForm: z.boolean().optional().describe("Only when the owner asked for an add/edit form on the page itself instead of a pop-up"),
     }),
     risk: "safe",
     run: async (b, i, fx) => {
@@ -191,6 +193,8 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const bp = await b.blueprint();
       const unknown = checkReferences(i.source, bp, i.newPage ? [i.newPage.id] : []);
       if (unknown.length) throw new Error(`The component refers to things that don't exist — fix these and call write_component again:\n${unknown.join("\n")}`);
+      const rules = checkStandards(i.source, bp, { inlineForm: i.inlineForm });
+      if (rules.errors.length) throw new Error(`The component breaks the app rules — fix these and call write_component again:\n${rules.errors.join("\n")}`);
       const ops: Op[] = [{ op: "putComponent", component: { id: i.id, label: i.label, source: i.source, compiled: compiled.compiled } }];
       const blockId = `blk_${i.id.slice(4)}`.slice(0, 64);
       const block = (x: number, y: number, w: number, h: number) => ({ id: blockId, type: "custom" as const, x, y, w, h, options: { component: i.id, ...(i.props ? { props: i.props } : {}) } });
@@ -221,7 +225,7 @@ export const OWNER_TOOLS: OwnerTool[] = [
       fx.preview = { summary: i.summary, ops: p.ok ? p.ops : [], undo: r.undo };
       const shownOn = i.newPage?.id ?? i.page ?? bp.pages.find((pg) => pg.layout.blocks.some((x) => x.type === "custom" && x.options?.component === i.id))?.id;
       (fx.verify ??= []).push({ componentId: i.id, ...(shownOn ? { pageId: shownOn } : {}) });
-      return { applied: i.summary, component: i.id, ...(i.newPage ? { page: i.newPage.id } : i.page ? { page: i.page, block: blockId } : {}) };
+      return { applied: i.summary, component: i.id, ...(i.newPage ? { page: i.newPage.id } : i.page ? { page: i.page, block: blockId } : {}), ...(rules.warnings.length ? { fix_next: rules.warnings } : {}) };
     },
   }),
 
@@ -276,7 +280,7 @@ export const OWNER_TOOLS: OwnerTool[] = [
     },
     describe: (i, bp) => {
       const exists = bp.functions?.some((f) => f.id === i.id);
-      return [`${exists ? "Update" : "Add"} server code “${i.label}”${i.hosts.length ? ` that can reach ${i.hosts.join(", ")}` : ""}${i.webhook ? ", callable from outside" : ""}`];
+      return [`${exists ? "Update" : "Add"} background task “${i.label}”${i.hosts.length ? ` that connects to ${i.hosts.join(", ")}` : ""}${i.webhook ? ", which other services can start" : ""}`];
     },
     run: async (b, i, fx) => {
       const c = compileFunction(i.source);

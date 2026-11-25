@@ -3,6 +3,7 @@ import type { Blueprint } from "@/schema/blueprint";
 import { menuOrder } from "@/engine/editing";
 import { localToday, isoDate } from "@/engine/dates";
 import { KIT_DTS } from "@/codegen/kitTypes";
+import { checkStandards } from "@/codegen/standards";
 import { SERVER_KIT_DTS } from "@/codegen/serverKitTypes";
 import { executeOwnerTool, OWNER_TOOLS, ownerToolDefinitions, type ToolEffects } from "./ownerTools";
 import type { AgentResponse, OwnerBackend, PendingAction } from "./types";
@@ -49,9 +50,11 @@ How to work:
 - Use the latest "Current setup" note in the conversation for ids (it is updated after setup changes). Refer to things by their labels when you talk to the owner; never show ids, JSON or tool names.
 - Prefer doing over explaining: when the owner asks for a change, make it, then say in one or two sentences what changed.
 - Setup changes go through change_setup in one call per request. Keep labels short and in the owner's language.
-- Removing data, changing prices or amounts, and changing automations wait for the owner's confirmation. When a tool tells you it is waiting, say plainly what will happen and that they can confirm below. Never claim it is done.
+- Removing data, changing prices or amounts, and changing automations wait for the owner's confirmation. When a tool tells you it is waiting, say in one or two plain sentences what will happen and that they can confirm below. Never claim it is done.
+- If more work depends on something waiting for confirmation, record the remaining steps with plan_build in the same turn: the app carries on by itself once the owner confirms. Never ask the owner to come back and tell you after confirming.
 - If a request is unclear, ask one short question with concrete options.
-- Keep replies short and warm. Plain sentences; a short list only when listing records.
+- Keep replies short and warm. Plain sentences; a short list only when listing records. Markdown (bold, lists) is shown formatted.
+- Talk like a helpful colleague, not an engineer: no technical words (server code, function, component, automation trigger, webhook, API, field, rollup, formula, database, code). Say what the owner will notice ("Rooms will now show when they have an open repair, and it stays up to date by itself"). Don't explain how it works unless they ask.
 
 Custom UI (write_component):
 - Standard blocks (table, board, calendar, list, number, form, notes) are quickest. When the owner wants something they can't do — collapsible or tabbed sections, a different look, combined views, a custom page or flow — write a component instead of saying no.
@@ -75,6 +78,8 @@ App rules — every screen you build follows these unless the owner asks otherwi
 - Deleting always goes through records.remove (the owner confirms). Changes show feedback (toast) and lists refresh by themselves.
 - Primary action top right of the screen; one primary button per screen. Destructive actions are secondary and red.
 - Business rules live in the data, not in screen code: a value that follows from other records (a room's status from its tenant, a flag for open maintenance, a copied rent status, totals) is a rollup or formula field, or an automation, set up with change_setup. A component only writes the record the owner is acting on — never "keep X in sync" code that updates other tables, because edits from tables, imports and the API would bypass it.
+- When the setup lists screens that don't meet the app rules yet, fix them whenever you change that screen, and fix all of them when the owner asks to tidy up or bring the app up to standard.
+- Show hierarchy: a record always appears with its parent for context (rooms grouped under or labelled with their building, tenants with their room and building, jobs with room and building). Lists of child records group by parent or show the parent in a column; detail views show the path (Building › Room). When designing tables, link children to their parent (room → building) instead of copying names.
 - Compare choice values to option ids (opt_…), never to label text; labels can be renamed.
 - Works on a phone: stack columns below md, tables become cards or scroll horizontally, tap targets at least 40px.
 
@@ -132,7 +137,12 @@ export function setupSummary(bp: Blueprint, now = new Date()): string {
   }
   if (bp.components?.length) {
     lines.push("", "Custom components (read_component for source):");
-    for (const c of bp.components) lines.push(`- ${c.id} "${c.label}"`);
+    for (const c of bp.components) {
+      // Screens built before a rule existed: flagged so they get fixed (when asked, or when touched).
+      const { errors, warnings } = checkStandards(c.source, bp);
+      const todo = [...errors.map(() => "add/edit form not in a pop-up"), ...warnings.filter((w) => w.includes("belong to")).map((w) => `show ${w.split(" belong to ")[1].split(" (")[0]}`)];
+      lines.push(`- ${c.id} "${c.label}"${todo.length ? ` — doesn't meet the app rules yet: ${todo.join("; ")}` : ""}`);
+    }
   }
   lines.push("", "The grid has 12 columns; blocks have x, y, w (width in columns) and h (height in rows).");
   return lines.join("\n");
