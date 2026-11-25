@@ -1,5 +1,8 @@
 "use client";
 
+import { isFullPageComponent, sandboxSchema } from "@/sandbox/schema";
+import { SandboxFrame } from "@/components/sandbox/SandboxFrame";
+import { useSandbox } from "@/components/sandbox/SandboxProvider";
 import { useRef, useState } from "react";
 import { GripVertical, Plus, Settings2, Trash2 } from "lucide-react";
 import { GRID_COLUMNS, type Block, type LayoutKey } from "@/schema/blueprint";
@@ -34,6 +37,16 @@ export function EditablePage({
   rendered: Record<string, React.ReactNode>;
 }) {
   const { blueprint, editing, push } = useEdit();
+  const sandbox = useSandbox();
+  // Custom blocks the server hasn't rendered (a draft, or the demo's local changes) render here.
+  const view = (b: Block, fullPage = false) => {
+    if (rendered[b.id]) return rendered[b.id];
+    const c = b.type === "custom" ? blueprint.components?.find((x) => x.id === b.options?.component) : undefined;
+    if (!c || !sandbox) return null;
+    const props = b.options?.props && typeof b.options.props === "object" ? (b.options.props as Record<string, unknown>) : {};
+    const frame = <SandboxFrame title={c.label} compiled={c.compiled} props={props} schema={sandboxSchema(blueprint)} bridge={sandbox.bridge} basePath={sandbox.basePath} autoHeight={fullPage} />;
+    return fullPage ? frame : <div className="h-full overflow-hidden rounded-card">{frame}</div>;
+  };
   const gridRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
@@ -176,7 +189,9 @@ export function EditablePage({
         </div>
       )}
 
-      {editing && !activeBlocks ? null : blocks.length === 0 && !editing ? (
+      {!editing && isFullPageComponent(blocks) ? (
+        <div data-block={blocks[0].id}>{view(blocks[0], true)}</div>
+      ) : editing && !activeBlocks ? null : blocks.length === 0 && !editing ? (
         <div className="card flex flex-col items-center justify-center gap-1 p-12 text-center">
           <p className="font-semibold">This page is empty</p>
           <p className="text-sm text-muted">Click Edit to add blocks, or ask the assistant to build it.</p>
@@ -199,7 +214,7 @@ export function EditablePage({
               data-block={b.id}
             >
               <div className={`h-full ${editing ? "pointer-events-none select-none" : ""}`} aria-hidden={editing || undefined}>
-                {rendered[b.id] ?? (
+                {view(b) ?? (
                   <div className="card flex h-full items-center justify-center p-4 text-center text-sm text-muted">
                     New {b.type} block — save to load its data
                   </div>

@@ -9,6 +9,9 @@ import type { UndoToken } from "@/engine/commit";
 import type { OwnerBackend, PendingAction } from "./types";
 import { recordUpdateIsRisky } from "@/engine/risk";
 import { availableSlots, bookSlot } from "@/booking/service";
+import { compileComponent } from "@/codegen/compile";
+import { ComponentId, GRID_COLUMNS, Label, PageId } from "@/schema/blueprint";
+import type { Operation as Op } from "@/schema/changeSet";
 
 /**
  * The owner agent's tools. Each has a zod schema (inputs are validated before running), a risk
@@ -140,6 +143,65 @@ export const OWNER_TOOLS: OwnerTool[] = [
       fx.changed = true;
       fx.preview = { summary: i.summary, ops: p.ok ? p.ops : [], undo: r.undo };
       return { applied: r.summary, version: r.blueprint.version };
+    },
+  }),
+
+  tool({
+    name: "write_component",
+    description:
+      "Write (or rewrite) a custom UI component in TSX and show it in the app — for anything the standard blocks can't do: collapsible sections, custom layouts, " +
+      "bespoke cards, dashboards, multi-step flows, whole custom pages. The code is type-checked; if there are errors you get them back and must fix and call again. " +
+      "Placement: `page` adds it as a block on an existing page (x/y/w/h on the 12-column grid), `newPage` creates a page that is just this component (full width, sized to content), " +
+      "`replaceBlocks` removes those blocks from `page` first (e.g. to swap a standard form + board for one custom component). Omit placement when only updating an existing component's code.",
+    input: z.strictObject({
+      id: ComponentId.describe("cmp_… id; reuse an existing id to update that component"),
+      label: Label.describe("Short owner-facing name, e.g. 'Bookings hub'"),
+      source: z.string().min(1).max(60_000).describe("Complete TSX module; default export is the component. Import only from 'react' and '@one/kit'."),
+      summary: z.string().min(1).max(300).describe("One short sentence for the owner describing the change."),
+      page: PageId.optional(),
+      replaceBlocks: z.array(z.string()).max(20).optional(),
+      position: z.strictObject({ x: z.int().min(0).max(GRID_COLUMNS - 1), y: z.int().min(0), w: z.int().min(1).max(GRID_COLUMNS), h: z.int().min(1).max(50) }).optional(),
+      newPage: z.strictObject({ id: PageId, label: Label, icon: z.string().max(40).optional() }).optional(),
+      props: z.record(z.string(), z.unknown()).optional().describe("Values the component reads with useProps()"),
+    }),
+    risk: "safe",
+    run: async (b, i, fx) => {
+      const compiled = compileComponent(i.source);
+      if (!compiled.ok) throw new Error(`The component didn't compile — fix these and call write_component again:\n${compiled.errors.join("\n")}`);
+      const bp = await b.blueprint();
+      const ops: Op[] = [{ op: "putComponent", component: { id: i.id, label: i.label, source: i.source, compiled: compiled.compiled } }];
+      const blockId = `blk_${i.id.slice(4)}`.slice(0, 64);
+      const block = (x: number, y: number, w: number, h: number) => ({ id: blockId, type: "custom" as const, x, y, w, h, options: { component: i.id, ...(i.props ? { props: i.props } : {}) } });
+      if (i.newPage) {
+        const order = Math.max(-1, ...bp.pages.map((p) => p.menuOrder)) + 1;
+        ops.push({ op: "addPage", page: { id: i.newPage.id, label: i.newPage.label, ...(i.newPage.icon ? { icon: i.newPage.icon } : {}), menuOrder: order, hidden: false, layout: { columns: GRID_COLUMNS, blocks: [block(0, 0, GRID_COLUMNS, 8)] } } });
+      } else if (i.page) {
+        const page = bp.pages.find((p) => p.id === i.page);
+        if (!page) throw new Error(`Unknown page ${i.page}`);
+        for (const id of i.replaceBlocks ?? []) ops.push({ op: "removeBlock", pageId: page.id, blockId: id });
+        const exists = page.layout.blocks.some((x) => x.id === blockId) && !(i.replaceBlocks ?? []).includes(blockId);
+        const pos = i.position ?? { x: 0, y: 0, w: GRID_COLUMNS, h: 6 };
+        if (exists) ops.push({ op: "updateBlock", pageId: page.id, block: block(pos.x, pos.y, pos.w, pos.h) });
+        else ops.push({ op: "addBlock", pageId: page.id, block: block(pos.x, pos.y, pos.w, pos.h) });
+      }
+      const r = await b.commitChangeSet({ baseVersion: bp.version, source: "ai", summary: i.summary, ops }, false);
+      if (!r.ok) throw new Error(r.error);
+      const p = previewChangeSet(bp, { baseVersion: bp.version, source: "ai", ops });
+      fx.changed = true;
+      fx.preview = { summary: i.summary, ops: p.ok ? p.ops : [], undo: r.undo };
+      return { applied: i.summary, component: i.id, ...(i.newPage ? { page: i.newPage.id } : i.page ? { page: i.page, block: blockId } : {}) };
+    },
+  }),
+
+  tool({
+    name: "read_component",
+    description: "The current TSX source of a custom component (read it before changing it).",
+    input: z.strictObject({ id: ComponentId }),
+    risk: "read",
+    run: async (b, i) => {
+      const c = (await b.blueprint()).components?.find((x) => x.id === i.id);
+      if (!c) throw new Error(`No component ${i.id}`);
+      return { id: c.id, label: c.label, source: c.source };
     },
   }),
 

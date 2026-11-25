@@ -10,7 +10,10 @@
     "test": "vitest run",
     "test:db": "scripts/test-db.sh",
     "typecheck": "tsc --noEmit",
-    "e2e": "node e2e/demo-edit.cjs && node e2e/demo-chat.cjs && node e2e/demo-booking.cjs"
+    "e2e": "node e2e/demo-edit.cjs && node e2e/demo-chat.cjs && node e2e/demo-booking.cjs && node e2e/demo-sandbox.cjs",
+    "sandbox": "node scripts/build-sandbox.mjs",
+    "prebuild": "node scripts/build-sandbox.mjs",
+    "predev": "node scripts/build-sandbox.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.13.0",
@@ -31,11 +34,13 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@tailwindcss/browser": "^4.3.5",
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "pg": "^8.23.1",

@@ -44,7 +44,7 @@ export function Select({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; host: Element } | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const pop = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -65,7 +65,9 @@ export function Select({
       if (!r) return;
       const below = window.innerHeight - r.bottom;
       const up = below < 280 && r.top > below;
-      setPos({ left: r.left, width: Math.max(r.width, 192), ...(up ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }) });
+      // Inside a modal <dialog> (browser top layer) the list must live in the dialog to show above it.
+      const host = button.current?.closest("dialog") ?? document.body;
+      setPos({ left: r.left, width: Math.max(r.width, 192), host, ...(up ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }) });
     };
     place();
     document.addEventListener("mousedown", close);
@@ -185,8 +187,7 @@ export function Select({
             })}
           </ul>
         </div>,
-        // Inside a modal <dialog> (browser top layer) the list must live in the dialog to show above it.
-        button.current?.closest("dialog") ?? document.body,
+        pos.host,
       )}
     </div>
   );

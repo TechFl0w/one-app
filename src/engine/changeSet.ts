@@ -390,6 +390,28 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
       bp.automations[i] = structuredClone(op.automation);
       return [{ op: "updateAutomation", automation: old }];
     }
+    case "putComponent": {
+      bp.components ??= [];
+      const i = bp.components.findIndex((c) => c.id === op.component.id);
+      if (i >= 0) {
+        const old = bp.components[i];
+        bp.components[i] = structuredClone(op.component);
+        return [{ op: "putComponent", component: old }];
+      }
+      bp.components.push(structuredClone(op.component));
+      return [{ op: "removeComponent", componentId: op.component.id }];
+    }
+    case "removeComponent": {
+      const i = (bp.components ?? []).findIndex((c) => c.id === op.componentId);
+      if (i < 0) throw new ChangeSetError("not_found", `Component ${op.componentId} not found`);
+      const usedOn = bp.pages.find((p) =>
+        [p.layout.blocks, ...Object.values(p.layoutOverrides ?? {}).map((o) => o?.blocks ?? [])].some((bs) => bs.some((b) => b.type === "custom" && b.options?.component === op.componentId)),
+      );
+      if (usedOn) throw new ChangeSetError("invalid", `Component ${op.componentId} is still shown on page ${usedOn.label}`);
+      const [component] = bp.components!.splice(i, 1);
+      if (!bp.components!.length) delete bp.components;
+      return [{ op: "putComponent", component }];
+    }
     case "toggleAutomation": {
       const a = automationOf(bp, op.automationId);
       const old = a.enabled;
@@ -477,5 +499,9 @@ function describe(bp: Blueprint, op: Operation): string {
       return `Change automation ${q(op.automation.label)}`;
     case "toggleAutomation":
       return `${op.enabled ? "Turn on" : "Turn off"} automation ${auto(op.automationId)}`;
+    case "putComponent":
+      return (bp.components ?? []).some((c) => c.id === op.component.id) ? `Update custom component ${q(op.component.label)}` : `Add custom component ${q(op.component.label)}`;
+    case "removeComponent":
+      return `Remove custom component ${labelOrId(bp.components ?? [], op.componentId)}`;
   }
 }

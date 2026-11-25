@@ -21,13 +21,51 @@ function script(body) {
   const latest = [...msgs].reverse().find((m) => m.role === "user" && typeof m.content === "string" && (!m.content.startsWith("[The owner ") || m.content.startsWith("[The owner is looking")));
   const ownerText = (latest?.content ?? "").replace(/^\[The owner is looking at[^\]]*\]\s*/, "");
   if (isToolResult) {
-    const r = JSON.parse(last.content[0].content || "{}");
+    let r = {};
+    try {
+      r = JSON.parse(last.content[0].content || "{}");
+    } catch {
+      return text(`Tool failed: ${String(last.content[0].content).slice(0, 300)}`);
+    }
     if (r.status === "waiting_for_owner_confirmation") return text("I’ll do that once you confirm below.");
     if (ownerText.includes("today")) return text(`You have ${r.total} bookings today.`);
     return text("Done — take a look.");
   }
   if (/rename/i.test(ownerText)) {
     return tool("change_setup", { summary: "Rename Clients to Guests", ops: [{ op: "rename", target: { kind: "page", pageId: "pg_clients" }, label: "Guests" }] });
+  }
+  if (/collapsible/i.test(ownerText)) {
+    return tool("write_component", {
+      id: "cmp_bookings_hub",
+      label: "Bookings hub",
+      summary: "Bookings page with a collapsible new-booking form and upcoming bookings",
+      page: "pg_bookings",
+      replaceBlocks: ["blk_board"],
+      position: { x: 0, y: 0, w: 12, h: 8 },
+      source: [
+        'import { Collapsible, RecordForm, useRecords, Card, Badge, optionLabel, formatDate, recordLabel } from "@one/kit";',
+        "export default function BookingsHub() {",
+        '  const { records, total } = useRecords({ table: "tbl_bookings", sort: [{ field: "fld_start", dir: "asc" }], limit: 5 });',
+        "  return (",
+        '    <div className="space-y-4 p-1">',
+        '      <Collapsible title="New booking" defaultOpen={false}>',
+        '        <RecordForm table="tbl_bookings" fields={["fld_client", "fld_start", "fld_status"]} />',
+        "      </Collapsible>",
+        '      <Card title={`Upcoming (${total})`}>',
+        '        <ul className="divide-y divide-line">',
+        "          {records.map((r) => (",
+        '            <li key={r.id} className="flex items-center gap-3 py-2 text-sm" data-testid="booking-row">',
+        '              <span className="flex-1">{formatDate(String(r.data.fld_start), "datetime")}</span>',
+        '              <Badge>{optionLabel("tbl_bookings", "fld_status", r.data.fld_status)}</Badge>',
+        "            </li>",
+        "          ))}",
+        "        </ul>",
+        "      </Card>",
+        "    </div>",
+        "  );",
+        "}",
+      ].join("\n"),
+    });
   }
   if (/pause/i.test(ownerText)) {
     return tool("change_setup", { summary: "Pause reminders", ops: [{ op: "toggleAutomation", automationId: "aut_reminder", enabled: false }] });

@@ -3,6 +3,8 @@ import { EditProvider, type EditMode } from "@/components/edit/EditProvider";
 import { Sidebar } from "./Sidebar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import type { ChatItem } from "@/agent/transcript";
+import { SandboxProvider } from "@/components/sandbox/SandboxProvider";
+import type { SandboxBridge } from "@/sandbox/protocol";
 
 export function AppShell({
   blueprint,
@@ -12,8 +14,11 @@ export function AppShell({
   footer,
   banner,
   transcript,
+  sandbox,
   children,
 }: {
+  /** Data access for generated components rendered in the browser. */
+  sandbox: SandboxBridge;
   /** Owner chat so far (server mode). */
   transcript?: ChatItem[];
   blueprint: Blueprint;
@@ -26,6 +31,7 @@ export function AppShell({
 }) {
   return (
     <EditProvider blueprint={blueprint} mode={mode}>
+    <SandboxProvider value={{ bridge: sandbox, basePath }}>
     <div className="flex min-h-screen flex-1 flex-col md:flex-row">
       <Sidebar basePath={basePath} businesses={businesses} footer={footer} />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -34,6 +40,7 @@ export function AppShell({
       </div>
     </div>
     <ChatPanel mode={mode} initialTranscript={transcript} />
+    </SandboxProvider>
     </EditProvider>
   );
 }

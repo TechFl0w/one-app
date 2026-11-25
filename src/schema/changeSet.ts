@@ -5,6 +5,8 @@ import {
   Block,
   BlockId,
   BusinessInfo,
+  Component,
+  ComponentId,
   Field,
   FieldId,
   Label,
@@ -68,6 +70,11 @@ export const Operation = z.discriminatedUnion("op", [
   /** Replace the booking setup (roles, hours, rules, deposit, statuses); null removes it. */
   z.strictObject({ op: z.literal("setScheduling"), scheduling: Scheduling.nullable() }),
 
+  /** Add or replace a generated component (source + server-compiled code). */
+  z.strictObject({ op: z.literal("putComponent"), component: Component }),
+  /** Remove a generated component; fails while a block still shows it. */
+  z.strictObject({ op: z.literal("removeComponent"), componentId: ComponentId }),
+
   /** Restore a whole layout override exactly (used by undo of removeLayoutOverride). */
   z.strictObject({
     op: z.literal("setLayoutOverride"),
@@ -121,4 +128,6 @@ export const OP_RISK: Record<OpName, "safe" | "risky"> = {
   updateAutomation: "risky",
   toggleAutomation: "risky",
   setScheduling: "risky",
+  putComponent: "safe",
+  removeComponent: "safe",
 };
