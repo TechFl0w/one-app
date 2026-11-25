@@ -37,6 +37,20 @@ export async function signUp(_prev: AuthState, form: FormData): Promise<AuthStat
   redirect("/");
 }
 
+/** Passwordless: emails a one-time sign-in link (also the way back in after a forgotten password). */
+export async function sendSignInLink(_prev: AuthState, form: FormData): Promise<AuthState> {
+  const supabase = await createClient();
+  const origin = (process.env.NEXT_PUBLIC_APP_URL || (await headers()).get("origin") || "").replace(/\/$/, "");
+  const next = safeNext(form.get("next"));
+  const { error } = await supabase.auth.signInWithOtp({
+    email: String(form.get("email") ?? ""),
+    options: { shouldCreateUser: false, emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}` },
+  });
+  // Same answer whether or not the account exists, so this can't be used to probe emails.
+  if (error && !/signups not allowed|user not found/i.test(error.message)) return { error: error.message };
+  return { message: "If there’s an account for that email, a sign-in link is on its way." };
+}
+
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
