@@ -5,7 +5,7 @@ import { supabaseEnv } from "./env";
 
 /** Supabase client for server components, server actions and route handlers (acts as the signed-in user).
  * Pass `source: "ai"` when the owner assistant is acting, so the audit log records it. */
-export async function createClient(opts: { source?: "ai" } = {}) {
+export async function createClient(opts: { source?: "ai" | "import" } = {}) {
   const cookieStore = await cookies(); // first, so pages using this are always dynamic
   const { url, key } = supabaseEnv();
   return createServerClient(url, key, {
