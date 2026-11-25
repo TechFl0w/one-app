@@ -41,7 +41,8 @@ export async function sendOwnerMessage(businessId: string, pageId: string | unde
       await saveConversation(supabase, businessId, userId, convo.history, transcript);
       return { ok: true, transcript, changed: false };
     }
-    const turn = await runOwnerTurn({ backend, history: historyForNextTurn(convo.history), message, pageId, images });
+    const { data: biz } = await supabase.from("businesses").select("ai_model").eq("id", businessId).maybeSingle();
+    const turn = await runOwnerTurn({ backend, history: historyForNextTurn(convo.history), message, pageId, images, modelId: biz?.ai_model });
     await logUsage(supabase, businessId, turn.usage);
     await savePending(supabase, businessId, turn.pending);
     transcript.push(newItem("assistant", turn.response.text, { response: turn.response }));
