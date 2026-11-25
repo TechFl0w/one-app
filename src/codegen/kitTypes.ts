@@ -65,6 +65,12 @@ declare module "@one/kit" {
 
   /** Go to another page of the app (page id, e.g. "pg_clients"). */
   export function navigate(pageId: string): void;
+  /**
+   * THE way to add or edit a record: One App opens a modal form over the whole page (validated,
+   * right input per field, linked-record pickers). Resolves the saved record, or null if cancelled.
+   * Lists refresh by themselves. defaults prefills a new record (e.g. { fld_client: clientId }).
+   */
+  export function openRecordForm(opts: { table: string; recordId?: string; fields?: string[]; title?: string; submitLabel?: string; defaults?: RecordData }): Promise<RecordRow | null>;
   /** Short message at the bottom of the screen. */
   export function toast(message: string): void;
   export function formatMoney(amount: number | null | undefined): string;
@@ -82,7 +88,7 @@ declare module "@one/kit" {
   /** Our dropdown (never the browser's). */
   export function Select(props: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; placeholder?: string; label?: ReactNode; className?: string }): JSX.Element;
   export function DateTimeInput(props: { value: string; onChange: (v: string) => void; withTime?: boolean; label?: ReactNode; className?: string }): JSX.Element;
-  /** A form for creating (or editing, with recordId) a record of a table, with the right input per field. */
+  /** An inline form for a record (only when the design shows the form on the page itself — otherwise use openRecordForm). */
   export function RecordForm(props: { table: string; fields?: string[]; recordId?: string; submitLabel?: string; onSaved?: (record: RecordRow) => void; className?: string }): JSX.Element;
   export function Spinner(props: { className?: string }): JSX.Element;
   export function Empty(props: { children?: ReactNode; className?: string }): JSX.Element;

@@ -20,7 +20,7 @@ function script(body) {
   const isToolResult = Array.isArray(last.content) && last.content[0]?.type === "tool_result";
   // The owner's latest words: plain text, or text blocks of a merged message (notes + new message).
   const textOf = (m) => (typeof m.content === "string" ? [m.content] : m.content.filter((b) => b.type === "text").map((b) => b.text));
-  const latest = [...msgs].reverse().map(textOf).flat().find((t) => !t.startsWith("[The owner ") || t.startsWith("[The owner is looking"));
+  const latest = [...msgs].reverse().map(textOf).flat().filter((t) => !t.startsWith("Current setup:")).find((t) => !t.startsWith("[The owner ") || t.startsWith("[The owner is looking"));
   const ownerText = (latest ?? "").replace(/^\[The owner is looking at[^\]]*\]\s*/, "");
   if (isToolResult) {
     let r = {};
@@ -70,7 +70,7 @@ function script(body) {
       replaceBlocks: ["blk_board"],
       position: { x: 0, y: 0, w: 12, h: 8 },
       source: [
-        'import { Collapsible, RecordForm, useRecords, Card, Badge, optionLabel, formatDate, recordLabel } from "@one/kit";',
+        'import { Collapsible, RecordForm, useRecords, Card, Badge, Button, openRecordForm, optionLabel, formatDate, recordLabel } from "@one/kit";',
         "export default function BookingsHub() {",
         '  const { records, total } = useRecords({ table: "tbl_bookings", sort: [{ field: "fld_start", dir: "asc" }], limit: 5 });',
         "  return (",
@@ -78,7 +78,7 @@ function script(body) {
         '      <Collapsible title="New booking" defaultOpen={false}>',
         '        <RecordForm table="tbl_bookings" fields={["fld_client", "fld_start", "fld_status"]} />',
         "      </Collapsible>",
-        '      <Card title={`Upcoming (${total})`}>',
+        '      <Card title={`Upcoming (${total})`} actions={<Button size="sm" onClick={() => openRecordForm({ table: "tbl_bookings", fields: ["fld_client", "fld_start", "fld_status"] })}>Add booking</Button>}>',
         '        <ul className="divide-y divide-line">',
         "          {records.map((r) => (",
         '            <li key={r.id} className="flex items-center gap-3 py-2 text-sm" data-testid="booking-row">',

@@ -39,7 +39,7 @@ export function DatePicker({ name, id, withTime = false, required, defaultValue 
   const move = (n: number) => setView((v) => ({ y: v.y + Math.floor((v.m + n) / 12), m: (v.m + n + 12) % 12 }));
 
   return (
-    <div ref={root} className="flex gap-2">
+    <div ref={root} className="flex gap-2" onKeyDown={(e) => open && e.key === "Escape" && (e.preventDefault(), setOpen(false))}>
       <input type="hidden" name={name} value={date ? value : ""} />
       {required && !date && <input tabIndex={-1} aria-hidden className="pointer-events-none absolute opacity-0" required value="" onChange={() => {}} />}
       <div className="relative flex-1">

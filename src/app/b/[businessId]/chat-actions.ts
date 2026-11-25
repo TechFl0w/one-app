@@ -6,7 +6,7 @@ import { cleanImages, runConfirmedAction, runOwnerTurn, withoutImages } from "@/
 import { hasModelCredentials, markResolved, MISSING_KEY_TEXT, newItem, withNote } from "@/agent/chatFlow";
 import type { ChatItem } from "@/agent/transcript";
 import { supabaseOwnerBackend } from "@/server/ownerBackend";
-import { historyForNextTurn, loadConversation, loadPending, resolvePending, savePending, saveConversation } from "@/server/ownerChat";
+import { historyForNextTurn, loadConversation, logUsage, loadPending, resolvePending, savePending, saveConversation } from "@/server/ownerChat";
 import { undoBlueprintChange } from "./actions";
 
 /** Chat panel server actions for a real business. The caller is the signed-in user (RLS). */
@@ -42,6 +42,7 @@ export async function sendOwnerMessage(businessId: string, pageId: string | unde
       return { ok: true, transcript, changed: false };
     }
     const turn = await runOwnerTurn({ backend, history: historyForNextTurn(convo.history), message, pageId, images });
+    await logUsage(supabase, businessId, turn.usage);
     await savePending(supabase, businessId, turn.pending);
     transcript.push(newItem("assistant", turn.response.text, { response: turn.response }));
     await saveConversation(supabase, businessId, userId, withoutImages(turn.history), transcript);

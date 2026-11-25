@@ -1,10 +1,36 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Message } from "@/agent/ownerAgent";
+import type { Message, TurnUsage } from "@/agent/ownerAgent";
 import type { PendingAction } from "@/agent/types";
 import { MAX_HISTORY_MESSAGES, MAX_TRANSCRIPT_ITEMS, type ChatItem } from "@/agent/transcript";
 
 /** Storage for the owner's conversation and pending confirmations (RLS: own rows only). */
+
+/** Logs what a turn cost. Never fails the turn. */
+export async function logUsage(supabase: SupabaseClient, businessId: string, u: TurnUsage) {
+  if (!u.requests) return;
+  const { error } = await supabase.from("ai_usage").insert({
+    business_id: businessId,
+    model: u.model,
+    requests: u.requests,
+    input_tokens: u.inputTokens,
+    output_tokens: u.outputTokens,
+    cache_read_tokens: u.cacheReadTokens,
+    cache_write_tokens: u.cacheWriteTokens,
+    cost_usd: Number(u.costUsd.toFixed(6)),
+  });
+  if (error) console.error("ai usage not logged:", error.message);
+  console.info(`ai turn ${u.model}: ${u.requests} calls, input ${u.inputTokens}, cache read ${u.cacheReadTokens}, cache write ${u.cacheWriteTokens}, output ${u.outputTokens}, about ${u.costUsd.toFixed(3)} USD`);
+}
+
+/** Estimated assistant spend this calendar month (UTC). */
+export async function usageThisMonth(supabase: SupabaseClient, businessId: string) {
+  const start = new Date();
+  start.setUTCDate(1);
+  start.setUTCHours(0, 0, 0, 0);
+  const { data } = await supabase.from("ai_usage").select("cost_usd").eq("business_id", businessId).gte("created_at", start.toISOString()).limit(10000);
+  return (data ?? []).reduce((a, r) => ({ cost: a.cost + Number(r.cost_usd), turns: a.turns + 1 }), { cost: 0, turns: 0 });
+}
 
 export async function loadConversation(supabase: SupabaseClient, businessId: string, userId: string) {
   const { data, error } = await supabase

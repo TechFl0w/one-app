@@ -20,7 +20,7 @@ export type HostToFrame =
   /** Asks the frame for a picture of what it shows (the assistant's self-check). */
   | { type: "capture"; id: number };
 
-export type CallMethod = "records.list" | "records.get" | "records.create" | "records.update" | "records.remove" | "navigate" | "toast";
+export type CallMethod = "records.list" | "records.get" | "records.create" | "records.update" | "records.remove" | "navigate" | "toast" | "form.open";
 
 export type FrameToHost =
   | { type: "ready" }

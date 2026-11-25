@@ -41,7 +41,8 @@ export interface PaymentsBackend {
 
 export interface BuildPlan {
   goal: string;
-  steps: { id: string; title: string; done: boolean }[];
+  /** images: 1-based numbers of the owner's screenshots this step reproduces (only those are sent again). */
+  steps: { id: string; title: string; done: boolean; images?: number[] }[];
 }
 
 /** A risky tool call held back until the owner confirms it (executed by code, not the model). */

@@ -43,11 +43,14 @@ describe("owner agent", () => {
     expect(req.output_config).toEqual({ effort: "medium" });
     const system = req.system as Anthropic.Beta.BetaTextBlockParam[];
     expect(system[0].cache_control).toEqual({ type: "ephemeral" });
-    expect(system[1].text).toContain('blk_cal calendar "Today’s calendar" from tbl_bookings');
+    expect(system).toHaveLength(1);
+    expect(req.cache_control).toEqual({ type: "ephemeral" });
+    expect(JSON.stringify(req.messages[0].content)).toContain('blk_cal calendar \\"Today’s calendar\\" from tbl_bookings');
     expect(req.tools!.map((t) => (t as Anthropic.Beta.BetaTool).name)).toEqual([
       "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "write_component", "plan_build", "read_component", "write_function", "read_function", "list_api_keys", "test_function", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
     ]);
-    expect(req.messages[0].content).toContain('looking at page "Today" (pg_today)');
+    expect(JSON.stringify(req.messages[0].content)).toContain('looking at page \\"Today\\" (pg_today)');
+    expect(r.usage).toMatchObject({ model: "claude-opus-5-5" });
     expect(r.response).toEqual({ text: "Hi!", changed: false });
     expect(r.history).toHaveLength(2);
   });
@@ -77,6 +80,25 @@ describe("owner agent", () => {
     expect(r.response.preview?.ops).toEqual([{ op: "rename", risk: "safe", description: "Rename page “Clients” to “Guests”" }]);
     expect(r.response.buttons?.map((b) => b.action)).toEqual(["keep", "undo"]);
     expect(r.pending).toEqual([]);
+  });
+
+  it("keeps the history cacheable: setup notes are appended (only when the setup changed), usage is summed", async () => {
+    const { backend } = setup();
+    const withUsage = (m: Anthropic.Beta.BetaMessage, u: Record<string, number>) => ({ ...m, usage: u }) as unknown as Anthropic.Beta.BetaMessage;
+    const { model, requests } = scripted(
+      withUsage(call("query_records", { table: "tbl_clients" }, "tu_q"), { input_tokens: 1000, output_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 5000 }),
+      withUsage(call("change_setup", { summary: "Rename", ops: [{ op: "rename", target: { kind: "page", pageId: "pg_clients" }, label: "Guests" }] }), { input_tokens: 200, output_tokens: 100, cache_read_input_tokens: 6000, cache_creation_input_tokens: 300 }),
+      withUsage(say("Done."), { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 6500, cache_creation_input_tokens: 200 }),
+    );
+    const r = await runOwnerTurn({ backend, history: [], message: "rename clients", model });
+    const texts = (m: Anthropic.Beta.BetaMessageParam) => (Array.isArray(m.content) ? m.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text) : []);
+    // Read-only step: no new note. Setup change: an updated note after the tool result.
+    expect(texts(requests[1].messages.at(-1)!)).toEqual([]);
+    expect(texts(requests[2].messages.at(-1)!).join("")).toContain('"Guests"');
+    // Earlier messages are never rewritten between steps.
+    expect(requests[2].messages.slice(0, requests[1].messages.length)).toEqual(requests[1].messages);
+    expect(r.usage).toMatchObject({ requests: 3, inputTokens: 1300, outputTokens: 250, cacheReadTokens: 12500, cacheWriteTokens: 5500 });
+    expect(r.usage.costUsd).toBeCloseTo((1300 * 4 + 250 * 20 + 12500 * 0.2 + 5500 * 5) / 1e6, 8);
   });
 
   it("holds risky actions for confirmation and runs them only when confirmed", async () => {

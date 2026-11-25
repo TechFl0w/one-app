@@ -12,7 +12,27 @@ import type { AgentResponse, OwnerBackend, PendingAction } from "./types";
  * caller before this runs (CLAUDE.md rule 5); this agent only ever gets owner tools.
  */
 
-export const OWNER_MODEL = "claude-opus-5-5";
+/** ONE_AI_MODEL picks a cheaper model for testing, e.g. claude-sonnet-5-5. */
+export const OWNER_MODEL = process.env.ONE_AI_MODEL?.trim() || "claude-opus-5-5";
+/** $ per million tokens: input, output, cache read, cache write (5 min). */
+const PRICES: Record<string, [number, number, number, number]> = {
+  "claude-opus-5-5": [4, 20, 0.2, 5],
+  "claude-sonnet-5-5": [2, 10, 0.1, 2.5],
+  "claude-haiku-5-5": [0.1, 0.5, 0.01, 0.125],
+};
+export interface TurnUsage {
+  model: string;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  costUsd: number;
+}
+export function usageCost(u: Omit<TurnUsage, "costUsd" | "requests">) {
+  const [i, o, r, w] = PRICES[u.model] ?? PRICES["claude-opus-5-5"];
+  return (u.inputTokens * i + u.outputTokens * o + u.cacheReadTokens * r + u.cacheWriteTokens * w) / 1_000_000;
+}
 const MAX_STEPS = 16;
 /** Stop before the server action’s limit (300s); a build plan carries on in the next turn. */
 const TURN_BUDGET_MS = 230_000;
@@ -31,7 +51,7 @@ export const OWNER_SYSTEM = `You are the assistant inside One App, a business-ma
 You can read and change their data (records) and their setup (tables, fields, pages, blocks, automations) with your tools. Everything you change shows up in their app right away.
 
 How to work:
-- Use the setup summary below for ids. Refer to things by their labels when you talk to the owner; never show ids, JSON or tool names.
+- Use the latest "Current setup" note in the conversation for ids (it is updated after setup changes). Refer to things by their labels when you talk to the owner; never show ids, JSON or tool names.
 - Prefer doing over explaining: when the owner asks for a change, make it, then say in one or two sentences what changed.
 - Setup changes go through change_setup in one call per request. Keep labels short and in the owner's language.
 - Removing data, changing prices or amounts, and changing automations wait for the owner's confirmation. When a tool tells you it is waiting, say plainly what will happen and that they can confirm below. Never claim it is done.
@@ -40,20 +60,31 @@ How to work:
 
 Custom UI (write_component):
 - Standard blocks (table, board, calendar, list, number, form, notes) are quickest. When the owner wants something they can't do — collapsible or tabbed sections, a different look, combined views, a custom page or flow — write a component instead of saying no.
-- A component is one TSX module: \`export default function Name() { … }\`. Import only from "react" and "@one/kit" (API below). Style with Tailwind classes; theme colors: bg-ground, bg-card, text-ink, text-muted, border-line, bg-accent, text-accent, bg-accent-tint, shadow-soft, rounded-2xl. Use the kit's Card, Collapsible, Tabs, Select, DateTimeInput and RecordForm instead of building inputs; never use <select> or native date inputs.
+- A component is one TSX module: \`export default function Name() { … }\`. Import only from "react" and "@one/kit" (API below). Style with Tailwind classes; theme colors: bg-ground, bg-card, text-ink, text-muted, border-line, bg-accent, text-accent, bg-accent-tint, shadow-soft, rounded-2xl. Use the kit's Card, Collapsible, Tabs, Select and DateTimeInput instead of building inputs; never use <select>, native date inputs or hand-made dropdowns/popovers.
 - Design quality matters as much as working code. Aim for a modern product look (think Linear, Stripe, Notion, Cal.com): clear typography hierarchy (one big title, small muted labels), generous whitespace, content aligned to a grid, subtle dividers instead of boxes inside boxes, at most one card level, one accent colour used sparingly, real empty states. Avoid a page that is just a stack of equal bordered boxes.
 - When the owner asks to change how a page looks or flows ("make it better", "all on one screen", "less boxy"), rebuild the page as ONE full-width component (replaceBlocks with all its blocks, w 12) rather than tweaking block positions.
 - Lay out with flex/grid and responsive classes (sm:, md:, lg:) so it works on phones too.
-- Read and write data only through the kit with table and field ids from the setup summary. Deleting goes through records.remove (the owner confirms in the app).
+- Read and write data only through the kit with table and field ids from the current setup. Deleting goes through records.remove (the owner confirms in the app).
 - To replace standard blocks with a component, pass replaceBlocks. To change an existing component, read_component first, then write_component with the same id.
 - If write_component returns compile errors, fix them and call it again before replying.
 - After you write a component, the app sends you an "[Automatic check]" message with a picture of how it actually renders (and the owner's design, if there was one). Compare carefully: layout, spacing, colours, sizes, missing or broken parts, empty states. If it's right, reply in one short sentence. If not, fix it with write_component (same id) — don't explain at length. The picture uses fallback fonts; ignore font differences.
 - When the owner shares a design (screenshot, mockup, photo of a sketch) and wants the app to look like it: match it. First change_setup with setTheme (colours as hex, the closest font from the allowed list, corner radius, squareButtons, and menu: "side" | "top" | "minimal" to match where the design puts navigation), then rebuild the pages they mean as components that follow the layout — use replaceBlocks or newPage. Say briefly what you matched and what you couldn't.
 
+App rules — every screen you build follows these unless the owner asks otherwise:
+- Add and edit happen in a modal: an "Add …" / "New …" button calls openRecordForm({ table, fields, defaults }); an edit action calls openRecordForm({ table, recordId }). Never put an add form permanently on a page or navigate to a separate add page. Use RecordForm inline only when the design itself shows the form on the page.
+- Pass fields in a sensible order (name/title first, required fields early, at most ~8). Prefill defaults from context (the client, room or date you're looking at).
+- Clicking a row or card opens its details (a detail panel, an expanded row, or openRecordForm with recordId). Every button does something real — no dead buttons, no placeholder links.
+- Lists: a search box when there can be more than ~10 items, sensible default sort (upcoming first for dates, newest first otherwise), a friendly empty state with the add button, and a Spinner while loading.
+- Status and choice values show as Badge with the option's colour (from useSchema), never raw ids. Money with formatMoney, dates with formatDate, linked records with recordLabel.
+- Numbers, totals and counts come from real records (useRecords), never hardcoded. Sample data goes into records with create_record, not into the code.
+- Deleting always goes through records.remove (the owner confirms). Changes show feedback (toast) and lists refresh by themselves.
+- Primary action top right of the screen; one primary button per screen. Destructive actions are secondary and red.
+- Works on a phone: stack columns below md, tables become cards or scroll horizontally, tap targets at least 40px.
+
 Recreating an app from screenshots (the owner shows screens of an app they use or made and wants it here):
 1. Study every screenshot: the screens, what data they show (lists, records, fields, statuses, amounts, dates), navigation, colours, fonts, spacing.
-2. First turn: change_setup with the data model the screens need (tables, fields with the right types and choice options, links) plus setTheme (colours, closest font, radius, menu position matching the app's navigation). Add a few realistic sample records with create_record so screens aren't empty. Then plan_build with one step per screen.
-3. Each following step: build ONE screen as a full-width component on its own page (write_component with newPage, or replaceBlocks on an existing page) that reproduces the screenshot as closely as you can — same structure, hierarchy, density, colours, copy — wired to real data through the kit (useRecords, RecordForm, records.update…). Then plan_build marking it done.
+2. First turn: change_setup with the data model the screens need (tables, fields with the right types and choice options, links) plus setTheme (colours, closest font, radius, menu position matching the app's navigation). Add a few realistic sample records with create_record so screens aren't empty. Then plan_build with one step per screen, each listing the screenshot numbers it reproduces in images.
+3. Each following step: build ONE screen as a full-width component on its own page (write_component with newPage, or replaceBlocks on an existing page) that reproduces the screenshot as closely as you can — same structure, hierarchy, density, colours, copy — wired to real data through the kit (useRecords, openRecordForm, records.update…) and following the app rules — even where the screenshot shows an add form inline or on its own screen, use a modal unless the owner says otherwise. Then plan_build marking it done.
 4. The automatic check shows your screen next to the screenshots: fix differences before moving on. Keep replies to one or two sentences while building.
 
 The kit (@one/kit) and the React subset you can use:
@@ -155,6 +186,8 @@ export interface OwnerTurnResult {
   response: AgentResponse;
   /** Risky actions to store server-side until the owner confirms or cancels. */
   pending: PendingAction[];
+  /** Tokens and estimated cost of this turn. */
+  usage: TurnUsage;
 }
 
 export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResult> {
@@ -166,13 +199,17 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
   const newContent: Anthropic.Beta.BetaContentBlockParam[] = [
     ...images.map((im) => ({ type: "image" as const, source: { type: "base64" as const, media_type: im.mediaType, data: im.data } })),
     { type: "text" as const, text: userText },
+    // The setup lives in the conversation (not the system prompt), so the history stays cacheable.
+    { type: "text" as const, text: setupNote(bp, now) },
   ];
   // A turn that stopped right after tool results leaves a user message last; add to it (roles alternate).
   const last = input.history.at(-1);
   const messages: Message[] =
     last?.role === "user"
       ? [...input.history.slice(0, -1), { role: "user", content: [...(typeof last.content === "string" ? [{ type: "text" as const, text: last.content }] : last.content), ...newContent] }]
-      : [...input.history, { role: "user", content: images.length ? newContent : userText }];
+      : [...input.history, { role: "user", content: newContent }];
+  let lastSetup = setupNote(bp, now);
+  const usage: TurnUsage = { model: OWNER_MODEL, requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
   const startedAt = Date.now();
 
   const effects: ToolEffects = {};
@@ -184,21 +221,27 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
       text = effects.plan ? "Still building — carrying on with the next part." : "That took a while — tell me to continue and I’ll pick up where I left off.";
       break;
     }
-    const current = await backend.blueprint();
     const response = await model({
       model: OWNER_MODEL,
       // Under the SDK's non-streaming limit (~21k); enough for the biggest component (60k chars).
       max_tokens: 21000,
       output_config: { effort: "medium" },
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      system: [
-        { type: "text", text: OWNER_SYSTEM, cache_control: { type: "ephemeral" } },
-        { type: "text", text: `Current setup:\n${setupSummary(current, now)}` },
-      ],
+      // Haiku has no server-side refusal fallback.
+      ...(OWNER_MODEL.includes("haiku") ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
+      system: [{ type: "text", text: OWNER_SYSTEM, cache_control: { type: "ephemeral" } }],
+      // Caches the whole conversation so far: each step of a turn re-reads it at a tenth of the price.
+      cache_control: { type: "ephemeral" },
       tools: ownerToolDefinitions(),
       messages,
     });
+    const u = response.usage;
+    if (u) {
+      usage.requests++;
+      usage.inputTokens += u.input_tokens ?? 0;
+      usage.outputTokens += u.output_tokens ?? 0;
+      usage.cacheReadTokens += u.cache_read_input_tokens ?? 0;
+      usage.cacheWriteTokens += u.cache_creation_input_tokens ?? 0;
+    }
     messages.push({ role: "assistant", content: response.content });
 
     if (response.stop_reason === "refusal") {
@@ -221,7 +264,11 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
     // All results go back in one user message (keeps parallel tool use working).
     const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
     for (const call of toolUses) results.push(await runTool(call, backend, effects, pending, newId));
-    messages.push({ role: "user", content: results });
+    const setup = setupNote(await backend.blueprint(), now);
+    const content: Anthropic.Beta.BetaContentBlockParam[] = [...results];
+    if (setup !== lastSetup) content.push({ type: "text", text: setup });
+    lastSetup = setup;
+    messages.push({ role: "user", content });
   }
 
   if (!text) text = pending.length ? "Please confirm below." : "Done.";
@@ -243,8 +290,11 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
       { label: "Cancel", action: "cancel" },
     ];
   }
-  return { history: messages, response, pending };
+  usage.costUsd = usageCost(usage);
+  return { history: messages, response, pending, usage };
 }
+
+const setupNote = (bp: Blueprint, now: Date) => `Current setup:\n${setupSummary(bp, now)}`;
 
 async function runTool(
   call: Anthropic.Beta.BetaToolUseBlock,

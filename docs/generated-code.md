@@ -71,6 +71,12 @@ records (list/get/create/update/delete), the business's tables and fields, navig
 current user, and UI primitives (Card, Button, Badge, Collapsible, Tabs, Field inputs…).
 Generated code calls the kit; the kit calls One App; One App enforces permissions.
 
+Add/edit screens: `openRecordForm({ table, recordId?, fields?, defaults? })` asks One App to
+open its own modal form over the whole page (a frame can only draw inside its own box). Kit
+dropdowns and calendars close on selection, outside click, Escape, and only one is open at a time.
+Rules every generated screen follows (modals for add/edit, clickable rows, empty states…):
+`docs/app-rules.md`.
+
 ## Theme and designs
 
 - `blueprint.theme`: colours (hex), font and heading font (from `THEME_FONTS`, Google Fonts), card

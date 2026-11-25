@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { RecordQuery } from "@/schema/records";
 import { Dialog } from "@/components/edit/Dialog";
-import type { FrameToHost, HostToFrame, SandboxBridge, SandboxSchema } from "@/sandbox/protocol";
+import type { FrameToHost, HostToFrame, SandboxBridge, SandboxRecord, SandboxSchema } from "@/sandbox/protocol";
 import type { Theme } from "@/schema/blueprint";
 import { sandboxSrcdoc } from "./srcdoc";
 import { registerCapture } from "./captureRegistry";
+import { RecordDialog, parseFormRequest, type RecordFormRequest } from "./RecordDialog";
 
 const noop = () => () => {};
 const str = (v: unknown, what: string) => {
@@ -54,6 +55,7 @@ export function SandboxFrame({
   const [height, setHeight] = useState<number | null>(null);
   const [crash, setCrash] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [form, setForm] = useState<{ request: RecordFormRequest; resolve: (r: SandboxRecord | null) => void } | null>(null);
   const [confirm, setConfirm] = useState<{ label: string; resolve: (ok: boolean) => void } | null>(null);
   const themeKey = JSON.stringify(theme ?? null);
   const srcDoc = useMemo(() => (origin ? sandboxSrcdoc(origin, JSON.parse(themeKey) ?? undefined) : undefined), [origin, themeKey]);
@@ -107,6 +109,12 @@ export function SandboxFrame({
             if (!/^pg_[a-z0-9_]{1,60}$/.test(page)) throw new Error("Unknown page");
             router.push(`${basePath}/p/${page}`);
             value = true;
+            break;
+          }
+          case "form.open": {
+            // Add/edit screens are a real modal over the whole page, drawn by One App.
+            const request = parseFormRequest(a[0], schema);
+            value = await new Promise<SandboxRecord | null>((resolve) => setForm({ request, resolve }));
             break;
           }
           case "toast":
@@ -168,6 +176,16 @@ export function SandboxFrame({
         </p>
       )}
       {toast && <p role="status" className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-sm text-white shadow-soft">{toast}</p>}
+      <RecordDialog
+        request={form?.request ?? null}
+        schema={schema}
+        bridge={bridge}
+        onDone={(saved) => {
+          form?.resolve(saved);
+          setForm(null);
+          if (saved) setToast(form?.request.recordId ? "Saved" : "Added");
+        }}
+      />
       <Dialog open={!!confirm} onClose={() => { confirm?.resolve(false); setConfirm(null); }} title="Delete this record?">
         <p className="text-sm text-muted">This removes one {confirm?.label.toLowerCase()} record. It’s kept in the activity log.</p>
         <div className="mt-5 flex justify-end gap-2">
