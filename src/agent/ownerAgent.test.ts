@@ -247,3 +247,27 @@ describe("writing server code", () => {
     expect(setupSummary(state.blueprint)).toContain('fn_shippo "Create shipping labels" hosts: api.goshippo.com');
   });
 });
+
+describe("designs in the chat", () => {
+  it("sends attached images to the model, applies a theme, and keeps images out of stored history", async () => {
+    const { withoutImages } = await import("./ownerAgent");
+    const { backend, state } = setup();
+    const { model, requests } = scripted(
+      call("change_setup", { summary: "Match the design's colours and font", ops: [{ op: "setTheme", theme: { colors: { accent: "#B5482B", ground: "#FBF7F2" }, font: "DM Sans", radius: 8 } }] }),
+      say("Matched the colours and font."),
+    );
+    const r = await runOwnerTurn({ backend, history: [], message: "make it look like this", images: [{ mediaType: "image/jpeg", data: "QUJD" }], model });
+    const first = requests[0].messages[0].content as Anthropic.Beta.BetaContentBlockParam[];
+    expect(first[0]).toEqual({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: "QUJD" } });
+    expect(state.blueprint.theme).toEqual({ colors: { accent: "#B5482B", ground: "#FBF7F2" }, font: "DM Sans", radius: 8 });
+    expect(r.response.preview?.ops[0].description).toBe("Change the look (colours, fonts, shape)");
+    const stored = JSON.stringify(withoutImages(r.history));
+    expect(stored).not.toContain("QUJD");
+    expect(stored).toContain("[The owner attached an image here.]");
+  });
+
+  it("rejects odd attachments", async () => {
+    const { cleanImages } = await import("./ownerAgent");
+    expect(cleanImages([{ mediaType: "image/gif", data: "QUJD" }, { mediaType: "image/png", data: "not base64!" }, { mediaType: "image/png", data: "QUJD" }, 5])).toEqual([{ mediaType: "image/png", data: "QUJD" }]);
+  });
+});

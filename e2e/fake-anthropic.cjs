@@ -34,6 +34,10 @@ function script(body) {
   if (/rename/i.test(ownerText)) {
     return tool("change_setup", { summary: "Rename Clients to Guests", ops: [{ op: "rename", target: { kind: "page", pageId: "pg_clients" }, label: "Guests" }] });
   }
+  const lastUser = [...msgs].reverse().find((m) => m.role === "user" && Array.isArray(m.content) && m.content.some((b) => b.type === "image"));
+  if (lastUser && lastUser === msgs.at(-1)) {
+    return tool("change_setup", { summary: "Match the design", ops: [{ op: "setTheme", theme: { colors: { accent: "#B5482B", accentHover: "#93391F", accentTint: "#F6E4DD", ground: "#FBF7F2" }, font: "DM Sans", radius: 8 } }] });
+  }
   if (/collapsible/i.test(ownerText)) {
     return tool("write_component", {
       id: "cmp_bookings_hub",

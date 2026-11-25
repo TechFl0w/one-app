@@ -4,6 +4,7 @@ import { Sidebar } from "./Sidebar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import type { ChatItem } from "@/agent/transcript";
 import { SandboxProvider } from "@/components/sandbox/SandboxProvider";
+import { ThemeStyle } from "@/theme/ThemeStyle";
 import type { SandboxBridge } from "@/sandbox/protocol";
 
 export function AppShell({
@@ -32,6 +33,7 @@ export function AppShell({
   return (
     <EditProvider blueprint={blueprint} mode={mode}>
     <SandboxProvider value={{ bridge: sandbox, basePath }}>
+    <ThemeStyle />
     <div className="flex min-h-screen flex-1 flex-col md:flex-row">
       <Sidebar basePath={basePath} businesses={businesses} footer={footer} />
       <div className="flex min-w-0 flex-1 flex-col">

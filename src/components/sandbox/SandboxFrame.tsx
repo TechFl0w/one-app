@@ -6,6 +6,7 @@ import { AlertTriangle } from "lucide-react";
 import { RecordQuery } from "@/schema/records";
 import { Dialog } from "@/components/edit/Dialog";
 import type { FrameToHost, HostToFrame, SandboxBridge, SandboxSchema } from "@/sandbox/protocol";
+import type { Theme } from "@/schema/blueprint";
 import { sandboxSrcdoc } from "./srcdoc";
 
 const noop = () => () => {};
@@ -31,7 +32,9 @@ export function SandboxFrame({
   basePath,
   autoHeight = false,
   title,
+  theme,
 }: {
+  theme?: Theme;
   compiled: string;
   props: Record<string, unknown>;
   schema: SandboxSchema;
@@ -48,7 +51,8 @@ export function SandboxFrame({
   const [crash, setCrash] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ label: string; resolve: (ok: boolean) => void } | null>(null);
-  const srcDoc = useMemo(() => (origin ? sandboxSrcdoc(origin) : undefined), [origin]);
+  const themeKey = JSON.stringify(theme ?? null);
+  const srcDoc = useMemo(() => (origin ? sandboxSrcdoc(origin, JSON.parse(themeKey) ?? undefined) : undefined), [origin, themeKey]);
   const init = useRef<HostToFrame>({ type: "init", compiled, props, schema, autoHeight });
   useEffect(() => {
     init.current = { type: "init", compiled, props, schema, autoHeight };
@@ -123,7 +127,7 @@ export function SandboxFrame({
       {srcDoc && (
         <iframe
           // A new version of the component (after an edit) restarts the frame.
-          key={compiled}
+          key={compiled + themeKey}
           ref={frame}
           title={title}
           sandbox="allow-scripts"

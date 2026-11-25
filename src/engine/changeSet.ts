@@ -412,6 +412,12 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
       if (!bp.components!.length) delete bp.components;
       return [{ op: "putComponent", component }];
     }
+    case "setTheme": {
+      const old = bp.theme ?? null;
+      if (op.theme) bp.theme = structuredClone(op.theme);
+      else delete bp.theme;
+      return [{ op: "setTheme", theme: old }];
+    }
     case "putFunction": {
       bp.functions ??= [];
       const i = bp.functions.findIndex((f) => f.id === op.fn.id);
@@ -523,6 +529,8 @@ function describe(bp: Blueprint, op: Operation): string {
       return (bp.components ?? []).some((c) => c.id === op.component.id) ? `Update custom component ${q(op.component.label)}` : `Add custom component ${q(op.component.label)}`;
     case "removeComponent":
       return `Remove custom component ${labelOrId(bp.components ?? [], op.componentId)}`;
+    case "setTheme":
+      return op.theme ? "Change the look (colours, fonts, shape)" : "Go back to the standard look";
     case "putFunction": {
       const verb = (bp.functions ?? []).some((f) => f.id === op.fn.id) ? "Update" : "Add";
       return `${verb} server code ${q(op.fn.label)}${op.fn.hosts.length ? ` (can reach ${op.fn.hosts.join(", ")})` : ""}${op.fn.webhook ? ", callable from outside" : ""}`;

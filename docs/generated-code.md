@@ -65,3 +65,12 @@ One small typed API for generated code — the same surface as the owner agent's
 records (list/get/create/update/delete), the business's tables and fields, navigation, toasts,
 current user, and UI primitives (Card, Button, Badge, Collapsible, Tabs, Field inputs…).
 Generated code calls the kit; the kit calls One App; One App enforces permissions.
+
+## Theme and designs
+
+- `blueprint.theme`: colours (hex), font and heading font (from `THEME_FONTS`, Google Fonts), card
+  radius, square buttons. Changed with the `setTheme` op (safe, undoable). `ThemeStyle` applies it to
+  the app as CSS variables; sandbox frames get the same values (`sandboxSrcdoc(origin, theme)`).
+- The chat accepts up to 3 images (pasted, dropped or picked; resized to 1280px JPEG in the
+  browser). They go to the model for that turn only; stored history keeps a note instead.
+  Given a design, the assistant sets the theme, then rebuilds pages as components.
