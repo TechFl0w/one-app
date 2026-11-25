@@ -68,6 +68,7 @@ function script(body) {
       summary: "Bookings page with a collapsible new-booking form and upcoming bookings",
       page: "pg_bookings",
       replaceBlocks: ["blk_board"],
+      inlineForm: true,
       position: { x: 0, y: 0, w: 12, h: 8 },
       source: [
         'import { Collapsible, RecordForm, useRecords, Card, Badge, Button, openRecordForm, optionLabel, formatDate, recordLabel } from "@one/kit";',

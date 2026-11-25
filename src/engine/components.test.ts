@@ -22,6 +22,18 @@ describe("generated components", () => {
     expect({ ...gone.blueprint, version: bp.version }).toEqual(bp);
   });
 
+  it("never lets a setup change remove something a live screen uses", () => {
+    const bp = salonBlueprint();
+    const uses: Component = { ...comp(1), source: 'export default function X() { return useRecords({ table: "tbl_clients", sort: [{ field: "fld_whatsapp", dir: "asc" }] }) }' };
+    const withScreen = applyChangeSet(bp, cs(bp, { op: "putComponent", component: uses })).blueprint;
+    const remove = cs(withScreen, { op: "removeField", tableId: "tbl_clients", fieldId: "fld_whatsapp" });
+    expect(() => applyChangeSet(withScreen, remove, { confirmed: true })).toThrow(/“WhatsApp” field of Clients is still used by the “Booking hub” screen/i);
+    // Renaming is fine (screens use ids), and once the screen stops using it the field can go.
+    applyChangeSet(withScreen, cs(withScreen, { op: "rename", target: { kind: "field", tableId: "tbl_clients", fieldId: "fld_whatsapp" }, label: "Mobile" }));
+    const updated = applyChangeSet(withScreen, cs(withScreen, { op: "putComponent", component: comp(2) })).blueprint;
+    expect(() => applyChangeSet(updated, cs(updated, { op: "removeField", tableId: "tbl_clients", fieldId: "fld_whatsapp" }), { confirmed: true })).not.toThrow();
+  });
+
   it("rejects custom blocks pointing at unknown components", () => {
     const bp = salonBlueprint();
     const r = (() => { try { applyChangeSet(bp, cs(bp, { op: "addBlock", pageId: "pg_today", block: customBlock })); } catch (e) { return e; } })();

@@ -22,5 +22,10 @@ The owner can ask for something else; the rules are in the owner agent's prompt
 - **Business rules in the data:** derived/synced values (a room's status from its tenant, an
   open-maintenance flag, totals) are rollup/formula fields or automations — never block code that
   updates other tables, which tables, imports and the API would bypass.
+- **Hierarchy:** records always show their parent for context (rooms with their building, tenants
+  with room and building). Lists group by parent or show it in a column; details show the path
+  (Building › Room). Children link to their parent rather than copying names.
+- **Plain language:** the assistant talks about what the owner will notice, never about code,
+  functions, fields or automations; work that waits on a confirmation continues by itself.
 - **Ids, not labels:** compare choices to option ids, never label text.
 - **Inputs:** only the kit's Select / DateTimeInput (never native, never hand-made popovers).

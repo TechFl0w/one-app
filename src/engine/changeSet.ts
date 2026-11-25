@@ -1,3 +1,4 @@
+import { brokenByChange, describeId } from "@/codegen/references";
 import type { z } from "zod";
 import { Blueprint, type Block, type LayoutKey, type Page } from "@/schema/blueprint";
 import { ChangeSet, OP_RISK, type Operation } from "@/schema/changeSet";
@@ -121,6 +122,15 @@ function run(blueprint: Blueprint, input: unknown, opts: ApplyOptions): ChangeSe
   const checked = Blueprint.safeParse(draft);
   if (!checked.success) {
     throw new ChangeSetError("invalid", explainIssue(draft, checked.error.issues[0]), undefined, checked.error.issues);
+  }
+  // Never break a live screen: removing something a screen's code uses is refused (rename is fine).
+  const broken = brokenByChange(blueprint, checked.data);
+  if (broken.length) {
+    const b = broken[0];
+    throw new ChangeSetError(
+      "invalid",
+      `${b.ids.map((id) => describeId(blueprint, id)).join(", ")} ${b.ids.length > 1 ? "are" : "is"} still used by the “${b.component}” screen. Change that screen first (the assistant can do it), then remove ${b.ids.length > 1 ? "them" : "it"}.`,
+    );
   }
 
   return {
@@ -526,16 +536,16 @@ function describe(bp: Blueprint, op: Operation): string {
     case "toggleAutomation":
       return `${op.enabled ? "Turn on" : "Turn off"} automation ${auto(op.automationId)}`;
     case "putComponent":
-      return (bp.components ?? []).some((c) => c.id === op.component.id) ? `Update custom component ${q(op.component.label)}` : `Add custom component ${q(op.component.label)}`;
+      return (bp.components ?? []).some((c) => c.id === op.component.id) ? `Update screen ${q(op.component.label)}` : `Add screen ${q(op.component.label)}`;
     case "removeComponent":
-      return `Remove custom component ${labelOrId(bp.components ?? [], op.componentId)}`;
+      return `Remove screen ${labelOrId(bp.components ?? [], op.componentId)}`;
     case "setTheme":
       return op.theme ? "Change the look (colours, fonts, shape)" : "Go back to the standard look";
     case "putFunction": {
       const verb = (bp.functions ?? []).some((f) => f.id === op.fn.id) ? "Update" : "Add";
-      return `${verb} server code ${q(op.fn.label)}${op.fn.hosts.length ? ` (can reach ${op.fn.hosts.join(", ")})` : ""}${op.fn.webhook ? ", callable from outside" : ""}`;
+      return `${verb} background task ${q(op.fn.label)}${op.fn.hosts.length ? ` (connects to ${op.fn.hosts.join(", ")})` : ""}${op.fn.webhook ? ", other services can start it" : ""}`;
     }
     case "removeFunction":
-      return `Remove server code ${labelOrId(bp.functions ?? [], op.functionId)}`;
+      return `Remove background task ${labelOrId(bp.functions ?? [], op.functionId)}`;
   }
 }

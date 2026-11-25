@@ -15,11 +15,11 @@ const log = (...a) => console.log("•", ...a);
   await p.goto(BASE + "/demo/p/pg_today");
   await p.getByRole("button", { name: "Ask the assistant" }).click();
   const ask = async (q) => {
-    const before = await p.locator("aside[aria-label=Assistant] p.bg-ground").count();
+    const before = await p.locator("aside[aria-label=Assistant] [data-role=assistant-text]").count();
     await p.getByLabel("Message").fill(q);
     await p.getByLabel("Message").press("Enter");
-    await p.waitForFunction((n) => document.querySelectorAll("aside[aria-label=Assistant] p.bg-ground").length > n, before);
-    return p.locator("aside[aria-label=Assistant] p.bg-ground").last().textContent();
+    await p.waitForFunction((n) => document.querySelectorAll("aside[aria-label=Assistant] [data-role=assistant-text]").length > n, before);
+    return p.locator("aside[aria-label=Assistant] [data-role=assistant-text]").last().textContent();
   };
 
   const a1 = await ask("how many bookings today?");

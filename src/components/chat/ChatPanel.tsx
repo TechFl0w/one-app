@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ArrowUp, Check, ImagePlus, Sparkles, X } from "lucide-react";
 import type { ChatImage } from "@/agent/ownerAgent";
 import type { BuildPlan } from "@/agent/types";
+import { Markdown } from "./Markdown";
 import { captureComponent } from "@/components/sandbox/captureRegistry";
 import type { ChatItem } from "@/agent/transcript";
 import type { Message } from "@/agent/ownerAgent";
@@ -142,9 +143,15 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
     deliver(`[Automatic check] The first image is how the component you just wrote (${target.componentId}) renders right now.${withDesign} Compare and fix anything that's off, or confirm briefly.`, [picture, ...shots].slice(0, 8), "Checking how it looks…");
   });
 
+  // After the owner confirms, work that waited on it carries on by itself (the plan's next step).
+  const resume = useRef(false);
   useEffect(() => {
     if (busy) return;
     const last = transcript.at(-1);
+    if (resume.current && last?.resolved === "confirmed") {
+      resume.current = false;
+      return continuePlan();
+    }
     if (!last || last.role !== "assistant" || checked.current.has(last.id)) return;
     checked.current.add(last.id);
     if (last.response?.plan) plan.current = last.response.plan;
@@ -166,6 +173,10 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
             ? await resolvePreview(mode.businessId, chat.id, action)
             : await resolveConfirmation(mode.businessId, chat.id, action);
         if (!r.ok) return setError(r.error);
+        if (action === "confirm" && chat.response?.plan) {
+          resume.current = true;
+          autoSteps.current = 0;
+        }
         setTranscript(r.transcript);
         if (r.changed) router.refresh();
         return;
@@ -193,6 +204,7 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
       if (!r.ok) return setError(r.error);
       adoptBlueprint(r.blueprint);
       demo.current.history.push({ role: "user", content: r.notes.join("\n") });
+      if (chat.response?.plan) resume.current = true;
       setResolved(chat.id, r.notes.some((n) => n.includes("failed")) ? "failed" : "confirmed");
     });
   };
@@ -315,7 +327,7 @@ function ChatBubble({ item: m, busy, onAction }: { item: ChatItem; busy: boolean
   const r = m.response;
   return (
     <div className="max-w-[92%] space-y-2">
-      <p className="whitespace-pre-wrap rounded-2xl rounded-bl-md bg-ground px-4 py-2.5 text-sm">{m.text}</p>
+      <Markdown text={m.text} data-role="assistant-text" className="rounded-2xl rounded-bl-md bg-ground px-4 py-2.5 text-sm" />
       {r?.preview && (
         <div className="rounded-2xl border border-line p-3 text-sm">
           <p className="mb-1 font-semibold">{r.preview.summary}</p>

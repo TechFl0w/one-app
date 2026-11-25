@@ -241,14 +241,16 @@ describe("writing custom components", () => {
     const { backend, state } = setup();
     const page = state.blueprint.pages.find((p) => p.id === "pg_bookings")!;
     const replaced = page.layout.blocks.map((b) => b.id);
-    const input = (source: string) => ({ id: "cmp_booking_hub", label: "Bookings hub", source, summary: "Collapsible new-booking form above the board", page: "pg_bookings", replaceBlocks: replaced.slice(0, 1), position: { x: 0, y: 0, w: 12, h: 4 } });
-    const { model, requests } = scripted(call("write_component", input(bad), "t1"), call("write_component", input(good), "t2"), say("Done."));
+    const input = (source: string, inlineForm?: boolean) => ({ id: "cmp_booking_hub", label: "Bookings hub", source, summary: "Collapsible new-booking form above the board", page: "pg_bookings", replaceBlocks: replaced.slice(0, 1), position: { x: 0, y: 0, w: 12, h: 4 }, ...(inlineForm ? { inlineForm } : {}) });
+    const { model, requests } = scripted(call("write_component", input(bad), "t1"), call("write_component", input(good), "t2"), call("write_component", input(good, true), "t3"), say("Done."));
     const r = await runOwnerTurn({ backend, history: [], message: "make the new booking form collapsible with a chevron", model });
 
     const first = lastToolResult(requests[1]);
     expect(first.isError).toBe(true);
     expect(first.content).toMatch(/didn't compile[\s\S]*Line 3:.*title/);
-    expect(JSON.parse(lastToolResult(requests[2]).content).component).toBe("cmp_booking_hub");
+    // An add form on the page is refused unless the owner asked for it (here they did).
+    expect(lastToolResult(requests[2])).toMatchObject({ isError: true, content: expect.stringMatching(/pop-up[\s\S]*openRecordForm/) });
+    expect(JSON.parse(lastToolResult(requests[3]).content).component).toBe("cmp_booking_hub");
 
     expect(state.blueprint.components?.[0]).toMatchObject({ id: "cmp_booking_hub", source: good });
     expect(state.blueprint.components?.[0].compiled).toContain("require(\"@one/kit\")");
@@ -273,7 +275,7 @@ describe("writing server code", () => {
     expect(lastToolResult(requests[1]).content).toMatch(/didn't compile[\s\S]*nope/);
     expect(JSON.parse(lastToolResult(requests[2]).content).status).toBe("waiting_for_owner_confirmation");
     expect(state.blueprint.functions).toBeUndefined();
-    expect(r.pending[0].items).toEqual(["Add server code “Create shipping labels” that can reach api.goshippo.com"]);
+    expect(r.pending[0].items).toEqual(["Add background task “Create shipping labels” that connects to api.goshippo.com"]);
 
     const done = await runConfirmedAction(backend, r.pending[0]);
     expect(done.ok).toBe(true);
