@@ -208,7 +208,7 @@ function Tabs({ tabs, defaultTab, className }: { tabs: { id: string; label: Reac
     <div className={className}>
       <div className="mb-4 flex flex-wrap gap-2" role="tablist">
         {tabs.map((t) => (
-          <button key={t.id} role="tab" aria-selected={t.id === active} onClick={() => setActive(t.id)} className={cx("rounded-full px-4 py-1.5 text-sm", t.id === active ? "bg-accent text-white" : "text-muted hover:bg-ground")}>
+          <button key={t.id} role="tab" aria-selected={t.id === active} onClick={() => setActive(t.id)} className={cx("rounded-[var(--button-radius)] px-4 py-1.5 text-sm", t.id === active ? "bg-accent text-white" : "text-muted hover:bg-ground")}>
             {t.label}
           </button>
         ))}
@@ -218,7 +218,7 @@ function Tabs({ tabs, defaultTab, className }: { tabs: { id: string; label: Reac
   );
 }
 
-const inputCls = "w-full rounded-xl border border-line bg-card px-4 py-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint";
+const inputCls = "w-full rounded-[min(var(--card-radius),12px)] border border-line bg-card px-4 py-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint";
 const Labelled = ({ label, children, className }: Kids & { label?: React.ReactNode }) =>
   label ? (
     <label className={cx("block", className)}>
@@ -262,7 +262,7 @@ function Select({ value, onChange, options, placeholder = "Choose…", label, cl
           <Chevron open={open} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted" />
         </button>
         {open && (
-          <ul role="listbox" className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-64 overflow-y-auto rounded-2xl border border-line bg-card p-1.5 shadow-lg">
+          <ul role="listbox" className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-64 overflow-y-auto rounded-[min(var(--card-radius),16px)] border border-line bg-card p-1.5 shadow-lg">
             {options.map((o) => (
               <li
                 key={o.value}

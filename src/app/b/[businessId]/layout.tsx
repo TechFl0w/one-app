@@ -6,6 +6,9 @@ import { signOut } from "@/app/login/actions";
 import { loadConversation } from "@/server/ownerChat";
 import { sandboxCreate, sandboxGet, sandboxList, sandboxRemove, sandboxUpdate } from "./sandbox-actions";
 
+// The assistant's server actions run here: rebuilding pages from a design can take a few minutes.
+export const maxDuration = 300;
+
 export default async function BusinessLayout({ children, params }: LayoutProps<"/b/[businessId]">) {
   const { businessId } = await params;
   const { blueprint, businesses, supabase, userId } = await getBusinessContext(businessId);
