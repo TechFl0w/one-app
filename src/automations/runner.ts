@@ -72,6 +72,8 @@ export interface AutomationIO {
   hasUpcomingBooking?(businessId: string, record: { tableId: string; recordId: string; data: Record<string, unknown> }, now: Date): Promise<boolean>;
   /** Returns a reason when the message can't be sent (e.g. channel not connected yet). */
   sendMessage(businessId: string, step: Extract<Step, { kind: "send_message" }>, key: string, record: { tableId: string; recordId: string; data: Record<string, unknown> }): Promise<{ sent: true } | { sent: false; reason: string }>;
+  /** Runs a generated server function in its sandbox. Throws on failure (the job retries). */
+  runFunction?(businessId: string, functionId: string, key: string, record: { tableId: string; recordId: string; data: Record<string, unknown> }): Promise<{ ran: true; note?: string } | { ran: false; reason: string }>;
 }
 
 // ---------- scheduling ----------
@@ -177,6 +179,15 @@ export async function runJob(job: Job, io: AutomationIO, queue: JobQueue, now: D
         case "send_message": {
           const r = await io.sendMessage(job.businessId, step, key, { tableId: job.tableId, recordId: job.recordId, data });
           steps.push(r.sent ? { description, outcome: "done" } : { description, outcome: "skipped", note: r.reason });
+          break;
+        }
+        case "run_function": {
+          if (!io.runFunction) {
+            steps.push({ description, outcome: "skipped", note: "Server code can’t run here" });
+            break;
+          }
+          const r = await io.runFunction(job.businessId, step.function, key, { tableId: job.tableId, recordId: job.recordId, data });
+          steps.push(r.ran ? { description, outcome: "done", ...(r.note ? { note: r.note } : {}) } : { description, outcome: "skipped", note: r.reason });
           break;
         }
         case "unsupported":

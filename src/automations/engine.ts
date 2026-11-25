@@ -147,6 +147,7 @@ export type Step =
   | { kind: "notify"; message: string }
   | { kind: "send_message"; channel: string; toField?: string; template?: string; message?: string }
   | { kind: "wait"; ms: number }
+  | { kind: "run_function"; function: string }
   | { kind: "unsupported"; type: string; reason: string };
 
 export function planStep(action: Automation["actions"][number], ctx: { tableId: string; recordId: string; data: Record<string, unknown>; automation: Automation }): Step {
@@ -172,6 +173,8 @@ export function planStep(action: Automation["actions"][number], ctx: { tableId: 
       const ms = parseDuration(action.duration);
       return ms && ms > 0 ? { kind: "wait", ms } : { kind: "unsupported", type: "wait", reason: "Wait needs a duration like 2h or 1d" };
     }
+    case "run_function":
+      return typeof action.function === "string" ? { kind: "run_function", function: action.function } : { kind: "unsupported", type: "run_function", reason: "No function chosen" };
     default:
       return { kind: "unsupported", type: action.type, reason: "This step isn’t available yet" };
   }
@@ -204,6 +207,8 @@ export function describeStep(bp: Blueprint, step: Step): string {
       const [n, unit] = step.ms >= 86_400_000 ? [step.ms / 86_400_000, "day"] : step.ms >= 3_600_000 ? [step.ms / 3_600_000, "hour"] : [step.ms / 60_000, "minute"];
       return `Wait ${n} ${unit}${n === 1 ? "" : "s"}`;
     }
+    case "run_function":
+      return `Run ${bp.functions?.find((f) => f.id === step.function)?.label ?? step.function}`;
     case "unsupported":
       return `${step.type}: ${step.reason}`;
   }

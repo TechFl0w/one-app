@@ -9,8 +9,8 @@ import type { UndoToken } from "@/engine/commit";
 import type { OwnerBackend, PendingAction } from "./types";
 import { recordUpdateIsRisky } from "@/engine/risk";
 import { availableSlots, bookSlot } from "@/booking/service";
-import { compileComponent } from "@/codegen/compile";
-import { ComponentId, GRID_COLUMNS, Label, PageId } from "@/schema/blueprint";
+import { compileComponent, compileFunction } from "@/codegen/compile";
+import { ComponentId, FunctionId, GRID_COLUMNS, Host, Label, PageId } from "@/schema/blueprint";
 import type { Operation as Op } from "@/schema/changeSet";
 
 /**
@@ -202,6 +202,77 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const c = (await b.blueprint()).components?.find((x) => x.id === i.id);
       if (!c) throw new Error(`No component ${i.id}`);
       return { id: c.id, label: c.label, source: c.source };
+    },
+  }),
+
+  tool({
+    name: "write_function",
+    description:
+      "Write (or rewrite) server code in TypeScript: talk to outside APIs (shipping, accounting, calendars, any REST API), sync data, handle webhooks. " +
+      "It runs in an isolated sandbox that can only reach `hosts`. Use secret(NAME) for the business's saved API keys (list_api_keys). " +
+      "To run it from an automation, add an automation with an action {type: \"run_function\", function: id} via change_setup. Set webhook: true to receive calls at the webhook URL. " +
+      "Always waits for the owner's confirmation. Compile errors come back for you to fix.",
+    input: z.strictObject({
+      id: FunctionId,
+      label: Label,
+      source: z.string().min(1).max(60_000).describe("Complete TS module; default export async function run(ctx: RunContext). Import only from '@one/server'; fetch is built in."),
+      hosts: z.array(Host).max(20).describe("Every outside host it calls, e.g. api.goshippo.com"),
+      webhook: z.boolean().optional(),
+    }),
+    // Compile first: errors go straight back to the model instead of to the owner.
+    risk: (i) => {
+      const c = compileFunction(i.source);
+      if (!c.ok) throw new Error(`The code didn't compile — fix these and call write_function again:\n${c.errors.join("\n")}`);
+      return "risky";
+    },
+    describe: (i, bp) => {
+      const exists = bp.functions?.some((f) => f.id === i.id);
+      return [`${exists ? "Update" : "Add"} server code “${i.label}”${i.hosts.length ? ` that can reach ${i.hosts.join(", ")}` : ""}${i.webhook ? ", callable from outside" : ""}`];
+    },
+    run: async (b, i, fx) => {
+      const c = compileFunction(i.source);
+      if (!c.ok) throw new Error(c.errors.join("\n"));
+      const bp = await b.blueprint();
+      const ops: Op[] = [{ op: "putFunction", fn: { id: i.id, label: i.label, source: i.source, compiled: c.compiled, hosts: i.hosts, ...(i.webhook ? { webhook: true } : {}) } }];
+      const r = await b.commitChangeSet({ baseVersion: bp.version, source: "ai", summary: `Server code: ${i.label}`, ops }, true);
+      if (!r.ok) throw new Error(r.error);
+      fx.changed = true;
+      return { saved: i.id };
+    },
+  }),
+
+  tool({
+    name: "read_function",
+    description: "The current source, hosts and webhook setting of a server function.",
+    input: z.strictObject({ id: FunctionId }),
+    risk: "read",
+    run: async (b, i) => {
+      const f = (await b.blueprint()).functions?.find((x) => x.id === i.id);
+      if (!f) throw new Error(`No function ${i.id}`);
+      return { id: f.id, label: f.label, source: f.source, hosts: f.hosts, webhook: !!f.webhook };
+    },
+  }),
+
+  tool({
+    name: "list_api_keys",
+    description: "Names and hosts of the API keys the owner saved (Settings → API keys). Use the name with secret(NAME) in server code. Values are never visible.",
+    input: z.strictObject({}),
+    risk: "read",
+    run: async (b) => {
+      if (!b.functions) return { keys: [], note: "Server code isn’t available here." };
+      return { keys: await b.functions.apiKeys(), note: "Missing a key? Ask the owner to add it under Settings → API keys (name, host, header)." };
+    },
+  }),
+
+  tool({
+    name: "test_function",
+    description: "Run a server function once with sample input and return its result and log. It really runs (it may call outside services and change data), so it waits for the owner's confirmation.",
+    input: z.strictObject({ id: FunctionId, input: z.unknown().optional() }),
+    risk: "risky",
+    describe: (i, bp) => [`Run “${bp.functions?.find((f) => f.id === i.id)?.label ?? i.id}” once as a test`],
+    run: async (b, i) => {
+      if (!b.functions) throw new Error("Server code can’t run here");
+      return b.functions.test(i.id, i.input ?? null);
     },
   }),
 

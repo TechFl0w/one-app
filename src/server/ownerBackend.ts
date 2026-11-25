@@ -8,6 +8,7 @@ import { commitChangeSet, getCurrentBlueprint } from "./blueprints";
 import { createCheckout, refundPayment, stripeConfigured } from "./payments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createRecord, deleteRecord, getRecord, listRecords, updateRecord } from "./records";
+import { functionsAvailable, runFunction } from "./functions";
 
 async function requireManager(supabase: SupabaseClient, businessId: string) {
   const { data: claims } = await supabase.auth.getClaims();
@@ -50,6 +51,20 @@ export function supabaseOwnerBackend(supabase: SupabaseClient, businessId: strin
           async refund(paymentId) {
             await manager();
             await refundPayment(createAdminClient(), businessId, paymentId);
+          },
+        }
+      : undefined,
+    functions: functionsAvailable()
+      ? {
+          async apiKeys() {
+            await manager();
+            const { data } = await createAdminClient().from("business_secrets").select("name, host, header").eq("business_id", businessId).order("name");
+            return data ?? [];
+          },
+          async test(functionId, input) {
+            await manager();
+            const out = await runFunction(createAdminClient(), businessId, functionId, { trigger: "test", input });
+            return out.ok ? { ok: true, value: out.value, logs: out.logs } : { ok: false, error: out.error, logs: out.logs };
           },
         }
       : undefined,

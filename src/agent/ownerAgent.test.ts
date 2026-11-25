@@ -45,7 +45,7 @@ describe("owner agent", () => {
     expect(system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(system[1].text).toContain('blk_cal calendar "Today’s calendar" from tbl_bookings');
     expect(req.tools!.map((t) => (t as Anthropic.Beta.BetaTool).name)).toEqual([
-      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "write_component", "read_component", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
+      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "write_component", "read_component", "write_function", "read_function", "list_api_keys", "test_function", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
     ]);
     expect(req.messages[0].content).toContain('looking at page "Today" (pg_today)');
     expect(r.response).toEqual({ text: "Hi!", changed: false });
@@ -223,5 +223,27 @@ describe("writing custom components", () => {
     expect(blocks.find((b) => b.type === "custom")).toMatchObject({ id: "blk_booking_hub", options: { component: "cmp_booking_hub" } });
     expect(r.response.buttons?.map((b) => b.action)).toEqual(["keep", "undo"]);
     expect(setupSummary(state.blueprint)).toContain('cmp_booking_hub "Bookings hub"');
+  });
+});
+
+describe("writing server code", () => {
+  const good = `import { records, secret, type RunContext } from "@one/server";\nexport default async function run(ctx: RunContext) {\n  const res = await fetch("https://api.goshippo.com/shipments/", { headers: { Authorization: secret("SHIPPO") } });\n  if (ctx.record) await records.update(ctx.record.table, ctx.record.id, { fld_notes: String(res.status) });\n  return res.status;\n}`;
+  const bad = `import { records } from "@one/server";\nexport default async function run() { return records.nope(); }`;
+
+  it("fixes compile errors first, then waits for confirmation before saving", async () => {
+    const { backend, state } = setup();
+    const input = (source: string) => ({ id: "fn_shippo", label: "Create shipping labels", source, hosts: ["api.goshippo.com"] });
+    const { model, requests } = scripted(call("write_function", input(bad), "t1"), call("write_function", input(good), "t2"), say("I’ll save it once you confirm."));
+    const r = await runOwnerTurn({ backend, history: [], message: "connect shippo", model, newId: () => "act_fn" });
+    expect(lastToolResult(requests[1])).toMatchObject({ isError: true });
+    expect(lastToolResult(requests[1]).content).toMatch(/didn't compile[\s\S]*nope/);
+    expect(JSON.parse(lastToolResult(requests[2]).content).status).toBe("waiting_for_owner_confirmation");
+    expect(state.blueprint.functions).toBeUndefined();
+    expect(r.pending[0].items).toEqual(["Add server code “Create shipping labels” that can reach api.goshippo.com"]);
+
+    const done = await runConfirmedAction(backend, r.pending[0]);
+    expect(done.ok).toBe(true);
+    expect(state.blueprint.functions?.[0]).toMatchObject({ id: "fn_shippo", hosts: ["api.goshippo.com"], source: good });
+    expect(setupSummary(state.blueprint)).toContain('fn_shippo "Create shipping labels" hosts: api.goshippo.com');
   });
 });

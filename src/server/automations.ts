@@ -1,4 +1,5 @@
 import "server-only";
+import { functionsAvailable, runFunction } from "./functions";
 import { idFromKey } from "@/automations/ids";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enqueueDueDates, enqueueForEvent, runDueJobs, type AutomationIO, type Job, type JobQueue } from "@/automations/runner";
@@ -144,6 +145,13 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
       });
       if (step.template === "tpl_review" && !bp.business.reviewUrl) return { sent: false, reason: "Add your review link in Online booking settings" };
       return sendEmail(db, settings, { to: to.email, subject: msg.subject, text: msg.text, key });
+    },
+    async runFunction(b, functionId, key, record) {
+      if (!functionsAvailable()) return { ran: false, reason: "Server code can’t run on this server yet" };
+      const out = await runFunction(db, b, functionId, { trigger: "automation", record: { table: record.tableId, id: record.recordId, data: record.data } }, { key });
+      // Failures throw, so the job retries with backoff and shows up in the run log.
+      if (!out.ok) throw new Error(out.error);
+      return { ran: true, ...(out.logs.length ? { note: out.logs.slice(-3).join(" · ").slice(0, 300) } : {}) };
     },
     async hasUpcomingBooking(b, record, now) {
       return hasUpcomingBooking(await blueprint(b), supabaseOwnerBackend(db, b), record, now);

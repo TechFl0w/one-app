@@ -21,6 +21,15 @@ export interface OwnerBackend {
   commitChangeSet(changeSet: ChangeSet, confirmed: boolean): Promise<CommitResult>;
   /** Stripe payments; missing when payments aren't available (demo, not configured). */
   payments?: PaymentsBackend;
+  /** Generated server code; missing where it can't run (demo, not configured). */
+  functions?: FunctionsBackend;
+}
+
+export interface FunctionsBackend {
+  /** Names and hosts of the business's saved API keys (never the values). */
+  apiKeys(): Promise<{ name: string; host: string; header: string }[]>;
+  /** Only called after the owner confirmed (it can call outside services and change data). */
+  test(functionId: string, input: unknown): Promise<{ ok: boolean; value?: unknown; error?: string; logs: string[] }>;
 }
 
 export interface PaymentsBackend {

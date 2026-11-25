@@ -246,6 +246,8 @@ export const ACTION_TYPES = [
   "wait",
   "ai_step",
   "approval",
+  /** Run a generated server function (blueprint.functions) with the record. */
+  "run_function",
 ] as const;
 
 export const Trigger = z.looseObject({
@@ -388,6 +390,26 @@ export const Component = z.strictObject({
 });
 export type Component = z.infer<typeof Component>;
 
+export const FunctionId = z.string().regex(/^fn_[a-z0-9_]{1,60}$/);
+/** An outside host a function may call, e.g. "api.goshippo.com" (no wildcards except a leading "*."). */
+export const Host = z.string().regex(/^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$/).max(253);
+
+/**
+ * Server code the AI wrote for this business (docs/generated-code.md): runs in an isolated VM,
+ * reaches only `hosts` (plus One App's own API), and gets the business's API keys injected by the
+ * VM's firewall — the code never sees them.
+ */
+export const ServerFunction = z.strictObject({
+  id: FunctionId,
+  label: Label,
+  source: z.string().min(1).max(MAX_COMPONENT_SOURCE),
+  compiled: z.string().min(1).max(MAX_COMPONENT_COMPILED),
+  hosts: z.array(Host).max(20),
+  /** Can be called from outside at /api/hooks/<business>/<id> (e.g. a payment provider's webhook). */
+  webhook: z.boolean().optional(),
+});
+export type ServerFunction = z.infer<typeof ServerFunction>;
+
 const BlueprintShape = z.strictObject({
   version: z.int().min(1),
   business: BusinessInfo,
@@ -398,6 +420,7 @@ const BlueprintShape = z.strictObject({
   modules: z.array(Module),
   scheduling: Scheduling.optional(),
   components: z.array(Component).max(200).optional(),
+  functions: z.array(ServerFunction).max(100).optional(),
 });
 
 /** Full blueprint with referential-integrity checks. */
@@ -478,8 +501,15 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
     }
   });
 
+  (bp.functions ?? []).forEach((f, fi) => claim(f.id, ["functions", fi, "id"]));
+  const functions = new Set((bp.functions ?? []).map((f) => f.id));
   bp.automations.forEach((a, ai) => {
     claim(a.id, ["automations", ai, "id"]);
+    a.actions.forEach((act, xi) => {
+      if (act.type === "run_function" && (typeof act.function !== "string" || !functions.has(act.function))) {
+        issue(["automations", ai, "actions", xi, "function"], `unknown function ${String(act.function)}`);
+      }
+    });
     if (a.trigger.table && !tables.has(a.trigger.table)) {
       issue(["automations", ai, "trigger", "table"], `unknown table ${a.trigger.table}`);
     }
