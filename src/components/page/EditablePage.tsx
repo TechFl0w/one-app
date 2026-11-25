@@ -131,6 +131,10 @@ export function EditablePage({
           </button>
         }
       />
+      {/* A page that is one full-screen component owns its design: no app title, just Edit. */}
+      {!editing && isFullPageComponent(blocks) ? (
+        <div className="mb-2 flex justify-end"><EditButton /></div>
+      ) : (
       <div className="mb-6 flex items-center gap-3">
         <PageIcon name={page.icon} className="h-6 w-6 shrink-0 text-accent" />
         {editing ? (
@@ -152,6 +156,7 @@ export function EditablePage({
         )}
         <EditButton />
       </div>
+      )}
       {editing && (
         <div className="mb-5 flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted">Layout for</span>
