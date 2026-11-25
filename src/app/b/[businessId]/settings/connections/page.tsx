@@ -19,7 +19,7 @@ export default async function ConnectionsPage({ params }: PageProps<"/b/[busines
         <Plug className="h-6 w-6 text-accent" />
         <h1 className="text-2xl font-bold tracking-tight">Connect AI apps</h1>
       </div>
-      <Connections url={mcpUrl()} tokens={(data ?? []) as TokenRow[]} create={createTokenAction.bind(null, businessId)} revoke={revokeTokenAction.bind(null, businessId)} />
+      <Connections url={mcpUrl(businessId)} tokens={(data ?? []) as TokenRow[]} create={createTokenAction.bind(null, businessId)} revoke={revokeTokenAction.bind(null, businessId)} />
     </div>
   );
 }

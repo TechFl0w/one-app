@@ -37,6 +37,10 @@ export function Connections({
           Use your business from Claude or another AI app that supports MCP. It gets the same tools as the assistant in One App: look up and change records,
           bookings and setup. Deleting, refunds, price and automation changes always wait for you under <span className="font-medium text-ink">Approvals</span>.
         </p>
+        <ol className="list-decimal space-y-1 pl-5 text-sm">
+          <li>In your AI app, add a custom connector (Claude: Settings → Connectors → Add custom connector. ChatGPT: Settings → Connectors).</li>
+          <li>Paste the URL below. You’ll be asked to sign in to One App and allow it.</li>
+        </ol>
         <div>
           <span className="label">Server URL</span>
           <div className="flex gap-2">
@@ -47,7 +51,8 @@ export function Connections({
       </section>
 
       <section className="card space-y-4 p-6">
-        <h2 className="font-semibold">New connection</h2>
+        <h2 className="font-semibold">Personal access tokens</h2>
+        <p className="text-sm text-muted">For developer tools that can’t sign in, like Claude Code or Cursor: send a token in the Authorization header instead.</p>
         <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); start(async () => { const r = await create(name); if (r.token) { setFresh(r.token); setName(""); setError(null); } else setError(r.message ?? "Couldn’t create it."); }); }}>
           <input className="input flex-1" placeholder="Name, e.g. Claude on my laptop" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} aria-label="Connection name" />
           <button className="btn-primary" disabled={busy || !name.trim()}>Create token</button>
@@ -60,7 +65,7 @@ export function Connections({
               <input className="input flex-1 font-mono text-xs" readOnly value={fresh} aria-label="New token" />
               <button type="button" className="btn-ghost px-3" onClick={() => copy(fresh)} aria-label="Copy token"><Copy className="h-4 w-4" /></button>
             </div>
-            <p className="text-xs text-muted">In your AI app, add a remote MCP server with the URL above and the header <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+            <p className="text-xs text-muted">In your AI app, add the server URL above with the header <code>Authorization: Bearer &lt;token&gt;</code>.</p>
           </div>
         )}
       </section>
