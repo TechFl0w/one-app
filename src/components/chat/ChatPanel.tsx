@@ -34,12 +34,24 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
   const [draft, setDraft] = useState("");
   const [images, setImages] = useState<(ChatImage & { url: string })[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
-  const addFiles = async (files: FileList | File[]) => {
-    const picked = [...files].filter((f) => f.type.startsWith("image/")).slice(0, 3 - images.length);
-    const ready = await Promise.all(picked.map(shrinkImage));
-    setImages((x) => [...x, ...ready.filter((r): r is ChatImage & { url: string } => !!r)].slice(0, 3));
-  };
   const [error, setError] = useState<string | null>(null);
+  const addFiles = async (files: FileList | File[]) => {
+    const all = [...files];
+    const picked = all.filter((f) => f.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|heic|heif|bmp)$/i.test(f.name)).slice(0, Math.max(0, 3 - images.length));
+    if (!picked.length) {
+      if (all.length) setError("That isn’t an image. Attach a PNG or JPEG screenshot.");
+      return;
+    }
+    const ready = await Promise.all(picked.map(shrinkImage));
+    const ok = ready.filter((r): r is ChatImage & { url: string } => !!r);
+    setError(ok.length < picked.length ? "Couldn’t read one of the images — try a PNG or JPEG screenshot." : null);
+    setImages((x) => [...x, ...ok].slice(0, 3));
+  };
+  // Images from the clipboard: Chrome fills `files`, Safari only `items`.
+  const fromClipboard = (data: DataTransfer) => {
+    const files = data.files.length ? [...data.files] : [...data.items].filter((i) => i.kind === "file").map((i) => i.getAsFile()).filter((f): f is File => !!f);
+    return files.filter((f) => f.type.startsWith("image/"));
+  };
   const [busy, startTransition] = useTransition();
   // Demo only: the browser holds the model history and pending actions.
   const demo = useRef<{ history: Message[]; pending: Map<string, PendingAction> }>({ history: [], pending: new Map() });
@@ -162,7 +174,16 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
   }
 
   return (
-    <aside className="fixed inset-0 z-40 flex flex-col bg-card shadow-soft md:inset-y-0 md:left-auto md:right-0 md:w-[400px] md:border-l md:border-line" aria-label="Assistant">
+    <aside
+      className="fixed inset-0 z-40 flex flex-col bg-card shadow-soft md:inset-y-0 md:left-auto md:right-0 md:w-[400px] md:border-l md:border-line"
+      aria-label="Assistant"
+      // Drop images anywhere on the panel.
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        void addFiles(e.dataTransfer.files);
+      }}
+    >
       <header className="flex items-center gap-2 border-b border-line px-5 py-4">
         <Sparkles className="h-4 w-4 text-accent" />
         <h2 className="flex-1 font-semibold">Assistant</h2>
@@ -205,15 +226,11 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
       <form
         className="flex items-end gap-2 border-t border-line p-3"
         onPaste={(e) => {
-          if (e.clipboardData.files.length) {
+          const files = fromClipboard(e.clipboardData);
+          if (files.length) {
             e.preventDefault();
-            void addFiles(e.clipboardData.files);
+            void addFiles(files);
           }
-        }}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          void addFiles(e.dataTransfer.files);
         }}
         onSubmit={(e) => {
           e.preventDefault();
@@ -307,7 +324,16 @@ function Resolved({ value }: { value: NonNullable<ChatItem["resolved"]> }) {
 /** Scales an image down (longest side 1280px, JPEG) so a few fit in one message. */
 async function shrinkImage(file: File): Promise<(ChatImage & { url: string }) | null> {
   try {
-    const bitmap = await createImageBitmap(file);
+    // createImageBitmap where available; an <img> otherwise (older Safari, some formats).
+    const bitmap: { width: number; height: number } & CanvasImageSource = await createImageBitmap(file).catch(
+      () =>
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = URL.createObjectURL(file);
+        }),
+    );
     const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(bitmap.width * scale);
