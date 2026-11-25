@@ -20,6 +20,8 @@ export interface AuditLine {
   what: string;
   changes: { field: string; before: string; after: string }[];
   at: string;
+  /** For setup changes: the history entry, so the change can be undone from Activity. */
+  historyId?: string;
 }
 
 type Fmt = (field: Field, value: unknown) => string;
@@ -72,5 +74,6 @@ export function auditLine(bp: Blueprint, row: AuditRow, me: string | undefined, 
       }
       what = row.action;
   }
-  return { id: row.id, who, what, changes, at: row.created_at };
+  const historyId = row.action === "setup.changed" && typeof row.details?.history_id === "string" ? row.details.history_id : undefined;
+  return { id: row.id, who, what, changes, at: row.created_at, ...(historyId ? { historyId } : {}) };
 }

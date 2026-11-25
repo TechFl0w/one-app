@@ -14,6 +14,7 @@ import { applyChangeSet } from "@/engine/changeSet";
 import { compileComponent, compileFunction } from "@/codegen/compile";
 import { checkReferences } from "@/codegen/references";
 import { checkStandards } from "@/codegen/standards";
+import { compileStyles } from "@/codegen/styles";
 import { ComponentId, FunctionId, GRID_COLUMNS, Host, Label, PageId } from "@/schema/blueprint";
 import type { Operation as Op } from "@/schema/changeSet";
 
@@ -195,7 +196,8 @@ export const OWNER_TOOLS: OwnerTool[] = [
       if (unknown.length) throw new Error(`The component refers to things that don't exist — fix these and call write_component again:\n${unknown.join("\n")}`);
       const rules = checkStandards(i.source, bp, { inlineForm: i.inlineForm });
       if (rules.errors.length) throw new Error(`The component breaks the app rules — fix these and call write_component again:\n${rules.errors.join("\n")}`);
-      const ops: Op[] = [{ op: "putComponent", component: { id: i.id, label: i.label, source: i.source, compiled: compiled.compiled } }];
+      const css = await compileStyles(i.source);
+      const ops: Op[] = [{ op: "putComponent", component: { id: i.id, label: i.label, source: i.source, compiled: compiled.compiled, ...(css ? { css } : {}) } }];
       const blockId = `blk_${i.id.slice(4)}`.slice(0, 64);
       const block = (x: number, y: number, w: number, h: number) => ({ id: blockId, type: "custom" as const, x, y, w, h, options: { component: i.id, ...(i.props ? { props: i.props } : {}) } });
       const existingPage = i.newPage && bp.pages.find((pg) => pg.id === i.newPage!.id);

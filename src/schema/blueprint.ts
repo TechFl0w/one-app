@@ -103,12 +103,29 @@ const FormulaField = z.strictObject({
   expression: z.string().min(1).max(2000),
 });
 
+/** A condition on the records a rollup looks at. Dates may use "@today" / "@now". */
+export const RollupWhere = z.strictObject({
+  field: FieldId,
+  op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "empty", "not_empty"]),
+  value: z.union([z.string().max(200), z.number(), z.boolean()]).optional(),
+});
+
+/**
+ * A value computed from linked records whenever records are read (never stored, never stale).
+ * Without `from`: `via` is a link field on this table (e.g. a booking's service price).
+ * With `from`: the records of table `from` whose link field `via` points at this record (e.g. a
+ * room's maintenance jobs). `where` narrows them; `latest` takes `field` from the newest one
+ * (by `sortBy`, default when created).
+ */
 const RollupField = z.strictObject({
   ...fieldBase,
   type: z.literal("rollup"),
-  via: FieldId, // a link field on this table
-  field: FieldId, // field on the linked table
-  agg: z.enum(["sum", "count", "avg", "min", "max"]),
+  from: TableId.optional(),
+  via: FieldId,
+  field: FieldId,
+  agg: z.enum(["sum", "count", "avg", "min", "max", "latest"]),
+  where: z.array(RollupWhere).max(5).optional(),
+  sortBy: FieldId.optional(),
 });
 
 export const Field = z.discriminatedUnion("type", [
@@ -389,6 +406,8 @@ export const Component = z.strictObject({
   label: Label,
   source: z.string().min(1).max(MAX_COMPONENT_SOURCE),
   compiled: z.string().min(1).max(MAX_COMPONENT_COMPILED),
+  /** Tailwind CSS for the classes it uses, built at save; without it the frame compiles in the browser. */
+  css: z.string().max(200_000).optional(),
 });
 export type Component = z.infer<typeof Component>;
 
@@ -477,12 +496,19 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
     });
     t.fields.forEach((f, fi) => {
       if (f.type !== "rollup") return;
-      const via = t.fields.find((x) => x.id === f.via);
-      if (!via || via.type !== "link") {
-        issue(["tables", ti, "fields", fi, "via"], `rollup must go via a link field on ${t.id}`);
-      } else if (!fieldsOf(via.to).has(f.field)) {
-        issue(["tables", ti, "fields", fi, "field"], `unknown field ${f.field} on ${via.to}`);
+      const at = ["tables", ti, "fields", fi];
+      // The table whose records are rolled up, and the link that connects them.
+      const source = f.from ? bp.tables.find((x) => x.id === f.from) : undefined;
+      if (f.from && !source) return issue([...at, "from"], `unknown table ${f.from}`);
+      const via = (source ?? t).fields.find((x) => x.id === f.via);
+      if (!via || via.type !== "link" || (source && via.to !== t.id)) {
+        return issue([...at, "via"], source ? `rollup must go via a link field on ${f.from} that points to ${t.id}` : `rollup must go via a link field on ${t.id}`);
       }
+      const target = source ? source.id : via.to;
+      const targetFields = fieldsOf(target);
+      if (!targetFields.has(f.field)) issue([...at, "field"], `unknown field ${f.field} on ${target}`);
+      for (const [wi, w] of (f.where ?? []).entries()) if (!targetFields.has(w.field)) issue([...at, "where", wi, "field"], `unknown field ${w.field} on ${target}`);
+      if (f.sortBy && !targetFields.has(f.sortBy)) issue([...at, "sortBy"], `unknown field ${f.sortBy} on ${target}`);
     });
     if (t.primaryField && !fieldIds.has(t.primaryField)) {
       issue(["tables", ti, "primaryField"], `unknown field ${t.primaryField}`);

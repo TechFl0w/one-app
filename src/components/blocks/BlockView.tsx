@@ -50,7 +50,7 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
           title={component.label}
           componentId={component.id}
           theme={blueprint.theme}
-          compiled={component.compiled}
+          compiled={component.compiled} css={component.css}
           props={props}
           schema={sandboxSchema(blueprint)}
           bridge={env.sandbox.bridge}

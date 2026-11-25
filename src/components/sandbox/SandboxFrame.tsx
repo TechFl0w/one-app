@@ -37,7 +37,10 @@ export function SandboxFrame({
   title,
   theme,
   componentId,
+  css,
 }: {
+  /** The screen's precompiled Tailwind CSS (older screens have none). */
+  css?: string;
   theme?: Theme;
   /** Lets the chat ask this frame for a picture of itself (self-check). */
   componentId?: string;
@@ -54,12 +57,18 @@ export function SandboxFrame({
   // Only known in the browser; the frame is created after hydration.
   const origin = useSyncExternalStore(noop, () => window.location.origin, () => null);
   const [height, setHeight] = useState<number | null>(null);
-  const [crash, setCrash] = useState<string | null>(null);
+  // A crash belongs to the code version that hit it; a new version starts clean.
+  const [crashed, setCrash] = useState<{ code: string; message: string } | null>(null);
+  const crash = crashed?.code === compiled ? crashed.message : null;
+  const crashRef = useRef<string | null>(null);
+  useEffect(() => {
+    crashRef.current = crash;
+  }, [crash]);
   const [toast, setToast] = useState<string | null>(null);
   const [form, setForm] = useState<{ request: RecordFormRequest; resolve: (r: SandboxRecord | null) => void } | null>(null);
   const [confirm, setConfirm] = useState<{ label: string; resolve: (ok: boolean) => void } | null>(null);
   const themeKey = JSON.stringify(theme ?? null);
-  const srcDoc = useMemo(() => (origin ? sandboxSrcdoc(origin, JSON.parse(themeKey) ?? undefined) : undefined), [origin, themeKey]);
+  const srcDoc = useMemo(() => (origin ? sandboxSrcdoc(origin, JSON.parse(themeKey) ?? undefined, css) : undefined), [origin, themeKey, css]);
   const init = useRef<HostToFrame>({ type: "init", compiled, props, schema, autoHeight });
   useEffect(() => {
     init.current = { type: "init", compiled, props, schema, autoHeight };
@@ -74,7 +83,7 @@ export function SandboxFrame({
       const m = e.data;
       if (m?.type === "ready") return send(init.current);
       if (m?.type === "resize") return autoHeight && setHeight(Math.min(Math.max(m.height, 40), 20_000));
-      if (m?.type === "crash") return setCrash(String(m.message).slice(0, 300));
+      if (m?.type === "crash") return setCrash({ code: init.current.type === "init" ? init.current.compiled : "", message: String(m.message).slice(0, 300) });
       if (m?.type === "captured") {
         const done = captures.current.get(m.id);
         captures.current.delete(m.id);
@@ -139,8 +148,9 @@ export function SandboxFrame({
   useEffect(() => {
     if (!componentId) return;
     let next = 1;
-    return registerCapture(componentId, () =>
-      new Promise<string | null>((resolve) => {
+    return registerCapture(componentId, async () => ({
+      crash: crashRef.current,
+      image: await new Promise<string | null>((resolve) => {
         const id = next++;
         captures.current.set(id, resolve);
         frame.current?.contentWindow?.postMessage({ type: "capture", id } satisfies HostToFrame, "*");
@@ -148,7 +158,7 @@ export function SandboxFrame({
           if (captures.current.delete(id)) resolve(null);
         }, 8000);
       }),
-    );
+    }));
   }, [componentId, srcDoc]);
 
   useEffect(() => {

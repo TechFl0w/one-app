@@ -1,3 +1,4 @@
+import { withComputed } from "@/engine/computed";
 import { getBusinessContext, getDevice } from "@/server/context";
 import { forBrowser } from "@/server/clientBlueprint";
 import { supabaseStore } from "@/server/store";
@@ -19,7 +20,7 @@ export default async function BusinessPage({ params }: PageProps<"/b/[businessId
       userId={userId}
       env={{
         blueprint: forBrowser(blueprint),
-        store: supabaseStore(supabase, businessId),
+        store: withComputed(supabaseStore(supabase, businessId), blueprint),
         formAction: (tableId, fields) => submitRecordForm.bind(null, businessId, tableId, fields),
         sandbox: {
           basePath: `/b/${businessId}`,

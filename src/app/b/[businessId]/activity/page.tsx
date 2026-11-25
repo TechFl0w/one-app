@@ -3,6 +3,8 @@ import { getBusinessContext } from "@/server/context";
 import { listAudit } from "@/server/audit";
 import { auditLine } from "@/engine/auditText";
 import { formatDateTime } from "@/components/blocks/format";
+import { RestoreButton } from "@/components/page/RestoreButton";
+import { undoSetupChange } from "../actions";
 
 /** Who changed what: records, setup and assistant confirmations (owners/admins). */
 export default async function ActivityPage({ params }: PageProps<"/b/[businessId]/activity">) {
@@ -29,6 +31,11 @@ export default async function ActivityPage({ params }: PageProps<"/b/[businessId
                 <span className="min-w-0 flex-1">{l.what}</span>
                 <time className="text-xs text-muted" dateTime={l.at}>{formatDateTime(l.at, ctx)}</time>
               </div>
+              {l.historyId && (
+                <div className="mt-1.5">
+                  <RestoreButton label="Undo this change" question="Undo this change? Later changes stay as they are." action={undoSetupChange.bind(null, businessId, l.historyId)} />
+                </div>
+              )}
               {l.changes.length > 0 && (
                 <ul className="mt-1 space-y-0.5 text-xs text-muted">
                   {l.changes.map((c, i) => (

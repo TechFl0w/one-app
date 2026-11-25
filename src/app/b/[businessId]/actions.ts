@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { FormState } from "@/components/blocks/FormBlock";
 import { createClient } from "@/lib/supabase/server";
-import { commitChangeSet, getCurrentBlueprint, undoHistoryEntry } from "@/server/blueprints";
+import { commitChangeSet, getCurrentBlueprint, restorePage, undoHistoryEntry } from "@/server/blueprints";
 import { ChangeSetError, previewChangeSet } from "@/engine/changeSet";
 import { errorResult, okResult, type CommitResult } from "@/engine/commit";
 import { riskyOps } from "@/engine/editing";
@@ -56,5 +56,27 @@ export async function undoBlueprintChange(businessId: string, historyId: string,
     return okResult(r, { historyId: r.historyId });
   } catch (e) {
     return errorResult(e, e instanceof ChangeSetError && e.code === "needs_confirmation" ? [e.message.replace(/^Needs confirmation: /, "")] : undefined);
+  }
+}
+
+/** Puts a page back to an earlier version (a normal change: it shows in Activity and can be undone). */
+export async function restorePageVersion(businessId: string, pageId: string, version: number): Promise<{ ok: boolean; message: string }> {
+  try {
+    const r = await restorePage(await createClient(), businessId, pageId, version);
+    revalidatePath(`/b/${businessId}`, "layout");
+    return { ok: true, message: r ? "Restored. You can undo this from Activity." : "The page already looks like that version." };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Couldn’t restore that version." };
+  }
+}
+
+/** Undoes one earlier setup change from Activity (if it still fits the current setup). */
+export async function undoSetupChange(businessId: string, historyId: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    await undoHistoryEntry(await createClient(), businessId, historyId, { confirmed: true });
+    revalidatePath(`/b/${businessId}`, "layout");
+    return { ok: true, message: "Undone." };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Couldn’t undo that change." };
   }
 }

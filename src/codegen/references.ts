@@ -41,7 +41,7 @@ export function brokenByChange(before: Blueprint, after: Blueprint): { component
   const has = ids(after);
   const out: { component: string; ids: string[] }[] = [];
   for (const c of after.components ?? []) {
-    const used = new Set([...c.source.matchAll(/["'`]((?:tbl|fld|opt|pg)_[a-z0-9_]{1,60})["'`]/g)].map((m) => m[1]));
+    const used = usedIds(c.source);
     const gone = [...used].filter((id) => had.has(id) && !has.has(id));
     if (gone.length) out.push({ component: c.label, ids: gone });
   }
@@ -60,4 +60,9 @@ export function describeId(bp: Blueprint, id: string): string {
     }
   const p = bp.pages.find((x) => x.id === id);
   return p ? `the ${p.label} page` : id;
+}
+
+/** Table, field, option and page ids written as whole string literals in a component's code. */
+export function usedIds(source: string): string[] {
+  return [...new Set([...source.matchAll(/["'`]((?:tbl|fld|opt|pg)_[a-z0-9_]{1,60})["'`]/g)].map((m) => m[1]))];
 }

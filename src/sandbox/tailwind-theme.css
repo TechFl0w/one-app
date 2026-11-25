@@ -1,0 +1,20 @@
+/*
+ * Tailwind setup for generated screens, compiled ahead of time (scripts/build-sandbox.mjs for the
+ * kit, src/codegen/styles.ts per screen). Theme colours and fonts point at --one-* variables that
+ * the frame sets from the business's theme, so a theme change never needs a recompile.
+ */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@theme {
+  --color-ground: var(--one-ground);
+  --color-card: var(--one-card);
+  --color-line: var(--one-line);
+  --color-ink: var(--one-ink);
+  --color-muted: var(--one-muted);
+  --color-accent: var(--one-accent);
+  --color-accent-hover: var(--one-accent-hover);
+  --color-accent-tint: var(--one-accent-tint);
+  --font-sans: var(--one-font);
+  --font-serif: var(--one-heading);
+  --shadow-soft: 0 1px 2px rgb(28 27 25 / 0.04), 0 4px 16px rgb(28 27 25 / 0.05);
+}

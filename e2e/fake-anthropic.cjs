@@ -43,6 +43,13 @@ function script(body) {
     return tool("change_setup", { summary: "Rename Clients to Guests", ops: [{ op: "rename", target: { kind: "page", pageId: "pg_clients" }, label: "Guests" }] });
   }
   const lastMsg = msgs.at(-1);
+  const flaky = (body) => ({ id: "cmp_flaky", label: "Flaky", summary: "A screen", source: `import { Card } from "@one/kit";\nexport default function S() {\n  const none: { title: string } | null = null as { title: string } | null;\n  return <Card title="Flaky">${body}</Card>;\n}` });
+  if (/broken screen/i.test(ownerText) && !isToolResult) {
+    return tool("write_component", { ...flaky("<p>{none!.title}</p>"), newPage: { id: "pg_flaky", label: "Flaky" } });
+  }
+  if (lastMsg.role === "user" && Array.isArray(lastMsg.content) && lastMsg.content.some((b) => b.type === "text" && b.text.includes("crashed when it rendered"))) {
+    return tool("write_component", flaky("<p>{none?.title ?? \"Fixed screen\"}</p>"));
+  }
   if (lastMsg.role === "user" && Array.isArray(lastMsg.content) && lastMsg.content.some((b) => b.type === "text" && b.text.includes("[Automatic check]"))) {
     const pic = lastMsg.content.find((b) => b.type === "image");
     const jpeg = pic && pic.source.data.startsWith("/9j/");

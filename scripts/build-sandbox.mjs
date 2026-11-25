@@ -1,7 +1,9 @@
 // Bundles the sandbox runtime (React + kit) and copies Tailwind's browser build into
 // public/sandbox/. Runs before `next build` and `next dev`.
 import { build } from "esbuild";
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { compile } from "tailwindcss";
+import { Scanner } from "@tailwindcss/oxide";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -19,5 +21,18 @@ await build({
   legalComments: "none",
   logLevel: "warning",
 });
+// Fallback for screens saved before styles were compiled ahead of time.
 copyFileSync(require.resolve("@tailwindcss/browser"), "public/sandbox/tailwind.js");
+
+// The kit's own styles (reset + every class the runtime uses), compiled once.
+const theme = readFileSync("src/sandbox/tailwind-theme.css", "utf8");
+const compiler = await compile(`@import "tailwindcss/preflight.css" layer(base);\n${theme}`, {
+  base: process.cwd(),
+  loadStylesheet: async (id, base) => {
+    const file = require.resolve(id);
+    return { path: file, base, content: readFileSync(file, "utf8") };
+  },
+});
+const candidates = new Scanner({}).getCandidatesWithPositions({ content: readFileSync("src/sandbox/runtime.tsx", "utf8"), extension: "tsx" }).map((c) => c.candidate);
+writeFileSync("public/sandbox/kit.css", compiler.build(candidates));
 console.log("sandbox runtime built");
