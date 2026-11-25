@@ -122,6 +122,12 @@ function optionLabel(table: string, field: string, optionId: unknown) {
   return f?.options?.find((o) => o.id === optionId)?.label ?? (optionId == null ? "" : String(optionId));
 }
 const navigate = (pageId: string) => void call("navigate", pageId);
+/** Add/edit screen as a modal drawn by One App over the whole page. Resolves the saved record, or null if cancelled. */
+async function openRecordForm(opts: { table: string; recordId?: string; fields?: string[]; title?: string; submitLabel?: string; defaults?: Record<string, unknown> }) {
+  const r = await call<SandboxRecord | null>("form.open", opts);
+  if (r) changed();
+  return r;
+}
 const toast = (message: string) => void call("toast", message);
 function formatMoney(n: number | null | undefined) {
   if (n == null || Number.isNaN(n)) return "—";
@@ -220,8 +226,15 @@ function Tabs({ tabs, defaultTab, className }: { tabs: { id: string; label: Reac
 }
 
 const inputCls = "w-full rounded-[min(var(--card-radius),12px)] border border-line bg-card px-4 py-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint";
-const Labelled = ({ label, children, className }: Kids & { label?: React.ReactNode }) =>
-  label ? (
+// `popover`: no <label> element, because a click inside a label is forwarded to its first
+// button — clicking an option would reopen the dropdown.
+const Labelled = ({ label, children, className, popover }: Kids & { label?: React.ReactNode; popover?: boolean }) =>
+  label && popover ? (
+    <div className={cx("block", className)}>
+      <span className="mb-1.5 block text-sm font-medium">{label}</span>
+      {children}
+    </div>
+  ) : label ? (
     <label className={cx("block", className)}>
       <span className="mb-1.5 block text-sm font-medium">{label}</span>
       {children}
@@ -245,18 +258,46 @@ function Textarea({ value, onChange, placeholder, rows = 3, label, className }: 
   );
 }
 
-function Select({ value, onChange, options, placeholder = "Choose…", label, className }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; placeholder?: string; label?: React.ReactNode; className?: string }) {
-  const [open, setOpen] = useState(false);
+// Only one dropdown/calendar is open at a time; any click outside, Escape, or a click in the
+// app around the frame closes it.
+let closeOpenPopover: (() => void) | null = null;
+function usePopover() {
+  const [open, setOpenState] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const closer = useRef<() => void>(() => setOpenState(false));
+  const setOpen = useCallback((v: boolean) => {
+    if (v) {
+      if (closeOpenPopover && closeOpenPopover !== closer.current) closeOpenPopover();
+      closeOpenPopover = closer.current;
+    } else if (closeOpenPopover === closer.current) closeOpenPopover = null;
+    setOpenState(v);
+  }, []);
   useEffect(() => {
     if (!open) return;
-    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
+    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onBlur = () => setOpen(false);
+    // Capture phase, so component code that stops propagation can't keep it open.
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [open, setOpen]);
+  useEffect(() => () => {
+    if (closeOpenPopover === closer.current) closeOpenPopover = null;
+  }, []);
+  return { open, setOpen, ref };
+}
+
+function Select({ value, onChange, options, placeholder = "Choose…", label, className }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; placeholder?: string; label?: React.ReactNode; className?: string }) {
+  const { open, setOpen, ref } = usePopover();
   const current = options.find((o) => o.value === value);
   return (
-    <Labelled label={label} className={className}>
+    <Labelled label={label} className={className} popover>
       <div ref={ref} className="relative">
         <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className={cx(inputCls, "relative truncate pr-11 text-left")}>
           <span className={current ? "" : "text-muted"}>{current?.label ?? placeholder}</span>
@@ -269,9 +310,10 @@ function Select({ value, onChange, options, placeholder = "Choose…", label, cl
                 key={o.value}
                 role="option"
                 aria-selected={o.value === value}
-                onClick={() => {
-                  onChange(o.value);
+                onClick={(e) => {
+                  e.preventDefault();
                   setOpen(false);
+                  onChange(o.value);
                 }}
                 className={cx("cursor-pointer truncate rounded-xl px-3 py-2 text-sm hover:bg-ground", o.value === value && "font-semibold text-accent")}
               >
@@ -293,7 +335,7 @@ function DateTimeInput({ value, onChange, withTime = false, label, className }: 
   const time = value.slice(11, 16) || "09:00";
   const set = (d: string, t: string) => onChange(withTime ? (d ? `${d}T${t}` : "") : d);
   // Calendar grid picker for the date; our Select for the time.
-  const [open, setOpen] = useState(false);
+  const { open, setOpen, ref } = usePopover();
   const base = date ? new Date(`${date}T12:00:00`) : new Date();
   const [view, setView] = useState({ y: base.getFullYear(), m: base.getMonth() });
   const first = new Date(view.y, view.m, 1);
@@ -301,9 +343,9 @@ function DateTimeInput({ value, onChange, withTime = false, label, className }: 
   const days = new Date(view.y, view.m + 1, 0).getDate();
   const iso = (d: number) => `${view.y}-${String(view.m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   return (
-    <Labelled label={label} className={className}>
+    <Labelled label={label} className={className} popover>
       <div className="flex gap-2">
-        <div className="relative flex-1">
+        <div ref={ref} className="relative flex-1">
           <button type="button" onClick={() => setOpen(!open)} className={cx(inputCls, "relative pr-11 text-left")}>
             <span className={date ? "" : "text-muted"}>{date ? formatDate(date) : "Pick a date"}</span>
             <Chevron open={open} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted" />
@@ -319,7 +361,7 @@ function DateTimeInput({ value, onChange, withTime = false, label, className }: 
               <div className="mt-1 grid grid-cols-7 gap-1">
                 {Array.from({ length: offset }, (_, i) => <span key={`x${i}`} />)}
                 {Array.from({ length: days }, (_, i) => (
-                  <button key={i} type="button" onClick={() => { set(iso(i + 1), time); setOpen(false); }} className={cx("h-9 rounded-full text-sm", iso(i + 1) === date ? "bg-accent font-semibold text-white" : "hover:bg-ground")}>
+                  <button key={i} type="button" onClick={(e) => { e.preventDefault(); setOpen(false); set(iso(i + 1), time); }} className={cx("h-9 rounded-full text-sm", iso(i + 1) === date ? "bg-accent font-semibold text-white" : "hover:bg-ground")}>
                     {i + 1}
                   </button>
                 ))}
@@ -434,7 +476,7 @@ function toLocalInput(iso: string) {
 }
 
 const kit = {
-  useRecords, useRecord, useSchema, useProps, records, recordLabel, optionLabel, navigate, toast, formatMoney, formatDate,
+  useRecords, useRecord, useSchema, useProps, records, recordLabel, optionLabel, navigate, openRecordForm, toast, formatMoney, formatDate,
   Card, Button, Badge, Collapsible, Tabs, Input, Textarea, Select, DateTimeInput, RecordForm, Spinner, Empty, Icon,
 };
 

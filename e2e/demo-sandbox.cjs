@@ -42,9 +42,35 @@ const log = (...a) => console.log("•", ...a);
   const opened = await height();
   log("chevron opens the form; frame height", closed, "→", opened);
   assert.ok(opened > closed + 150, "frame grows when the section opens");
+  // Kit dropdowns close when you pick, and only one popover is open at a time.
+  const lists = () => frame.locator('[role="listbox"]').count();
+  await frame.getByRole("button", { name: /Choose…/ }).first().click();
+  assert.equal(await lists(), 1);
+  await frame.locator('[role="option"]').first().click();
+  await p.waitForTimeout(200);
+  assert.equal(await lists(), 0, "dropdown closes on pick");
+  await frame.getByRole("button", { name: /Pick a date/ }).click();
+  await frame.getByText("Mo", { exact: true }).waitFor();
+  await frame.getByRole("button", { name: /Choose…/ }).first().click();
+  await p.waitForTimeout(200);
+  assert.equal(await frame.getByText("Mo", { exact: true }).count(), 0, "calendar closes when another dropdown opens");
+  await frame.locator("body").press("Escape");
+  await p.waitForTimeout(200);
+  assert.equal(await lists(), 0, "Escape closes");
+  log("dropdowns close on pick, outside click and Escape");
   await frame.getByRole("button", { name: /New booking/ }).click();
   await p.waitForTimeout(800);
   assert.equal(await height(), closed, "and shrinks back when it closes");
+
+  // Add screens are One App's own modal over the whole page.
+  await frame.getByRole("button", { name: "Add booking" }).click();
+  const dialog = p.locator("dialog[open]");
+  await dialog.getByText("New booking").waitFor();
+  assert.ok((await dialog.locator("label").count()) >= 3, "modal shows the form fields");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await p.waitForTimeout(300);
+  assert.equal(await p.locator("dialog[open]").count(), 0);
+  log("openRecordForm opens the app's modal");
   await p.screenshot({ path: `${S}/sandbox-hub.png` });
 
   // The frame is a stranger to the app: opaque origin, no cookies, no parent DOM, no network.

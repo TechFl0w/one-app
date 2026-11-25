@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { CalendarCheck, ChevronRight, Code2, CreditCard, FileSpreadsheet, LogOut, Mail, MessageCircle, Plug, Settings } from "lucide-react";
 import { getBusinessContext } from "@/server/context";
+import { usageThisMonth } from "@/server/ownerChat";
+import { OWNER_MODEL } from "@/agent/ownerAgent";
 import { signOut } from "@/app/login/actions";
 import { AccountForms, BusinessForm } from "@/components/settings/SettingsForms";
 import { changeEmail, changePassword, saveBusiness, saveProfile } from "../settings-actions";
@@ -13,6 +15,7 @@ export default async function SettingsPage({ params }: PageProps<"/b/[businessId
   const user = data.user;
   const { data: role } = await supabase.from("memberships").select("role").eq("business_id", businessId).eq("user_id", user?.id ?? "").maybeSingle();
   const manager = role && ["owner", "admin"].includes(role.role);
+  const usage = manager ? await usageThisMonth(supabase, businessId) : null;
   const base = `/b/${businessId}`;
   const links = [
     { href: `${base}/settings/booking`, icon: CalendarCheck, label: "Online booking", hint: "Your booking page, hours and rules", show: !!blueprint.scheduling },
@@ -43,6 +46,16 @@ export default async function SettingsPage({ params }: PageProps<"/b/[businessId
           <h2 className="mb-4 text-lg font-semibold">Business</h2>
           <div className="card p-6">
             <BusinessForm business={blueprint.business} save={saveBusiness.bind(null, businessId)} />
+          </div>
+        </section>
+      )}
+
+      {usage && (
+        <section>
+          <h2 className="mb-4 text-lg font-semibold">Assistant usage</h2>
+          <div className="card flex flex-wrap items-baseline gap-x-8 gap-y-2 p-6">
+            <p><span className="text-2xl font-bold tabular-nums">${usage.cost.toFixed(2)}</span> <span className="text-sm text-muted">this month (estimate)</span></p>
+            <p className="text-sm text-muted">{usage.turns} assistant {usage.turns === 1 ? "reply" : "replies"} · model {OWNER_MODEL}</p>
           </div>
         </section>
       )}

@@ -1,0 +1,188 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Dialog } from "@/components/edit/Dialog";
+import { Select } from "@/components/ui/Select";
+import { DatePicker } from "@/components/ui/DatePicker";
+import type { SandboxBridge, SandboxRecord, SandboxSchema } from "@/sandbox/protocol";
+
+type Table = SandboxSchema["tables"][number];
+type Field = Table["fields"][number];
+
+export interface RecordFormRequest {
+  table: string;
+  recordId?: string;
+  fields?: string[];
+  title?: string;
+  submitLabel?: string;
+  /** Prefilled values for a new record (e.g. the client you're looking at). */
+  defaults?: Record<string, unknown>;
+}
+
+const SKIP = new Set(["rollup", "formula", "file", "hours"]);
+const pad = (n: number) => String(n).padStart(2, "0");
+function toLocal(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+export function labelOf(t: Table | undefined, r: SandboxRecord) {
+  const f = t?.fields.find((x) => x.id === t.primaryField) ?? t?.fields.find((x) => x.type === "text");
+  const v = f ? r.data[f.id] : undefined;
+  return v == null || v === "" ? "Untitled" : String(v);
+}
+
+/** Validates what a frame asked for: known table, known fields. */
+export function parseFormRequest(v: unknown, schema: SandboxSchema): RecordFormRequest {
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("Invalid form request");
+  const o = v as Record<string, unknown>;
+  const t = schema.tables.find((x) => x.id === o.table);
+  if (!t) throw new Error("Unknown table");
+  const text = (x: unknown, max: number) => (typeof x === "string" && x.trim() ? x.slice(0, max) : undefined);
+  const fields = Array.isArray(o.fields) ? o.fields.filter((f): f is string => typeof f === "string" && t.fields.some((x) => x.id === f)).slice(0, 40) : undefined;
+  const defaults = o.defaults && typeof o.defaults === "object" && !Array.isArray(o.defaults) ? (o.defaults as Record<string, unknown>) : undefined;
+  return { table: t.id, recordId: text(o.recordId, 200), fields: fields?.length ? fields : undefined, title: text(o.title, 80), submitLabel: text(o.submitLabel, 40), defaults };
+}
+
+/**
+ * The add/edit form a generated component opens with openRecordForm(): drawn by One App as a
+ * real modal over the whole page (a frame can only draw inside its own box).
+ */
+export function RecordDialog({ request, schema, bridge, onDone }: { request: RecordFormRequest | null; schema: SandboxSchema; bridge: SandboxBridge; onDone: (saved: SandboxRecord | null) => void }) {
+  const t = schema.tables.find((x) => x.id === request?.table);
+  const title = request?.title ?? (t ? (request?.recordId ? `Edit ${t.label.toLowerCase()}` : `New ${t.label.toLowerCase()}`) : "");
+  return (
+    <Dialog open={!!request && !!t} onClose={() => onDone(null)} title={title}>
+      {request && t && <Body key={`${request.table}:${request.recordId ?? "new"}`} request={request} table={t} schema={schema} bridge={bridge} onDone={onDone} />}
+    </Dialog>
+  );
+}
+
+function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFormRequest; table: Table; schema: SandboxSchema; bridge: SandboxBridge; onDone: (saved: SandboxRecord | null) => void }) {
+  const editing = !!request.recordId;
+  const [values, setValues] = useState<Record<string, unknown> | null>(editing ? null : { ...(request.defaults ?? {}) });
+  const [links, setLinks] = useState<Record<string, { value: string; label: string }[]>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const all = t.fields.filter((f) => !SKIP.has(f.type));
+  const shown = request.fields ? request.fields.map((id) => all.find((f) => f.id === id)).filter((f): f is Field => !!f) : all.slice(0, 10);
+
+  useEffect(() => {
+    let live = true;
+    if (request.recordId)
+      bridge.get(t.id, request.recordId).then(
+        (r) => live && setValues(r.data),
+        (e) => live && setError(e instanceof Error ? e.message : "Couldn’t load"),
+      );
+    const linked = [...new Set(shown.filter((f) => f.type === "link" && f.to).map((f) => f.to!))];
+    for (const to of linked)
+      bridge.list({ table: to, limit: 200 }).then((res) => {
+        if (!live) return;
+        const lt = schema.tables.find((x) => x.id === to);
+        const opts = res.records.map((r) => ({ value: r.id, label: labelOf(lt, r) })).sort((a, b) => a.label.localeCompare(b.label));
+        setLinks((x) => ({ ...x, [to]: opts }));
+      }, () => {});
+    return () => {
+      live = false;
+    };
+    // Loads once per opened form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const submit = async (form: FormData) => {
+    setBusy(true);
+    setError(null);
+    const data: Record<string, unknown> = {};
+    for (const f of shown) {
+      const raw = form.get(f.id);
+      const s = typeof raw === "string" ? raw.trim() : "";
+      let v: unknown;
+      if (f.type === "checkbox") v = form.has(f.id);
+      else if (!s) v = null;
+      else if (f.type === "number" || f.type === "money") v = Number(s);
+      else if (f.type === "datetime") v = new Date(s).toISOString();
+      else v = s;
+      if (v !== null || editing) data[f.id] = v;
+    }
+    if (!editing) for (const [k, v] of Object.entries(request.defaults ?? {})) if (!(k in data) && t.fields.some((f) => f.id === k)) data[k] = v;
+    try {
+      const saved = editing ? await bridge.update(t.id, request.recordId!, data) : await bridge.create(t.id, data);
+      onDone(saved);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn’t save");
+      setBusy(false);
+    }
+  };
+
+  if (!values) return error ? <p className="text-sm text-red-700">{error}</p> : <p className="text-sm text-muted">Loading…</p>;
+  return (
+    <form action={submit} className="grid gap-4">
+      {shown.map((f) => (
+        <div key={f.id}>
+          {f.type === "checkbox" ? (
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" name={f.id} defaultChecked={values[f.id] === true} className="h-4 w-4 accent-[var(--accent)]" />
+              {f.label}
+            </label>
+          ) : (
+            <>
+              <label className="label" htmlFor={`rf-${f.id}`}>
+                {f.label}
+                {f.required && <span className="text-accent"> *</span>}
+              </label>
+              <FieldInput field={f} value={values[f.id]} options={f.type === "link" ? (links[f.to ?? ""] ?? []) : (f.options ?? []).map((o) => ({ value: o.id, label: o.label }))} />
+            </>
+          )}
+        </div>
+      ))}
+      {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="flex justify-end gap-2 pt-1">
+        <button type="button" className="btn-ghost" onClick={() => onDone(null)}>Cancel</button>
+        <button className="btn-primary" disabled={busy}>{busy ? "Saving…" : (request.submitLabel ?? (editing ? "Save" : "Add"))}</button>
+      </div>
+    </form>
+  );
+}
+
+function FieldInput({ field: f, value, options }: { field: Field; value: unknown; options: { value: string; label: string }[] }) {
+  const id = `rf-${f.id}`;
+  const str = value == null ? "" : String(value);
+  const common = { id, name: f.id, required: f.required, className: "input", defaultValue: str };
+  switch (f.type) {
+    case "long_text":
+      return <textarea {...common} rows={3} />;
+    case "number":
+      return <input {...common} type="number" step="any" inputMode="decimal" />;
+    case "money":
+      return <input {...common} type="number" step="0.01" inputMode="decimal" />;
+    case "date":
+      return <DatePicker id={id} name={f.id} required={f.required} defaultValue={str.slice(0, 10)} />;
+    case "datetime":
+      return <DatePicker id={id} name={f.id} required={f.required} withTime defaultValue={str ? toLocal(str) : ""} />;
+    case "email":
+      return <input {...common} type="email" autoComplete="off" />;
+    case "phone":
+      return <input {...common} type="tel" autoComplete="off" />;
+    case "status":
+    case "choice":
+    case "link":
+      return <Choice id={id} name={f.id} required={f.required} initial={str} options={options} />;
+    default:
+      return <input {...common} type="text" />;
+  }
+}
+
+function Choice({ id, name, required, initial, options }: { id: string; name: string; required?: boolean; initial: string; options: { value: string; label: string }[] }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <Select
+      id={id}
+      name={name}
+      required={required}
+      value={value}
+      onChange={(v) => setValue(String(v))}
+      placeholder={required ? "Choose…" : "—"}
+      options={[...(!required && value ? [{ value: "", label: "—" }] : []), ...options]}
+    />
+  );
+}

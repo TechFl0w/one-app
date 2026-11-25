@@ -106,6 +106,12 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
   const plan = useRef<BuildPlan | null>(null);
   const autoSteps = useRef(0);
   const stalled = useRef({ key: "", count: 0 });
+  // Only the screenshots the step being built needs (saves tokens); all of them when it doesn't say.
+  const building = useRef<BuildPlan["steps"][number] | null>(null);
+  const designsFor = (step: BuildPlan["steps"][number] | null | undefined) => {
+    const picked = step?.images?.map((n) => designs.current[n - 1]).filter((x): x is ChatImage => !!x) ?? [];
+    return picked.length ? picked : designs.current;
+  };
   const continuePlan = useEffectEvent(() => {
     const next = plan.current?.steps.find((s) => !s.done);
     if (!next || autoSteps.current >= 15) return;
@@ -115,9 +121,11 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
     if (stalled.current.count >= 2) return;
     autoSteps.current += 1;
     round.current = 0;
+    building.current = next;
+    const shots = designsFor(next);
     deliver(
-      `[Automatic] Continue the plan "${plan.current!.goal}": do the next step now — ${next.title}.${designs.current.length ? " The screenshots are attached again." : ""}`,
-      designs.current,
+      `[Automatic] Continue the plan "${plan.current!.goal}": do the next step now — ${next.title}.${shots.length ? ` The screenshot${shots.length > 1 ? "s for this step are" : " for this step is"} attached again.` : ""}`,
+      shots,
       `Next: ${next.title}…`,
     );
   });
@@ -129,8 +137,9 @@ export function ChatPanel({ mode, initialTranscript = [] }: { mode: EditMode; in
     if (!shot) return continuePlan();
     round.current += 1;
     const picture: ChatImage = { mediaType: "image/jpeg", data: shot.slice(shot.indexOf(",") + 1) };
-    const withDesign = designs.current.length ? ` The owner's design${designs.current.length > 1 ? "s follow" : " follows"} it.` : "";
-    deliver(`[Automatic check] The first image is how the component you just wrote (${target.componentId}) renders right now.${withDesign} Compare and fix anything that's off, or confirm briefly.`, [picture, ...designs.current].slice(0, 8), "Checking how it looks…");
+    const shots = designsFor(building.current ?? plan.current?.steps.find((s) => !s.done));
+    const withDesign = shots.length ? ` The owner's design${shots.length > 1 ? "s follow" : " follows"} it.` : "";
+    deliver(`[Automatic check] The first image is how the component you just wrote (${target.componentId}) renders right now.${withDesign} Compare and fix anything that's off, or confirm briefly.`, [picture, ...shots].slice(0, 8), "Checking how it looks…");
   });
 
   useEffect(() => {

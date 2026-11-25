@@ -226,10 +226,10 @@ export const OWNER_TOOLS: OwnerTool[] = [
     name: "plan_build",
     description:
       "For big jobs that take several turns (recreating an app from screenshots, building many pages): record the plan — one step per screen or part — and which steps are done. " +
-      "Call it at the start, and again after finishing each step (mark it done). While steps remain, the app automatically sends you a “[Automatic] Continue” message (with the screenshots again) so you can do the next step.",
+      "Call it at the start, and again after finishing each step (mark it done). While steps remain, the app automatically sends you a “[Automatic] Continue” message (with the screenshots again) so you can do the next step. For each step, list in images which of the owner's screenshots (1 = first attached) it reproduces; only those are sent with that step.",
     input: z.strictObject({
       goal: z.string().min(1).max(200),
-      steps: z.array(z.strictObject({ id: z.string().regex(/^[a-z0-9_]{1,40}$/), title: z.string().min(1).max(120), done: z.boolean() })).min(1).max(20),
+      steps: z.array(z.strictObject({ id: z.string().regex(/^[a-z0-9_]{1,40}$/), title: z.string().min(1).max(120), done: z.boolean(), images: z.array(z.int().min(1).max(8)).max(8).optional() })).min(1).max(20),
     }),
     risk: "read",
     run: async (_b, i, fx) => {
