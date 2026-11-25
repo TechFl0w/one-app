@@ -35,6 +35,8 @@ export interface OwnerTool<I = unknown> {
   /** Plain-language lines for a confirmation, for risky calls. */
   describe?: (input: I, bp: Blueprint) => string[];
   run: (backend: OwnerBackend, input: I, effects: ToolEffects, opts: { confirmed: boolean }) => Promise<unknown>;
+  /** After a confirmed run: a short message for the owner about the result (e.g. a test run's output). */
+  report?: (result: unknown) => string | null;
 }
 
 const tool = <I>(t: OwnerTool<I>) => t as unknown as OwnerTool<unknown>;
@@ -273,6 +275,11 @@ export const OWNER_TOOLS: OwnerTool[] = [
     run: async (b, i) => {
       if (!b.functions) throw new Error("Server code can’t run here");
       return b.functions.test(i.id, i.input ?? null);
+    },
+    report: (r) => {
+      const x = r as { ok: boolean; value?: unknown; error?: string; logs: string[] };
+      const logs = x.logs?.length ? `\nLog: ${x.logs.slice(-5).join(" · ")}` : "";
+      return x.ok ? `Test run finished. Result: ${JSON.stringify(x.value).slice(0, 500)}${logs}` : `Test run failed: ${x.error}${logs}`;
     },
   }),
 

@@ -62,6 +62,7 @@ export async function resolveConfirmation(businessId: string, itemId: string, de
     let history = convo.history;
     let changed = false;
     let failed = false;
+    const reports: string[] = [];
     if (decision === "cancel") {
       await resolvePending(supabase, ids, "cancelled");
       history = withNote(history, `[The owner cancelled: ${item.response!.confirm!.items.join("; ")}]`);
@@ -70,16 +71,22 @@ export async function resolveConfirmation(businessId: string, itemId: string, de
       for (const a of actions) {
         const r = await runConfirmedAction(backend, a);
         changed ||= !!r.effects.changed;
-        failed ||= r.note.includes("failed");
+        failed ||= !r.ok;
         notes.push(r.note);
+        if (r.report) reports.push(r.report);
         await resolvePending(supabase, [a.id], r.note.includes("failed") ? "failed" : "confirmed");
       }
       history = withNote(history, notes.join("\n"));
     }
     const resolved = decision === "cancel" ? "cancelled" : failed ? "failed" : "confirmed";
-    await saveConversation(supabase, businessId, userId, history, markResolved(convo.transcript, itemId, resolved));
+    // Results worth showing (e.g. a test run's output) appear as an assistant message.
+    const transcript = [
+      ...markResolved(convo.transcript, itemId, resolved),
+      ...reports.map((text) => ({ id: crypto.randomUUID(), role: "assistant" as const, text, at: new Date().toISOString() })),
+    ];
+    await saveConversation(supabase, businessId, userId, history, transcript);
     if (changed) revalidatePath(`/b/${businessId}`, "layout");
-    return { ok: true, transcript: markResolved(convo.transcript, itemId, resolved), changed };
+    return { ok: true, transcript, changed };
   } catch (e) {
     return fail(e);
   }

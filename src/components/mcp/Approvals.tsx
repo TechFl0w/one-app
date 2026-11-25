@@ -16,7 +16,7 @@ export function Approvals({ rows, resolve }: { rows: ApprovalRow[]; resolve: (id
   const act = (id: string, approve: boolean) =>
     start(async () => {
       const r = await resolve(id, approve);
-      setDone((d) => ({ ...d, [id]: r.ok ? (approve ? "Done." : "Declined.") : `Couldn’t do it: ${r.message}` }));
+      setDone((d) => ({ ...d, [id]: r.ok ? (approve ? (r.message ?? "Done.") : "Declined.") : `Couldn’t do it: ${r.message}` }));
     });
 
   if (!rows.length)
