@@ -355,7 +355,7 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const link = await b.payments.createLink({
         kind: i.interval ? "subscription" : "payment",
         amount: i.amount,
-        currency: (i.currency ?? process.env.DEFAULT_CURRENCY ?? "CAD").toUpperCase(),
+        currency: (i.currency ?? (await b.blueprint()).business.currency ?? process.env.DEFAULT_CURRENCY ?? "CAD").toUpperCase(),
         description: i.description,
         interval: i.interval,
         tableId: i.table,
