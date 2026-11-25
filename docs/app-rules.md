@@ -19,4 +19,8 @@ The owner can ask for something else; the rules are in the owner agent's prompt
   refresh themselves.
 - **One primary action** per screen, top right; destructive actions secondary and red.
 - **Phones:** columns stack below `md`, tables become cards or scroll, tap targets ≥ 40px.
+- **Business rules in the data:** derived/synced values (a room's status from its tenant, an
+  open-maintenance flag, totals) are rollup/formula fields or automations — never block code that
+  updates other tables, which tables, imports and the API would bypass.
+- **Ids, not labels:** compare choices to option ids, never label text.
 - **Inputs:** only the kit's Select / DateTimeInput (never native, never hand-made popovers).

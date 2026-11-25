@@ -11,6 +11,6 @@ describe("sandbox document", () => {
     expect(csp).toContain("connect-src 'none'");
     expect(csp).toContain("form-action 'none'");
     expect(csp).toContain("img-src https://app.example data: blob:");
-    expect(html).toContain('<script src="https://app.example/sandbox/runtime.js"></script>');
+    expect(html).toMatch(/<script src="https:\/\/app\.example\/sandbox\/runtime\.js\?v=[a-z0-9]+"><\/script>/);
   });
 });

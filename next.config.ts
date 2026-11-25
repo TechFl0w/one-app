@@ -1,4 +1,14 @@
 import type { NextConfig } from "next";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+
+// Version of the sandbox scripts (built by scripts/build-sandbox.mjs before next): their URLs carry
+// it, so browsers can cache them for good and still get each new build.
+const sandboxVersion = (() => {
+  const h = createHash("sha256");
+  for (const f of ["public/sandbox/runtime.js", "public/sandbox/tailwind.js"]) if (existsSync(f)) h.update(readFileSync(f));
+  return h.digest("hex").slice(0, 12);
+})();
 
 const nextConfig: NextConfig = {
   // Generated components are type-checked on the server with the TypeScript compiler, which reads
@@ -8,6 +18,10 @@ const nextConfig: NextConfig = {
   experimental: { serverActions: { bodySizeLimit: "4mb" } },
   outputFileTracingIncludes: { "/**": ["./node_modules/typescript/lib/lib.*.d.ts"] },
   // OAuth discovery for the MCP server (RFC 9728) lives under /.well-known.
+  env: { NEXT_PUBLIC_SANDBOX_VERSION: sandboxVersion },
+  async headers() {
+    return [{ source: "/sandbox/:file*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] }];
+  },
   async rewrites() {
     return [
       { source: "/.well-known/oauth-protected-resource", destination: "/api/oauth-metadata" },

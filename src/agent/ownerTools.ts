@@ -12,6 +12,7 @@ import { availableSlots, bookSlot } from "@/booking/service";
 import { overlapFixOps } from "@/engine/editing";
 import { applyChangeSet } from "@/engine/changeSet";
 import { compileComponent, compileFunction } from "@/codegen/compile";
+import { checkReferences } from "@/codegen/references";
 import { ComponentId, FunctionId, GRID_COLUMNS, Host, Label, PageId } from "@/schema/blueprint";
 import type { Operation as Op } from "@/schema/changeSet";
 
@@ -188,6 +189,8 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const compiled = compileComponent(i.source);
       if (!compiled.ok) throw new Error(`The component didn't compile — fix these and call write_component again:\n${compiled.errors.join("\n")}`);
       const bp = await b.blueprint();
+      const unknown = checkReferences(i.source, bp, i.newPage ? [i.newPage.id] : []);
+      if (unknown.length) throw new Error(`The component refers to things that don't exist — fix these and call write_component again:\n${unknown.join("\n")}`);
       const ops: Op[] = [{ op: "putComponent", component: { id: i.id, label: i.label, source: i.source, compiled: compiled.compiled } }];
       const blockId = `blk_${i.id.slice(4)}`.slice(0, 64);
       const block = (x: number, y: number, w: number, h: number) => ({ id: blockId, type: "custom" as const, x, y, w, h, options: { component: i.id, ...(i.props ? { props: i.props } : {}) } });

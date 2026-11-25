@@ -32,6 +32,11 @@ const log = (...a) => console.log("•", ...a);
   const rows = await frame.locator('[data-testid="booking-row"]').count();
   log("rows from the bridge:", rows, `(${Date.now() - t0} ms)`);
   assert.ok(rows > 0);
+  // Asking for more than one page (limit 1000) still loads everything, page by page.
+  await frame.locator('[data-testid="all-count"]').filter({ hasText: "/" }).waitFor();
+  const [got, of] = (await frame.locator('[data-testid="all-count"]').textContent()).split("/").map(Number);
+  log("limit 1000 →", got, "of", of);
+  assert.ok(got > 0 && got === of, "a big limit is paged, not rejected");
   assert.equal(await frame.getByText("Client").count(), 0, "collapsed by default");
   const height = () => p.locator('iframe[title="Bookings hub"]').evaluate((e) => Math.round(e.getBoundingClientRect().height));
   await p.waitForTimeout(800);

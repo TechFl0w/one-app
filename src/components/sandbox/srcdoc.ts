@@ -6,6 +6,9 @@
 import type { Theme } from "@/schema/blueprint";
 import { themeFontsHref } from "@/theme/theme";
 
+/** Changes with every build of the sandbox scripts (see next.config.ts), so they can be cached forever. */
+const V = process.env.NEXT_PUBLIC_SANDBOX_VERSION ?? "dev";
+
 export function sandboxSrcdoc(appOrigin: string, theme?: Theme): string {
   const c = theme?.colors ?? {};
   const font = theme?.font ?? "Plus Jakarta Sans";
@@ -38,6 +41,6 @@ export function sandboxSrcdoc(appOrigin: string, theme?: Theme): string {
 h1, h2, h3 { font-family: "${heading}", ui-sans-serif, system-ui, sans-serif; }
 html, body { margin: 0; background: transparent; color: var(--color-ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 </style>
-<script src="${appOrigin}/sandbox/tailwind.js"></script>
-</head><body><div id="root"></div><script src="${appOrigin}/sandbox/runtime.js"></script></body></html>`;
+<script src="${appOrigin}/sandbox/tailwind.js?v=${V}"></script>
+</head><body><div id="root"></div><script src="${appOrigin}/sandbox/runtime.js?v=${V}"></script></body></html>`;
 }

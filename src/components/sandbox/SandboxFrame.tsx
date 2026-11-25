@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { RecordQuery } from "@/schema/records";
+import { unwrap } from "@/sandbox/result";
 import { Dialog } from "@/components/edit/Dialog";
 import type { FrameToHost, HostToFrame, SandboxBridge, SandboxRecord, SandboxSchema } from "@/sandbox/protocol";
 import type { Theme } from "@/schema/blueprint";
@@ -85,22 +86,22 @@ export function SandboxFrame({
         let value: unknown;
         switch (m.method) {
           case "records.list":
-            value = await bridge.list(RecordQuery.parse(a[0]));
+            value = unwrap(await bridge.list(RecordQuery.parse(a[0])));
             break;
           case "records.get":
-            value = await bridge.get(str(a[0], "table"), str(a[1], "id"));
+            value = unwrap(await bridge.get(str(a[0], "table"), str(a[1], "id")));
             break;
           case "records.create":
-            value = await bridge.create(str(a[0], "table"), obj(a[1]));
+            value = unwrap(await bridge.create(str(a[0], "table"), obj(a[1])));
             break;
           case "records.update":
-            value = await bridge.update(str(a[0], "table"), str(a[1], "id"), obj(a[2]));
+            value = unwrap(await bridge.update(str(a[0], "table"), str(a[1], "id"), obj(a[2])));
             break;
           case "records.remove": {
             const table = str(a[0], "table");
             const id = str(a[1], "id");
             const ok = await new Promise<boolean>((resolve) => setConfirm({ label: tableLabel(table), resolve }));
-            if (ok) await bridge.remove(table, id);
+            if (ok) unwrap(await bridge.remove(table, id));
             value = ok;
             break;
           }

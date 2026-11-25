@@ -40,8 +40,26 @@ const changed = () => listeners.forEach((l) => l());
 
 type Query = { table: string; filters?: { field: string; op: string; value?: unknown }[]; sort?: { field: string; dir: "asc" | "desc" }[]; limit?: number; offset?: number };
 
+// The bridge serves at most PAGE rows per call; bigger limits are fetched page by page (up to MAX_ROWS).
+const PAGE = 500;
+const MAX_ROWS = 5000;
+async function listAll(q: Query) {
+  const want = Math.min(Math.max(1, Math.floor(Number(q.limit) || 50)), MAX_ROWS);
+  const start = Math.max(0, Math.floor(Number(q.offset) || 0));
+  if (want <= PAGE) return call<{ records: SandboxRecord[]; total: number }>("records.list", { ...q, limit: want, offset: start });
+  const out: SandboxRecord[] = [];
+  let total = 0;
+  while (out.length < want) {
+    const page = await call<{ records: SandboxRecord[]; total: number }>("records.list", { ...q, limit: Math.min(PAGE, want - out.length), offset: start + out.length });
+    out.push(...page.records);
+    total = page.total;
+    if (page.records.length < PAGE || start + out.length >= total) break;
+  }
+  return { records: out, total };
+}
+
 const records = {
-  list: (q: Query) => call<{ records: SandboxRecord[]; total: number }>("records.list", q),
+  list: (q: Query) => listAll(q),
   get: (table: string, id: string) => call<SandboxRecord>("records.get", table, id),
   create: async (table: string, data: Record<string, unknown>) => {
     const r = await call<SandboxRecord>("records.create", table, data);
@@ -86,7 +104,27 @@ function useRecords(query: Query) {
       live = false;
     };
   }, [key, tick, again]);
-  return { ...state, reload: () => setAgain((x) => x + 1) };
+  return useErrorGuard(state, () => setAgain((x) => x + 1));
+}
+
+/**
+ * A load error is never shown as an empty list: unless the component reads `error` itself, the
+ * error goes to the frame's error card (with Retry), and One App shows it too.
+ */
+function useErrorGuard<S extends { error: string | null }>(state: S, reload: () => void) {
+  const handled = useRef(false);
+  if (state.error && !handled.current) throw new Error(state.error);
+  const out = { ...state, reload } as S & { reload: () => void };
+  Object.defineProperty(out, "error", {
+    enumerable: true,
+    get: () => {
+      // Read lazily by the component during render: remembers that it handles errors itself.
+      // eslint-disable-next-line react-hooks/immutability
+      handled.current = true;
+      return state.error;
+    },
+  });
+  return out;
 }
 
 function useRecord(table: string, id: string | null | undefined) {
@@ -104,7 +142,7 @@ function useRecord(table: string, id: string | null | undefined) {
       live = false;
     };
   }, [table, id, tick, again]);
-  return { ...state, reload: () => setAgain((x) => x + 1) };
+  return useErrorGuard(state, () => setAgain((x) => x + 1));
 }
 
 const useSchema = () => useContext(KitContext).schema;
@@ -491,7 +529,16 @@ class Boundary extends React.Component<{ children: React.ReactNode }, { error: s
     post({ type: "crash", message: e instanceof Error ? e.message : String(e) });
   }
   render() {
-    return this.state.error ? <Empty>Something went wrong in this part: {this.state.error}</Empty> : this.props.children;
+    if (!this.state.error) return this.props.children;
+    return (
+      <div role="alert" className="m-1 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <p className="font-semibold">This part couldn’t load.</p>
+        <p className="mt-1 break-words">{this.state.error}</p>
+        <button type="button" className="mt-3 rounded-full bg-white px-4 py-1.5 font-medium text-red-800 ring-1 ring-red-200 hover:bg-red-100" onClick={() => this.setState({ error: null })}>
+          Try again
+        </button>
+      </div>
+    );
   }
 }
 

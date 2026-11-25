@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { History, Inbox, Settings, ShieldCheck, Zap } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
+import { forBrowser } from "@/server/clientBlueprint";
 import { getBusinessContext } from "@/server/context";
 import { loadConversation } from "@/server/ownerChat";
 import { sandboxCreate, sandboxGet, sandboxList, sandboxRemove, sandboxUpdate } from "./sandbox-actions";
@@ -38,7 +39,7 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
         update: sandboxUpdate.bind(null, businessId),
         remove: sandboxRemove.bind(null, businessId),
       }}
-      blueprint={blueprint}
+      blueprint={forBrowser(blueprint)}
       mode={{ kind: "server", businessId }}
       basePath={`/b/${businessId}`}
       businesses={businesses}
