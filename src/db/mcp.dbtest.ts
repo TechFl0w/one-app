@@ -56,3 +56,18 @@ describe.skipIf(!testDbUrl)("mcp storage", () => {
     expect(e.rows).toEqual([{ source: "mcp" }]);
   });
 });
+
+describe.skipIf(!testDbUrl)("deleting a business", () => {
+  it("cascades through records without the audit/event triggers failing", async () => {
+    const t2 = await setupTestDb();
+    try {
+      const u = await t2.newUser();
+      const b = await t2.createBusiness(u, "Gone");
+      await t2.db.query("insert into public.records (business_id, table_id, data) values ($1, 'tbl_clients', '{\"fld_name\":\"Ava\"}')", [b]);
+      await t2.db.query("delete from public.businesses where id = $1", [b]);
+      expect((await t2.db.query("select count(*)::int n from public.records where business_id = $1", [b])).rows[0].n).toBe(0);
+    } finally {
+      await t2.close();
+    }
+  });
+});
