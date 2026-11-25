@@ -38,8 +38,8 @@ export function supabaseOwnerBackend(supabase: SupabaseClient, businessId: strin
             return createCheckout(createAdminClient(), {
               ...input,
               businessId,
-              successUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/paid`,
-              cancelUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/paid?cancelled=1`,
+              successUrl: `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/paid`,
+              cancelUrl: `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/paid?cancelled=1`,
               customerEmail: input.email,
             });
           },
