@@ -10,6 +10,9 @@ import { supabaseOwnerBackend } from "./ownerBackend";
 import { expireHolds, hasUpcomingBooking } from "@/booking/service";
 import { ensureEmailSettings, sendEmail } from "./email";
 import { renderTemplate, resolveRecipient } from "@/email/compose";
+import { approvedTemplate, getLine, sendWhatsApp, whatsappConfigured } from "./whatsapp";
+import { resolvePhone } from "@/whatsapp/recipient";
+import { templateVariables } from "@/whatsapp/core";
 import { formatDateTime } from "@/components/blocks/format";
 
 /** Supabase implementations of the automation queue and side effects (service role). */
@@ -89,13 +92,42 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
     },
     async sendMessage(b, step, key, record) {
       // WhatsApp/SMS arrive with Twilio (Phase 5); until then those steps are skipped.
-      // "auto" means WhatsApp when connected (Phase 5), email until then.
-      if (step.channel !== "email" && step.channel !== "auto") return { sent: false, reason: `${step.channel === "whatsapp" ? "WhatsApp" : step.channel} isn’t connected yet` };
       const bp = await blueprint(b);
-      const to = await resolveRecipient(bp, record.tableId, record.data, step.toField, async (t, id) => {
+      const getRecord = async (t: string, id: string) => {
         const r = await db.from("records").select("data").eq("business_id", b).eq("table_id", t).eq("id", id).maybeSingle();
         return (r.data?.data as Record<string, unknown>) ?? null;
-      });
+      };
+      const whenOf = () => {
+        const table = bp.tables.find((t) => t.id === record.tableId);
+        const f = table?.fields.find((x) => x.type === "datetime" || x.type === "date");
+        const v = f && record.data[f.id];
+        return typeof v === "string" ? formatDateTime(v.length === 10 ? `${v}T12:00:00Z` : v, { timezone: bp.business.timezone }) : undefined;
+      };
+
+      // WhatsApp first ("whatsapp" or "auto"): needs an online line, an approved template and a phone.
+      if (step.channel === "whatsapp" || step.channel === "auto") {
+        const why = await (async () => {
+          if (!whatsappConfigured()) return "WhatsApp isn’t set up on this server";
+          const line = await getLine(db, b);
+          if (line?.status !== "online") return "WhatsApp isn’t connected yet";
+          if (!step.template) return "WhatsApp messages from automations need a template";
+          const contentSid = await approvedTemplate(db, b, step.template);
+          if (!contentSid) return "That WhatsApp template isn’t approved yet";
+          const to = await resolvePhone(bp, record.tableId, record.data, step.toField, getRecord);
+          if (!to) return "No WhatsApp number for this record";
+          const tracking = bp.tables.find((t) => t.id === record.tableId)?.fields.find((f) => /track/i.test(f.label) && typeof record.data[f.id] === "string");
+          const variables = templateVariables(step.template, {
+            name: to.name?.split(" ")[0], business: bp.business.name, when: whenOf(), reviewLink: bp.business.reviewUrl, tracking: tracking ? String(record.data[tracking.id]) : undefined,
+          });
+          await sendWhatsApp(db, b, to.phone, { contentSid, variables }, { author: "automation", key, preview: `${step.template}: ${Object.values(variables).join(" · ")}` });
+          return null;
+        })();
+        if (!why) return { sent: true };
+        if (step.channel === "whatsapp") return { sent: false, reason: why };
+        // "auto" falls back to email below.
+      }
+      if (step.channel !== "email" && step.channel !== "auto") return { sent: false, reason: `${step.channel} isn’t supported` };
+      const to = await resolveRecipient(bp, record.tableId, record.data, step.toField, getRecord);
       if (!to) return { sent: false, reason: "No email address for this record" };
       const settings = await ensureEmailSettings(db, b, bp.business.name);
       const table = bp.tables.find((t) => t.id === record.tableId);

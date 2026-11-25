@@ -58,6 +58,10 @@ describe("booking service", () => {
     const any = await bookSlot(demoBlueprint, backend, { serviceId: GEL, start: local("10:00"), client: { name: "Zed", phone: "+1 604 555 0199" } }, now);
     expect(any.slot.practitionerId).toBe(PRIYA); // Mai is taken at 10:00
     expect(state.records.filter((x) => x.tableId === "tbl_clients" && x.data.fld_name === "Zed")).toHaveLength(1);
+
+    // A differently formatted number still finds the same client (Ben: "+1 604 555 0102").
+    const ben = await bookSlot(demoBlueprint, backend, { serviceId: GEL, start: local("13:00"), client: { name: "Ben", phone: "(604) 555-0102" } }, now);
+    expect(state.records.find((x) => x.id === ben.bookingId)!.data.fld_client).toBe(id(11));
   });
 
   it("validates requests", async () => {

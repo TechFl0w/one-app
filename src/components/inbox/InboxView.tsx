@@ -20,7 +20,9 @@ export function InboxView({
   inboundAddress,
   timezone,
   markRead,
+  tabs,
 }: {
+  tabs?: React.ReactNode;
   items: InboxItem[];
   inboundAddress: string;
   timezone: string;
@@ -48,6 +50,7 @@ export function InboxView({
         <Inbox className="h-6 w-6 text-accent" />
         <h1 className="text-2xl font-bold tracking-tight">Inbox</h1>
       </div>
+      {tabs}
       <p className="mb-6 text-sm text-muted">
         Emails to <span className="font-medium text-ink">{inboundAddress}</span> land here. Forward order or booking emails to it, or use it as your reply address.
       </p>

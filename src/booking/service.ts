@@ -6,6 +6,7 @@ import { recordLabel } from "@/engine/blockData";
 import { RecordError } from "@/engine/records";
 import { findSlots, type FinderPractitioner, type FinderResource, type Interval, type Slot } from "./slots";
 import { blocksTime, initialState, optionFor, stateOf } from "./lifecycle";
+import { toE164 } from "@/whatsapp/core";
 
 /**
  * Bookings on top of the blueprint's records: what can be booked, which times are free, and
@@ -224,15 +225,14 @@ export async function bookSlot(
   );
   if (!slot) throw new RecordError("invalid", "Sorry, that time is no longer available. Please pick another.");
 
-  // Find the client by email, then phone; otherwise add them.
+  // Find the client by email, then phone (numbers compared normalised: "+1 604 555 0101" = "+16045550101"); otherwise add them.
   let clientId: string | undefined;
-  for (const [field, value] of [[sc.clients.email, req.client.email], [sc.clients.phone, req.client.phone]] as const) {
-    if (!field || !value) continue;
-    const found = await all(b, sc.clients.table, [{ field, op: "eq", value: field === sc.clients.email ? value.trim().toLowerCase() : value.trim() }]);
-    if (found[0]) {
-      clientId = found[0].id;
-      break;
-    }
+  if (sc.clients.email && req.client.email) {
+    clientId = (await all(b, sc.clients.table, [{ field: sc.clients.email, op: "eq", value: req.client.email.trim().toLowerCase() }]))[0]?.id;
+  }
+  const phone = req.client.phone ? toE164(req.client.phone) : null;
+  if (!clientId && sc.clients.phone && phone) {
+    clientId = (await all(b, sc.clients.table, [{ field: sc.clients.phone, op: "not_empty" }])).find((r) => toE164(String(r.data[sc.clients.phone!])) === phone)?.id;
   }
   if (!clientId) {
     const values: Record<string, unknown> = { [sc.clients.name]: name };

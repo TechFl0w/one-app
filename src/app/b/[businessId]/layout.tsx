@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck, CreditCard, History, Inbox, Mail, Zap } from "lucide-react";
+import { CalendarCheck, CreditCard, History, Inbox, Mail, MessageCircle, Zap } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { getBusinessContext } from "@/server/context";
 import { signOut } from "@/app/login/actions";
@@ -13,7 +13,12 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
     .select("id", { count: "exact", head: true })
     .eq("business_id", businessId)
     .is("read_at", null);
-  const unread = count ?? 0;
+  const { count: waCount } = await supabase
+    .from("conversations")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", businessId)
+    .gt("unread", 0);
+  const unread = (count ?? 0) + (waCount ?? 0);
   const { transcript } = userId ? await loadConversation(supabase, businessId, userId).catch(() => ({ transcript: [] })) : { transcript: [] };
   return (
     <AppShell
@@ -38,6 +43,9 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
           )}
           <Link href={`/b/${businessId}/settings/payments`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
             <CreditCard className="h-4 w-4" /> Payments
+          </Link>
+          <Link href={`/b/${businessId}/settings/whatsapp`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
+            <MessageCircle className="h-4 w-4" /> WhatsApp
           </Link>
           <Link href={`/b/${businessId}/settings/email`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
             <Mail className="h-4 w-4" /> Email settings
