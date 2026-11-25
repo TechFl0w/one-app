@@ -308,3 +308,33 @@ export function newFieldOp(
 export function riskyOps(preview: { ops: { risk: string; description: string }[] }): string[] {
   return preview.ops.filter((o) => o.risk === "risky").map((o) => o.description);
 }
+
+// ---------- keeping layouts tidy ----------
+
+/**
+ * Extra moveBlock ops so blocks that `ops` added, moved or resized don't cover other blocks: those
+ * get pushed down (the AI path; drag-and-drop already uses layoutOps). Default layouts only.
+ */
+export function overlapFixOps(after: Blueprint, ops: Operation[]): Operation[] {
+  const touched = new Map<string, Set<string>>();
+  for (const op of ops) {
+    const add = (pageId: string, blockId: string) => {
+      if ("layout" in op && op.layout) return;
+      (touched.get(pageId) ?? touched.set(pageId, new Set()).get(pageId)!).add(blockId);
+    };
+    if (op.op === "addBlock" || op.op === "updateBlock") add(op.pageId, op.block.id);
+    if (op.op === "moveBlock" || op.op === "resizeBlock") add(op.pageId, op.blockId);
+  }
+  const fixes: Operation[] = [];
+  for (const [pageId, ids] of touched) {
+    const page = after.pages.find((p) => p.id === pageId);
+    if (!page) continue;
+    let blocks = page.layout.blocks;
+    for (const id of ids) if (blocks.some((b) => b.id === id)) blocks = pushDown(blocks, id);
+    for (const b of blocks) {
+      const before = page.layout.blocks.find((x) => x.id === b.id)!;
+      if (b.y !== before.y) fixes.push({ op: "moveBlock", pageId, blockId: b.id, x: b.x, y: b.y });
+    }
+  }
+  return fixes;
+}

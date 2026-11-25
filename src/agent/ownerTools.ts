@@ -9,6 +9,8 @@ import type { UndoToken } from "@/engine/commit";
 import type { OwnerBackend, PendingAction } from "./types";
 import { recordUpdateIsRisky } from "@/engine/risk";
 import { availableSlots, bookSlot } from "@/booking/service";
+import { overlapFixOps } from "@/engine/editing";
+import { applyChangeSet } from "@/engine/changeSet";
 import { compileComponent, compileFunction } from "@/codegen/compile";
 import { ComponentId, FunctionId, GRID_COLUMNS, Host, Label, PageId } from "@/schema/blueprint";
 import type { Operation as Op } from "@/schema/changeSet";
@@ -42,6 +44,16 @@ export interface OwnerTool<I = unknown> {
 }
 
 const tool = <I>(t: OwnerTool<I>) => t as unknown as OwnerTool<unknown>;
+
+/** The assistant's layout changes never leave blocks on top of each other: covered blocks move down. */
+function withoutOverlaps(bp: Blueprint, ops: Op[]): Op[] {
+  try {
+    const after = applyChangeSet(bp, { baseVersion: bp.version, source: "ai", ops }, { confirmed: true }).blueprint;
+    return [...ops, ...overlapFixOps(after, ops)];
+  } catch {
+    return ops; // invalid changes are reported by the commit itself
+  }
+}
 
 const Values = z.record(FieldId, z.unknown()).describe("Field values keyed by field id (fld_…). Use null to clear a field.");
 
@@ -141,6 +153,7 @@ export const OWNER_TOOLS: OwnerTool[] = [
     },
     run: async (b, i, fx, { confirmed }) => {
       const bp = await b.blueprint();
+      i = { ...i, ops: withoutOverlaps(bp, i.ops) };
       const r = await b.commitChangeSet({ baseVersion: bp.version, source: "ai", summary: i.summary, ops: i.ops }, confirmed);
       if (!r.ok) throw new Error(r.error);
       const p = previewChangeSet(bp, { baseVersion: bp.version, source: "ai", ops: i.ops });
@@ -188,9 +201,10 @@ export const OWNER_TOOLS: OwnerTool[] = [
         if (exists) ops.push({ op: "updateBlock", pageId: page.id, block: block(pos.x, pos.y, pos.w, pos.h) });
         else ops.push({ op: "addBlock", pageId: page.id, block: block(pos.x, pos.y, pos.w, pos.h) });
       }
-      const r = await b.commitChangeSet({ baseVersion: bp.version, source: "ai", summary: i.summary, ops }, false);
+      const tidy = withoutOverlaps(bp, ops);
+      const r = await b.commitChangeSet({ baseVersion: bp.version, source: "ai", summary: i.summary, ops: tidy }, false);
       if (!r.ok) throw new Error(r.error);
-      const p = previewChangeSet(bp, { baseVersion: bp.version, source: "ai", ops });
+      const p = previewChangeSet(bp, { baseVersion: bp.version, source: "ai", ops: tidy });
       fx.changed = true;
       fx.preview = { summary: i.summary, ops: p.ok ? p.ops : [], undo: r.undo };
       const shownOn = i.newPage?.id ?? i.page ?? bp.pages.find((pg) => pg.layout.blocks.some((x) => x.type === "custom" && x.options?.component === i.id))?.id;

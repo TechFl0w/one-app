@@ -37,3 +37,18 @@ describe("generated components", () => {
     expect(ok.blueprint.components).toBeUndefined();
   });
 });
+
+describe("AI layout changes don't overlap", () => {
+  it("pushes covered blocks down", async () => {
+    const { overlapFixOps } = await import("./editing");
+    const bp = salonBlueprint();
+    const page = bp.pages.find((p) => p.layout.blocks.length >= 2)!;
+    const add = { op: "addBlock" as const, pageId: page.id, block: { id: "blk_banner", type: "notes" as const, x: 0, y: 0, w: 12, h: 2, options: { text: "Hi" } } };
+    const after = applyChangeSet(bp, cs(bp, add)).blueprint;
+    const fixes = overlapFixOps(after, [add]);
+    const final = applyChangeSet(after, cs(after, ...fixes)).blueprint.pages.find((p) => p.id === page.id)!.layout.blocks;
+    const overlap = (a: (typeof final)[number], b: (typeof final)[number]) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    for (const a of final) for (const b of final) if (a !== b) expect(overlap(a, b), `${a.id} vs ${b.id}`).toBe(false);
+    expect(final.find((b) => b.id === "blk_banner")!.y).toBe(0);
+  });
+});

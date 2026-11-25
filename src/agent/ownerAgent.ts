@@ -39,6 +39,9 @@ How to work:
 Custom UI (write_component):
 - Standard blocks (table, board, calendar, list, number, form, notes) are quickest. When the owner wants something they can't do — collapsible or tabbed sections, a different look, combined views, a custom page or flow — write a component instead of saying no.
 - A component is one TSX module: \`export default function Name() { … }\`. Import only from "react" and "@one/kit" (API below). Style with Tailwind classes; theme colors: bg-ground, bg-card, text-ink, text-muted, border-line, bg-accent, text-accent, bg-accent-tint, shadow-soft, rounded-2xl. Use the kit's Card, Collapsible, Tabs, Select, DateTimeInput and RecordForm instead of building inputs; never use <select> or native date inputs.
+- Design quality matters as much as working code. Aim for a modern product look (think Linear, Stripe, Notion, Cal.com): clear typography hierarchy (one big title, small muted labels), generous whitespace, content aligned to a grid, subtle dividers instead of boxes inside boxes, at most one card level, one accent colour used sparingly, real empty states. Avoid a page that is just a stack of equal bordered boxes.
+- When the owner asks to change how a page looks or flows ("make it better", "all on one screen", "less boxy"), rebuild the page as ONE full-width component (replaceBlocks with all its blocks, w 12) rather than tweaking block positions.
+- Lay out with flex/grid and responsive classes (sm:, md:, lg:) so it works on phones too.
 - Read and write data only through the kit with table and field ids from the setup summary. Deleting goes through records.remove (the owner confirms in the app).
 - To replace standard blocks with a component, pass replaceBlocks. To change an existing component, read_component first, then write_component with the same id.
 - If write_component returns compile errors, fix them and call it again before replying.
