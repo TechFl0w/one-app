@@ -18,8 +18,10 @@ function script(body) {
   const msgs = body.messages;
   const last = msgs.at(-1);
   const isToolResult = Array.isArray(last.content) && last.content[0]?.type === "tool_result";
-  const latest = [...msgs].reverse().find((m) => m.role === "user" && typeof m.content === "string" && (!m.content.startsWith("[The owner ") || m.content.startsWith("[The owner is looking")));
-  const ownerText = (latest?.content ?? "").replace(/^\[The owner is looking at[^\]]*\]\s*/, "");
+  // The owner's latest words: plain text, or text blocks of a merged message (notes + new message).
+  const textOf = (m) => (typeof m.content === "string" ? [m.content] : m.content.filter((b) => b.type === "text").map((b) => b.text));
+  const latest = [...msgs].reverse().map(textOf).flat().find((t) => !t.startsWith("[The owner ") || t.startsWith("[The owner is looking"));
+  const ownerText = (latest ?? "").replace(/^\[The owner is looking at[^\]]*\]\s*/, "");
   if (isToolResult) {
     let r = {};
     try {
