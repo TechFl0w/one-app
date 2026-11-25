@@ -23,7 +23,8 @@ export async function signIn(_prev: AuthState, form: FormData): Promise<AuthStat
 
 export async function signUp(_prev: AuthState, form: FormData): Promise<AuthState> {
   const supabase = await createClient();
-  const origin = (await headers()).get("origin") ?? "";
+  // The configured app URL wins: Supabase only redirects to allow-listed URLs, else to its Site URL.
+  const origin = (process.env.NEXT_PUBLIC_APP_URL || (await headers()).get("origin") || "").replace(/\/$/, "");
   const { data, error } = await supabase.auth.signUp({
     email: String(form.get("email") ?? ""),
     password: String(form.get("password") ?? ""),
