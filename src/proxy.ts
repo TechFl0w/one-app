@@ -10,7 +10,7 @@ export async function proxy(request: NextRequest) {
   // The demo and the onboarding preview run without a session or database.
   if (path === "/demo" || path.startsWith("/demo/") || path === "/start" || path.startsWith("/book/") || path === "/paid") return NextResponse.next();
   // Cron routes (CRON_SECRET) and webhooks (signatures) authenticate themselves, not with a session.
-  if (path.startsWith("/api/cron/") || path.startsWith("/api/webhooks/")) return NextResponse.next(); // signed, no session
+  if (path.startsWith("/api/cron/") || path.startsWith("/api/webhooks/") || path === "/api/mcp") return NextResponse.next(); // signed or token, no session
   // Without Supabase configured (local dev), only the demo works.
   if (!isSupabaseConfigured()) {
     return NextResponse.redirect(new URL("/demo", request.url));

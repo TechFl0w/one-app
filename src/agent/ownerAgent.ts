@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Blueprint } from "@/schema/blueprint";
 import { menuOrder } from "@/engine/editing";
 import { localToday, isoDate } from "@/engine/dates";
-import { OWNER_TOOLS, ownerTool, ownerToolDefinitions, type ToolEffects } from "./ownerTools";
+import { executeOwnerTool, OWNER_TOOLS, ownerToolDefinitions, type ToolEffects } from "./ownerTools";
 import type { AgentResponse, OwnerBackend, PendingAction } from "./types";
 
 /**
@@ -171,39 +171,28 @@ async function runTool(
     return { type: "tool_result", tool_use_id: call.id, content: s, ...(isError ? { is_error: true } : {}) };
   };
 
-  const t = ownerTool(call.name);
-  if (!t) return result(`Unknown tool ${call.name}`, true);
-  const parsed = t.input.safeParse(call.input);
-  if (!parsed.success) {
-    return result(`Invalid input: ${parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`, true);
+  const out = await executeOwnerTool(call.name, call.input, backend, effects, newId);
+  if (out.kind === "error") return result(out.message, true);
+  if (out.kind === "pending") {
+    pending.push(out.action);
+    return result({ status: "waiting_for_owner_confirmation", will_do: out.action.items });
   }
-  try {
-    const bp = await backend.blueprint();
-    const risk = typeof t.risk === "function" ? t.risk(parsed.data, bp) : t.risk;
-    if (risk === "risky") {
-      const action: PendingAction = { id: newId(), tool: t.name, input: parsed.data, items: t.describe?.(parsed.data, bp) ?? [call.name] };
-      pending.push(action);
-      return result({ status: "waiting_for_owner_confirmation", will_do: action.items });
-    }
-    return result(await t.run(backend, parsed.data, effects, { confirmed: false }));
-  } catch (e) {
-    return result(e instanceof Error ? e.message : String(e), true);
-  }
+  return result(out.value);
 }
 
 /**
  * Runs a confirmed PendingAction. Called by app code when the owner presses Confirm, never by
  * the model. Returns effects for the UI and a note to append to the conversation.
  */
-export async function runConfirmedAction(backend: OwnerBackend, action: PendingAction): Promise<{ effects: ToolEffects; note: string }> {
+export async function runConfirmedAction(backend: OwnerBackend, action: PendingAction): Promise<{ ok: boolean; effects: ToolEffects; note: string }> {
   const t = OWNER_TOOLS.find((x) => x.name === action.tool);
   if (!t) throw new Error(`Unknown tool ${action.tool}`);
   const input = t.input.parse(action.input);
   const effects: ToolEffects = {};
   try {
     await t.run(backend, input, effects, { confirmed: true });
-    return { effects, note: `[The owner confirmed and it is done: ${action.items.join("; ")}]` };
+    return { ok: true, effects, note: `[The owner confirmed and it is done: ${action.items.join("; ")}]` };
   } catch (e) {
-    return { effects, note: `[The owner confirmed, but it failed: ${e instanceof Error ? e.message : String(e)}]` };
+    return { ok: false, effects, note: `[The owner confirmed, but it failed: ${e instanceof Error ? e.message : String(e)}]` };
   }
 }

@@ -6,7 +6,7 @@ import { RecordFilter, RecordId } from "@/schema/records";
 import { previewChangeSet, type OpPreview } from "@/engine/changeSet";
 import { recordLabel } from "@/engine/blockData";
 import type { UndoToken } from "@/engine/commit";
-import type { OwnerBackend } from "./types";
+import type { OwnerBackend, PendingAction } from "./types";
 import { recordUpdateIsRisky } from "@/engine/risk";
 import { availableSlots, bookSlot } from "@/booking/service";
 
@@ -263,4 +263,28 @@ export function ownerToolDefinitions(): Anthropic.Beta.BetaTool[] {
 export function labelFor(bp: Blueprint, tableId: string, record: Parameters<typeof recordLabel>[1]) {
   const t = bp.tables.find((x) => x.id === tableId);
   return t ? recordLabel(t, record) : record.id;
+}
+
+export type ToolOutcome = { kind: "result"; value: unknown } | { kind: "error"; message: string } | { kind: "pending"; action: PendingAction };
+
+/**
+ * Validates and runs one owner tool call. Risky calls don't run: they come back as a
+ * PendingAction for code to run after the owner confirms. Shared by the in-app agent and the
+ * business's MCP server, so both have exactly the same tools and rules.
+ */
+export async function executeOwnerTool(name: string, rawInput: unknown, backend: OwnerBackend, effects: ToolEffects, newId: () => string): Promise<ToolOutcome> {
+  const t = ownerTool(name);
+  if (!t) return { kind: "error", message: `Unknown tool ${name}` };
+  const parsed = t.input.safeParse(rawInput ?? {});
+  if (!parsed.success) {
+    return { kind: "error", message: `Invalid input: ${parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}` };
+  }
+  try {
+    const bp = await backend.blueprint();
+    const risk = typeof t.risk === "function" ? t.risk(parsed.data, bp) : t.risk;
+    if (risk === "risky") return { kind: "pending", action: { id: newId(), tool: t.name, input: parsed.data, items: t.describe?.(parsed.data, bp) ?? [name] } };
+    return { kind: "result", value: await t.run(backend, parsed.data, effects, { confirmed: false }) };
+  } catch (e) {
+    return { kind: "error", message: e instanceof Error ? e.message : String(e) };
+  }
 }

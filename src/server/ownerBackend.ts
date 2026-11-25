@@ -16,8 +16,13 @@ async function requireManager(supabase: SupabaseClient, businessId: string) {
   if (!data || !["owner", "admin"].includes(data.role)) throw new Error("Only owners and admins can handle payments");
 }
 
-/** OwnerBackend for a real business, acting as the signed-in user (RLS applies to every call). */
-export function supabaseOwnerBackend(supabase: SupabaseClient, businessId: string): OwnerBackend {
+/**
+ * OwnerBackend for a real business, acting as the signed-in user (RLS applies to every call).
+ * With a service-role client (customer agent, MCP), every call is still scoped by businessId and
+ * `verifiedManager` says the caller's owner/admin role was already checked.
+ */
+export function supabaseOwnerBackend(supabase: SupabaseClient, businessId: string, opts: { verifiedManager?: boolean } = {}): OwnerBackend {
+  const manager = () => (opts.verifiedManager ? Promise.resolve() : requireManager(supabase, businessId));
   return {
     blueprint: () => getCurrentBlueprint(supabase, businessId),
     query: (q) => listRecords(supabase, businessId, q),
@@ -29,7 +34,7 @@ export function supabaseOwnerBackend(supabase: SupabaseClient, businessId: strin
       ? {
           // Payment rows and Stripe calls need the service role; only owners/admins get here.
           async createLink(input) {
-            await requireManager(supabase, businessId);
+            await manager();
             return createCheckout(createAdminClient(), {
               ...input,
               businessId,
@@ -43,7 +48,7 @@ export function supabaseOwnerBackend(supabase: SupabaseClient, businessId: strin
             return (data ?? []).map((p) => ({ ...p, amount: Number(p.amount) }));
           },
           async refund(paymentId) {
-            await requireManager(supabase, businessId);
+            await manager();
             await refundPayment(createAdminClient(), businessId, paymentId);
           },
         }

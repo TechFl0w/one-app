@@ -5,7 +5,7 @@ import type { Blueprint, Field } from "@/schema/blueprint";
 export interface AuditRow {
   id: number;
   actor_id: string | null;
-  source: "ui" | "ai" | "undo" | "system";
+  source: "ui" | "ai" | "undo" | "system" | "mcp";
   action: string;
   table_id: string | null;
   record_id: string | null;
@@ -33,7 +33,7 @@ const plain: Fmt = (f, v) => {
 
 export function auditLine(bp: Blueprint, row: AuditRow, me: string | undefined, fmt: Fmt = plain): AuditLine {
   const who =
-    row.source === "ai" ? "Assistant" : row.actor_id && row.actor_id === me ? "You" : row.actor_id ? "A team member" : row.source === "ui" ? "Online booking" : "Automation";
+    row.source === "ai" ? "Assistant" : row.source === "mcp" ? "An AI app" : row.actor_id && row.actor_id === me ? "You" : row.actor_id ? "A team member" : row.source === "ui" ? "Online booking" : "Automation";
   const table = bp.tables.find((t) => t.id === row.table_id);
   const thing = table?.label.replace(/s$/, "").toLowerCase() ?? "record";
   const data = (row.details?.after ?? row.details?.before ?? {}) as Record<string, unknown>;
