@@ -4,7 +4,7 @@ import type { SandboxSchema } from "./protocol";
 /** What a generated component sees of the business: names, tables, fields, options (no code, no automations). */
 export function sandboxSchema(bp: Blueprint): SandboxSchema {
   return {
-    business: { name: bp.business.name, timezone: bp.business.timezone, currency: "CAD" },
+    business: { name: bp.business.name, timezone: bp.business.timezone, currency: bp.business.currency ?? "CAD" },
     tables: bp.tables.map((t) => ({
       id: t.id,
       label: t.label,

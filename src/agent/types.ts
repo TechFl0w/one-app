@@ -39,6 +39,11 @@ export interface PaymentsBackend {
   refund(paymentId: string): Promise<void>;
 }
 
+export interface BuildPlan {
+  goal: string;
+  steps: { id: string; title: string; done: boolean }[];
+}
+
 /** A risky tool call held back until the owner confirms it (executed by code, not the model). */
 export interface PendingAction {
   id: string;
@@ -63,4 +68,6 @@ export interface AgentResponse {
   changed: boolean;
   /** Components to picture and send back for a self-check (in-app chat only). */
   verify?: { componentId: string; pageId?: string }[];
+  /** A multi-step build (e.g. recreating an app from screenshots); the chat continues it automatically. */
+  plan?: BuildPlan;
 }

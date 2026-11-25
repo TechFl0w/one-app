@@ -30,7 +30,7 @@ export interface BlockEnv {
 
 export async function BlockView({ block, env, fullPage = false }: { block: Block; env: BlockEnv; fullPage?: boolean }) {
   const { blueprint, store, now } = env;
-  const ctx: FormatCtx = { timezone: blueprint.business.timezone };
+  const ctx: FormatCtx = { timezone: blueprint.business.timezone, currency: blueprint.business.currency ?? process.env.DEFAULT_CURRENCY ?? "CAD" };
   const title = blockTitle(block, blueprint);
 
   if (block.type === "custom") {

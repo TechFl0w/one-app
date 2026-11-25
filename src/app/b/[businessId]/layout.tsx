@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { CalendarCheck, Code2, CreditCard, FileSpreadsheet, History, Inbox, Mail, MessageCircle, Plug, ShieldCheck, Zap } from "lucide-react";
+import { History, Inbox, Settings, ShieldCheck, Zap } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { getBusinessContext } from "@/server/context";
-import { signOut } from "@/app/login/actions";
 import { loadConversation } from "@/server/ownerChat";
 import { sandboxCreate, sandboxGet, sandboxList, sandboxRemove, sandboxUpdate } from "./sandbox-actions";
 
@@ -59,35 +58,12 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
           <Link href={`/b/${businessId}/automations`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
             <Zap className="h-4 w-4" /> Automations
           </Link>
-          {blueprint.scheduling && (
-            <Link href={`/b/${businessId}/settings/booking`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
-              <CalendarCheck className="h-4 w-4" /> Online booking
-            </Link>
-          )}
-          <Link href={`/b/${businessId}/settings/payments`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
-            <CreditCard className="h-4 w-4" /> Payments
-          </Link>
-          <Link href={`/b/${businessId}/settings/whatsapp`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
-            <MessageCircle className="h-4 w-4" /> WhatsApp
-          </Link>
-          <Link href={`/b/${businessId}/settings/email`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
-            <Mail className="h-4 w-4" /> Email settings
-          </Link>
-          <Link href={`/b/${businessId}/settings/connections`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
-            <Plug className="h-4 w-4" /> Connect AI apps
-          </Link>
-          <Link href={`/b/${businessId}/settings/code`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
-            <Code2 className="h-4 w-4" /> API keys & code
-          </Link>
-          <Link href={`/b/${businessId}/import`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
-            <FileSpreadsheet className="h-4 w-4" /> Import
-          </Link>
           <Link href={`/b/${businessId}/activity`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
             <History className="h-4 w-4" /> Activity
           </Link>
-          <form action={signOut}>
-            <button className="btn-ghost w-full">Sign out</button>
-          </form>
+          <Link href={`/b/${businessId}/settings`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
+            <Settings className="h-4 w-4" /> Settings
+          </Link>
         </div>
       }
     >

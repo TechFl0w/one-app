@@ -6,7 +6,7 @@ import { RecordFilter, RecordId } from "@/schema/records";
 import { previewChangeSet, type OpPreview } from "@/engine/changeSet";
 import { recordLabel } from "@/engine/blockData";
 import type { UndoToken } from "@/engine/commit";
-import type { OwnerBackend, PendingAction } from "./types";
+import type { BuildPlan, OwnerBackend, PendingAction } from "./types";
 import { recordUpdateIsRisky } from "@/engine/risk";
 import { availableSlots, bookSlot } from "@/booking/service";
 import { overlapFixOps } from "@/engine/editing";
@@ -28,6 +28,8 @@ export interface ToolEffects {
   preview?: { summary: string; ops: OpPreview[]; undo: UndoToken };
   /** Components written this turn: the browser sends back a picture so the assistant can check them. */
   verify?: { componentId: string; pageId?: string }[];
+  /** The current multi-step build plan (the chat keeps going until every step is done). */
+  plan?: BuildPlan;
 }
 
 export interface OwnerTool<I = unknown> {
@@ -189,7 +191,14 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const ops: Op[] = [{ op: "putComponent", component: { id: i.id, label: i.label, source: i.source, compiled: compiled.compiled } }];
       const blockId = `blk_${i.id.slice(4)}`.slice(0, 64);
       const block = (x: number, y: number, w: number, h: number) => ({ id: blockId, type: "custom" as const, x, y, w, h, options: { component: i.id, ...(i.props ? { props: i.props } : {}) } });
-      if (i.newPage) {
+      const existingPage = i.newPage && bp.pages.find((pg) => pg.id === i.newPage!.id);
+      if (existingPage) {
+        // Rebuilding a page that already exists: the component replaces what's on it.
+        for (const blk of existingPage.layout.blocks) if (blk.id !== blockId) ops.push({ op: "removeBlock", pageId: existingPage.id, blockId: blk.id });
+        const has = existingPage.layout.blocks.some((x) => x.id === blockId);
+        ops.push(has ? { op: "updateBlock", pageId: existingPage.id, block: block(0, 0, GRID_COLUMNS, 8) } : { op: "addBlock", pageId: existingPage.id, block: block(0, 0, GRID_COLUMNS, 8) });
+        if (existingPage.label !== i.newPage!.label) ops.push({ op: "rename", target: { kind: "page", pageId: existingPage.id }, label: i.newPage!.label });
+      } else if (i.newPage) {
         const order = Math.max(-1, ...bp.pages.map((p) => p.menuOrder)) + 1;
         ops.push({ op: "addPage", page: { id: i.newPage.id, label: i.newPage.label, ...(i.newPage.icon ? { icon: i.newPage.icon } : {}), menuOrder: order, hidden: false, layout: { columns: GRID_COLUMNS, blocks: [block(0, 0, GRID_COLUMNS, 8)] } } });
       } else if (i.page) {
@@ -210,6 +219,23 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const shownOn = i.newPage?.id ?? i.page ?? bp.pages.find((pg) => pg.layout.blocks.some((x) => x.type === "custom" && x.options?.component === i.id))?.id;
       (fx.verify ??= []).push({ componentId: i.id, ...(shownOn ? { pageId: shownOn } : {}) });
       return { applied: i.summary, component: i.id, ...(i.newPage ? { page: i.newPage.id } : i.page ? { page: i.page, block: blockId } : {}) };
+    },
+  }),
+
+  tool({
+    name: "plan_build",
+    description:
+      "For big jobs that take several turns (recreating an app from screenshots, building many pages): record the plan — one step per screen or part — and which steps are done. " +
+      "Call it at the start, and again after finishing each step (mark it done). While steps remain, the app automatically sends you a “[Automatic] Continue” message (with the screenshots again) so you can do the next step.",
+    input: z.strictObject({
+      goal: z.string().min(1).max(200),
+      steps: z.array(z.strictObject({ id: z.string().regex(/^[a-z0-9_]{1,40}$/), title: z.string().min(1).max(120), done: z.boolean() })).min(1).max(20),
+    }),
+    risk: "read",
+    run: async (_b, i, fx) => {
+      fx.plan = i;
+      const next = i.steps.find((s) => !s.done);
+      return next ? { next: next.title, remaining: i.steps.filter((s) => !s.done).length } : { finished: true };
     },
   }),
 
@@ -355,7 +381,7 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const link = await b.payments.createLink({
         kind: i.interval ? "subscription" : "payment",
         amount: i.amount,
-        currency: (i.currency ?? process.env.DEFAULT_CURRENCY ?? "CAD").toUpperCase(),
+        currency: (i.currency ?? (await b.blueprint()).business.currency ?? process.env.DEFAULT_CURRENCY ?? "CAD").toUpperCase(),
         description: i.description,
         interval: i.interval,
         tableId: i.table,

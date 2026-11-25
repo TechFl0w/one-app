@@ -27,7 +27,7 @@ export default async function BookPage({ params, searchParams }: PageProps<"/boo
     <main className="flex flex-1 items-start justify-center px-4 py-10 sm:px-8 sm:py-16">
       {fonts && <link rel="stylesheet" href={fonts} />}
       {Object.keys(vars).length > 0 && <style>{`:root{${cssDeclarations(vars)}}`}</style>}
-      <BookingFlow slug={slug} catalog={catalog} currency={currency ?? "CAD"} intro={info?.page.intro} returned={returned} />
+      <BookingFlow slug={slug} catalog={catalog} currency={currency ?? info?.blueprint.business.currency ?? "CAD"} intro={info?.page.intro} returned={returned} />
     </main>
   );
 }

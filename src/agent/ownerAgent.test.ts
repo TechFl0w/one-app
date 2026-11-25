@@ -45,7 +45,7 @@ describe("owner agent", () => {
     expect(system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(system[1].text).toContain('blk_cal calendar "Today’s calendar" from tbl_bookings');
     expect(req.tools!.map((t) => (t as Anthropic.Beta.BetaTool).name)).toEqual([
-      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "write_component", "read_component", "write_function", "read_function", "list_api_keys", "test_function", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
+      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "write_component", "plan_build", "read_component", "write_function", "read_function", "list_api_keys", "test_function", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
     ]);
     expect(req.messages[0].content).toContain('looking at page "Today" (pg_today)');
     expect(r.response).toEqual({ text: "Hi!", changed: false });
@@ -154,7 +154,7 @@ describe("owner agent", () => {
 
     const forever: ModelCall = async () => call("query_records", { table: "tbl_team" });
     const looped = await runOwnerTurn({ backend, history: [], message: "x", model: forever });
-    expect(looped.history.length).toBe(1 + 10 * 2);
+    expect(looped.history.length).toBe(1 + 16 * 2);
     expect(looped.response.text).toBe("Done.");
   });
 });
@@ -269,5 +269,32 @@ describe("designs in the chat", () => {
   it("rejects odd attachments", async () => {
     const { cleanImages } = await import("./ownerAgent");
     expect(cleanImages([{ mediaType: "image/gif", data: "QUJD" }, { mediaType: "image/png", data: "not base64!" }, { mediaType: "image/png", data: "QUJD" }, 5])).toEqual([{ mediaType: "image/png", data: "QUJD" }]);
+  });
+});
+
+describe("multi-step builds", () => {
+  it("returns the plan so the chat can continue it", async () => {
+    const { backend } = setup();
+    const plan = { goal: "Recreate the app", steps: [{ id: "a", title: "Dashboard", done: true }, { id: "b", title: "Clients", done: false }] };
+    const { model, requests } = scripted(call("plan_build", plan), say("Next up: Clients."));
+    const r = await runOwnerTurn({ backend, history: [], message: "recreate this", model });
+    expect(JSON.parse(lastToolResult(requests[1]).content)).toEqual({ next: "Clients", remaining: 1 });
+    expect(r.response.plan).toEqual(plan);
+  });
+
+  it("stops at the time budget and the next turn picks up cleanly", async () => {
+    const { backend } = setup();
+    const slow: ModelCall = async () => {
+      await new Promise((res) => setTimeout(res, 30));
+      return call("query_records", { table: "tbl_clients", limit: 1 });
+    };
+    const r = await runOwnerTurn({ backend, history: [], message: "do lots", model: slow, budgetMs: 10 });
+    expect(r.response.text).toMatch(/continue/i);
+    // History ends with tool results (a user message); the next message joins it so roles still alternate.
+    expect(r.history.at(-1)!.role).toBe("user");
+    const { model, requests } = scripted(say("Done."));
+    await runOwnerTurn({ backend, history: r.history, message: "continue", model });
+    const roles = requests[0].messages.map((m) => m.role);
+    for (let i = 1; i < roles.length; i++) expect(roles[i]).not.toBe(roles[i - 1]);
   });
 });

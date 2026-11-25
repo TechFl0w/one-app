@@ -18,8 +18,10 @@ function script(body) {
   const msgs = body.messages;
   const last = msgs.at(-1);
   const isToolResult = Array.isArray(last.content) && last.content[0]?.type === "tool_result";
-  const latest = [...msgs].reverse().find((m) => m.role === "user" && typeof m.content === "string" && (!m.content.startsWith("[The owner ") || m.content.startsWith("[The owner is looking")));
-  const ownerText = (latest?.content ?? "").replace(/^\[The owner is looking at[^\]]*\]\s*/, "");
+  // The owner's latest words: plain text, or text blocks of a merged message (notes + new message).
+  const textOf = (m) => (typeof m.content === "string" ? [m.content] : m.content.filter((b) => b.type === "text").map((b) => b.text));
+  const latest = [...msgs].reverse().map(textOf).flat().find((t) => !t.startsWith("[The owner ") || t.startsWith("[The owner is looking"));
+  const ownerText = (latest ?? "").replace(/^\[The owner is looking at[^\]]*\]\s*/, "");
   if (isToolResult) {
     let r = {};
     try {
@@ -28,6 +30,12 @@ function script(body) {
       return text(`Tool failed: ${String(last.content[0].content).slice(0, 300)}`);
     }
     if (r.status === "waiting_for_owner_confirmation") return text("I’ll do that once you confirm below.");
+    if (r.component === "cmp_screen_a" || r.component === "cmp_screen_b") {
+      const both = r.component === "cmp_screen_b";
+      return tool("plan_build", { goal: "Recreate the app", steps: [{ id: "screen_a", title: "Screen A", done: true }, { id: "screen_b", title: "Screen B", done: both }] });
+    }
+    if (r.next) return text(`Plan saved. Next: ${r.next}.`);
+    if (r.finished) return text("All screens built.");
     if (ownerText.includes("today")) return text(`You have ${r.total} bookings today.`);
     return text("Done — take a look.");
   }
@@ -40,6 +48,14 @@ function script(body) {
     const jpeg = pic && pic.source.data.startsWith("/9j/");
     if (jpeg && process.env.FAKE_SAVE_DIR) require("node:fs").writeFileSync(`${process.env.FAKE_SAVE_DIR}/self-check.jpg`, Buffer.from(pic.source.data, "base64"));
     return text(jpeg ? `Checked the picture (${Math.round(pic.source.data.length / 1024)} KB): it looks right.` : "Checked: no picture arrived.");
+  }
+  const lastText = Array.isArray(lastMsg.content) ? lastMsg.content.filter((b) => b.type === "text").map((b) => b.text).join(" ") : String(lastMsg.content);
+  if (lastMsg.role === "user" && lastText.includes("[Automatic] Continue")) {
+    if (lastText.includes("next step now — Screen A")) return tool("write_component", { id: "cmp_screen_a", label: "Screen A", summary: "Screen A from the screenshot", newPage: { id: "pg_screen_a", label: "Screen A" }, source: 'import { Card } from "@one/kit";\nexport default function S() { return <Card title="Screen A"><p className="text-sm">Rebuilt from the screenshot.</p></Card>; }' });
+    if (lastText.includes("next step now — Screen B")) return tool("write_component", { id: "cmp_screen_b", label: "Screen B", summary: "Screen B from the screenshot", newPage: { id: "pg_screen_b", label: "Screen B" }, source: 'import { Card } from "@one/kit";\nexport default function S() { return <Card title="Screen B"><p className="text-sm">Rebuilt from the screenshot.</p></Card>; }' });
+  }
+  if (lastMsg.role === "user" && /recreate/i.test(lastText)) {
+    return tool("plan_build", { goal: "Recreate the app", steps: [{ id: "screen_a", title: "Screen A", done: false }, { id: "screen_b", title: "Screen B", done: false }] });
   }
   const lastUser = [...msgs].reverse().find((m) => m.role === "user" && Array.isArray(m.content) && m.content.some((b) => b.type === "image"));
   if (lastUser && lastUser === msgs.at(-1)) {

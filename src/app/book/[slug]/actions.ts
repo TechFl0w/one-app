@@ -15,7 +15,7 @@ import type { Blueprint } from "@/schema/blueprint";
 function currencyOf(bp: Blueprint): string {
   const sc = bp.scheduling!;
   const f = sc.services.price ? bp.tables.find((t) => t.id === sc.services.table)?.fields.find((x) => x.id === sc.services.price) : undefined;
-  return (f?.type === "money" && f.currency) || process.env.DEFAULT_CURRENCY || "CAD";
+  return (f?.type === "money" && f.currency) || bp.business.currency || process.env.DEFAULT_CURRENCY || "CAD";
 }
 
 /** Public booking actions. "demo" is the sample salon in memory (nothing is saved). */

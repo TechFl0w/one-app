@@ -303,6 +303,8 @@ export const BusinessInfo = z.strictObject({
   timezone: z.string().min(1).max(64),
   /** Where review requests send customers (e.g. the Google review link). */
   reviewUrl: z.url({ protocol: /^https$/ }).max(500).optional(),
+  /** ISO 4217 code used for prices without their own currency (e.g. CAD, USD, EUR). */
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
 });
 
 // ---------- scheduling (bookings) ----------
