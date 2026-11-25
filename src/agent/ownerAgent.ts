@@ -13,19 +13,8 @@ import { aiModelInfo, defaultAiModel, resolveAiModel } from "./models";
  * caller before this runs (CLAUDE.md rule 5); this agent only ever gets owner tools.
  */
 
-<<<<<<< HEAD
 /** Default model; a business can choose another in Settings (see ./models). */
 export const OWNER_MODEL = defaultAiModel();
-=======
-/** ONE_AI_MODEL picks a cheaper model for testing, e.g. claude-sonnet-5-5. */
-export const OWNER_MODEL = process.env.ONE_AI_MODEL?.trim() || "claude-opus-5-5";
-/** $ per million tokens: input, output, cache read, cache write (5 min). */
-const PRICES: Record<string, [number, number, number, number]> = {
-  "claude-opus-5-5": [4, 20, 0.2, 5],
-  "claude-sonnet-5-5": [2, 10, 0.1, 2.5],
-  "claude-haiku-5-5": [0.1, 0.5, 0.01, 0.125],
-};
->>>>>>> 520e641a5491896bb3a943e58268cfa74b1ce9b4
 export interface TurnUsage {
   model: string;
   requests: number;
@@ -36,11 +25,7 @@ export interface TurnUsage {
   costUsd: number;
 }
 export function usageCost(u: Omit<TurnUsage, "costUsd" | "requests">) {
-<<<<<<< HEAD
   const [i, o, r, w] = aiModelInfo(u.model).prices;
-=======
-  const [i, o, r, w] = PRICES[u.model] ?? PRICES["claude-opus-5-5"];
->>>>>>> 520e641a5491896bb3a943e58268cfa74b1ce9b4
   return (u.inputTokens * i + u.outputTokens * o + u.cacheReadTokens * r + u.cacheWriteTokens * w) / 1_000_000;
 }
 const MAX_STEPS = 16;
@@ -221,12 +206,8 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
       ? [...input.history.slice(0, -1), { role: "user", content: [...(typeof last.content === "string" ? [{ type: "text" as const, text: last.content }] : last.content), ...newContent] }]
       : [...input.history, { role: "user", content: newContent }];
   let lastSetup = setupNote(bp, now);
-<<<<<<< HEAD
   const modelId = resolveAiModel(input.modelId);
   const usage: TurnUsage = { model: modelId, requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
-=======
-  const usage: TurnUsage = { model: OWNER_MODEL, requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
->>>>>>> 520e641a5491896bb3a943e58268cfa74b1ce9b4
   const startedAt = Date.now();
 
   const effects: ToolEffects = {};
@@ -244,11 +225,7 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
       max_tokens: 21000,
       output_config: { effort: "medium" },
       // Haiku has no server-side refusal fallback.
-<<<<<<< HEAD
       ...(modelId.includes("haiku") ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
-=======
-      ...(OWNER_MODEL.includes("haiku") ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
->>>>>>> 520e641a5491896bb3a943e58268cfa74b1ce9b4
       system: [{ type: "text", text: OWNER_SYSTEM, cache_control: { type: "ephemeral" } }],
       // Caches the whole conversation so far: each step of a turn re-reads it at a tenth of the price.
       cache_control: { type: "ephemeral" },
