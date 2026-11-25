@@ -3,7 +3,7 @@
 -- with overlap constraints per practitioner and per resource. A trigger keeps it in sync using
 -- the business's scheduling section (which table/fields are bookings, which statuses free time).
 
-create extension if not exists btree_gist;
+create extension if not exists btree_gist with schema extensions;
 
 create table public.booking_slots (
   record_id       uuid primary key references public.records (id) on delete cascade,
