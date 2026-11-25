@@ -1,0 +1,49 @@
+{
+  "name": "one-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:db": "scripts/test-db.sh",
+    "typecheck": "tsc --noEmit",
+    "e2e": "node e2e/demo-edit.cjs && node e2e/demo-chat.cjs && node e2e/demo-booking.cjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@stripe/connect-js": "^3.5.1",
+    "@stripe/react-connect-js": "^3.5.1",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.119.2",
+    "lucide-react": "^1.78.0",
+    "next": "16.4.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "resend": "^6.39.0",
+    "server-only": "^0.0.1",
+    "standardwebhooks": "^1.3.0",
+    "stripe": "^23.2.0",
+    "twilio": "^6.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "4.3.3",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.6",
+    "pg": "^8.23.1",
+    "tailwindcss": "4.3.3",
+    "typescript": "^5",
+    "vitest": "^5.1.1"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}
