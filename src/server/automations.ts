@@ -18,8 +18,8 @@ import { formatDateTime } from "@/components/blocks/format";
 
 /** Supabase implementations of the automation queue and side effects (service role). */
 
-type JobRow = { id: string; business_id: string; automation_id: string; table_id: string; record_id: string; key: string; run_at: string; step: number; attempts: number };
-const toJob = (r: JobRow): Job => ({ id: r.id, businessId: r.business_id, automationId: r.automation_id, tableId: r.table_id, recordId: r.record_id, key: r.key, runAt: r.run_at, step: r.step, attempts: r.attempts });
+type JobRow = { id: string; business_id: string; automation_id: string; table_id: string; record_id: string; key: string; run_at: string; step: number; attempts: number; depth?: number };
+const toJob = (r: JobRow): Job => ({ id: r.id, businessId: r.business_id, automationId: r.automation_id, tableId: r.table_id, recordId: r.record_id, key: r.key, runAt: r.run_at, step: r.step, attempts: r.attempts, depth: r.depth ?? 0 });
 
 const must = <T>(r: { data: T; error: { message: string } | null }, what: string): T => {
   if (r.error) throw new Error(`${what}: ${r.error.message}`);
@@ -33,7 +33,7 @@ export function supabaseQueue(db: SupabaseClient): JobQueue {
         await db
           .from("automation_jobs")
           .upsert(
-            { business_id: j.businessId, automation_id: j.automationId, table_id: j.tableId, record_id: j.recordId, key: j.key, run_at: j.runAt },
+            { business_id: j.businessId, automation_id: j.automationId, table_id: j.tableId, record_id: j.recordId, key: j.key, run_at: j.runAt, depth: j.depth ?? 0 },
             { onConflict: "business_id,key", ignoreDuplicates: true },
           )
           .select("id"),
@@ -146,9 +146,9 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
       if (step.template === "tpl_review" && !bp.business.reviewUrl) return { sent: false, reason: "Add your review link in Online booking settings" };
       return sendEmail(db, settings, { to: to.email, subject: msg.subject, text: msg.text, key });
     },
-    async runFunction(b, functionId, key, record) {
+    async runFunction(b, functionId, key, record, depth) {
       if (!functionsAvailable()) return { ran: false, reason: "Server code can’t run on this server yet" };
-      const out = await runFunction(db, b, functionId, { trigger: "automation", record: { table: record.tableId, id: record.recordId, data: record.data } }, { key });
+      const out = await runFunction(db, b, functionId, { trigger: "automation", record: { table: record.tableId, id: record.recordId, data: record.data } }, { key, depth });
       // Failures throw, so the job retries with backoff and shows up in the run log.
       if (!out.ok) throw new Error(out.error);
       return { ran: true, ...(out.logs.length ? { note: out.logs.slice(-3).join(" · ").slice(0, 300) } : {}) };
@@ -159,7 +159,7 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
   };
 }
 
-type EventRow = { id: number; business_id: string; table_id: string; record_id: string; kind: RecordEvent["kind"]; before: Record<string, unknown> | null; after: Record<string, unknown> | null; at: string };
+type EventRow = { id: number; business_id: string; table_id: string; record_id: string; kind: RecordEvent["kind"]; before: Record<string, unknown> | null; after: Record<string, unknown> | null; at: string; depth?: number };
 
 /** One worker pass: events → jobs, due dates → jobs, then run what's due. */
 export async function automationTick(db: SupabaseClient, now = new Date()) {
@@ -169,7 +169,7 @@ export async function automationTick(db: SupabaseClient, now = new Date()) {
   const events = must(await db.from("record_events").select("*").is("processed_at", null).order("id").limit(500), "load events") as EventRow[];
   let queued = 0;
   for (const e of events) {
-    queued += await enqueueForEvent({ id: String(e.id), businessId: e.business_id, tableId: e.table_id, recordId: e.record_id, kind: e.kind, before: e.before, after: e.after, at: e.at }, io, queue);
+    queued += await enqueueForEvent({ id: String(e.id), businessId: e.business_id, tableId: e.table_id, recordId: e.record_id, kind: e.kind, before: e.before, after: e.after, at: e.at, depth: e.depth ?? 0 }, io, queue);
     must(await db.from("record_events").update({ processed_at: now.toISOString() }).eq("id", e.id), "mark event");
   }
 
