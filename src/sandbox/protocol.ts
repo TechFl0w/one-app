@@ -16,7 +16,9 @@ export interface SandboxRecord {
 export type HostToFrame =
   | { type: "init"; compiled: string; props: Record<string, unknown>; schema: SandboxSchema; autoHeight: boolean }
   | { type: "result"; id: number; ok: true; value: unknown }
-  | { type: "result"; id: number; ok: false; error: string };
+  | { type: "result"; id: number; ok: false; error: string }
+  /** Asks the frame for a picture of what it shows (the assistant's self-check). */
+  | { type: "capture"; id: number };
 
 export type CallMethod = "records.list" | "records.get" | "records.create" | "records.update" | "records.remove" | "navigate" | "toast";
 
@@ -24,7 +26,8 @@ export type FrameToHost =
   | { type: "ready" }
   | { type: "resize"; height: number }
   | { type: "call"; id: number; method: CallMethod; args: unknown[] }
-  | { type: "crash"; message: string };
+  | { type: "crash"; message: string }
+  | { type: "captured"; id: number; dataUrl: string | null };
 
 /** What the host lets a frame do. Implementations run as the signed-in user (or the demo). */
 export interface SandboxBridge {
