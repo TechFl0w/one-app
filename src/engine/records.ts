@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WeeklyHours, type Blueprint, type DataSource, type Field, type Table } from "@/schema/blueprint";
+import { WeeklyHours, isComputedField, type Blueprint, type DataSource, type Field, type Table } from "@/schema/blueprint";
 import { isDateToken, isoDate, startOfLocalDay, tokenRange, localToday } from "./dates";
 import { isBusinessFilePath } from "@/lib/files";
 import { FileValue, RecordInput, RecordQuery, type FilterOp, type RecordFilter } from "@/schema/records";
@@ -28,7 +28,6 @@ export function tableOrThrow(blueprint: Blueprint, tableId: string): Table {
 
 // ---------- values ----------
 
-const COMPUTED: Field["type"][] = ["formula", "rollup"];
 const uuid = z.uuid();
 const email = z.email();
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -142,9 +141,13 @@ export function validateRecordInput(
       continue;
     }
     if (value === null || value === undefined || value === "") {
-      if (COMPUTED.includes(field.type)) errors.push({ field: fieldId, message: `${field.label} is calculated and cannot be set` });
+      if (isComputedField(field)) errors.push({ field: fieldId, message: `${field.label} is calculated and cannot be set` });
       else if (field.required) errors.push({ field: fieldId, message: `${field.label} is required` });
       else out[fieldId] = null;
+      continue;
+    }
+    if (isComputedField(field)) {
+      errors.push({ field: fieldId, message: `${field.label} is calculated and cannot be set` });
       continue;
     }
     const r = checkValue(field, value);
@@ -154,7 +157,7 @@ export function validateRecordInput(
 
   if (mode === "create") {
     for (const f of table.fields) {
-      if (f.required && !COMPUTED.includes(f.type) && !(f.id in out) && !errors.some((e) => e.field === f.id)) {
+      if (f.required && !isComputedField(f) && !(f.id in out) && !errors.some((e) => e.field === f.id)) {
         errors.push({ field: f.id, message: `${f.label} is required` });
       }
     }
@@ -190,6 +193,7 @@ export type FieldKind = "text" | "number" | "bool" | "date" | "datetime" | "arra
 
 /** How a field is compared in queries; null = not filterable/sortable. */
 export function fieldKind(field: Field): FieldKind | null {
+  if (isComputedField(field)) return null; // not stored: filtered and sorted after computing (engine/computed)
   switch (field.type) {
     case "text":
     case "long_text":

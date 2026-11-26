@@ -3,6 +3,7 @@ import { TEMPLATES, type Answers, type Question } from ".";
 import { validateRecordInput, tableOrThrow } from "@/engine/records";
 import { loadBlockData } from "@/engine/blockData";
 import { memoryStore } from "@/engine/store";
+import { checkDataRules } from "@/engine/dataRules";
 
 const business = { name: "Test Co", timezone: "America/Los_Angeles" };
 
@@ -29,6 +30,10 @@ describe.each(TEMPLATES.map((t) => [t.id, t] as const))("template %s", (_id, tem
       expect(blueprint.business).toMatchObject({ name: "Test Co", timezone: "America/Los_Angeles", type: template.businessType });
       expect(blueprint.pages.length).toBeGreaterThan(0);
     }
+  });
+
+  it("follows the data rules (statuses follow dates, sends re-check who they're for)", () => {
+    for (const answers of answerSets(template.questions)) expect(checkDataRules(template.build(business, answers).blueprint)).toEqual([]);
   });
 
   it("seeds records that validate against their tables", () => {

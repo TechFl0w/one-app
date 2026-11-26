@@ -1,5 +1,6 @@
-import type { Block, Blueprint, Field, Table } from "@/schema/blueprint";
-import type { RecordFilter, RecordRow } from "@/schema/records";
+import { isComputedField, type Block, type Blueprint, type Field, type Table } from "@/schema/blueprint";
+import type { RecordFilter, RecordQuery, RecordRow } from "@/schema/records";
+import { loadAllVia, queryWithComputed } from "./computed";
 import { buildAggregate, buildRecordQuery, RecordError, type QueryContext } from "./records";
 import type { RecordStore } from "./store";
 
@@ -92,12 +93,19 @@ async function groupsFor(blueprint: Blueprint, field: Field, store: RecordStore,
 export function formFieldsFor(table: Table, wanted?: unknown): Field[] {
   const ids = Array.isArray(wanted) && wanted.every(isStr) ? (wanted as string[]) : undefined;
   const fields = ids ? ids.map((id) => table.fields.find((f) => f.id === id)).filter((f): f is Field => !!f) : table.fields;
-  return fields.filter((f) => !["formula", "rollup", "file", "person", "hours"].includes(f.type));
+  return fields.filter((f) => !isComputedField(f) && !["file", "person", "hours"].includes(f.type));
 }
 
 const opt = <T>(v: unknown, guard: (x: unknown) => x is T): T | undefined => (guard(v) ? v : undefined);
 const isNum = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 const isStr = (x: unknown): x is string => typeof x === "string";
+
+/** Records for a block; filters and sorts on computed fields (derived statuses, rollups) work too. */
+function queryBlock(blueprint: Blueprint, store: RecordStore, query: RecordQuery, ctx: QueryContext) {
+  return queryWithComputed(blueprint, query, (q) => store.query(buildRecordQuery(blueprint, q, ctx)), loadAllVia(store, blueprint), ctx.now);
+}
+
+const computedIn = (table: Table, ids: (string | undefined)[]) => ids.some((id) => { const f = table.fields.find((x) => x.id === id); return !!f && isComputedField(f); });
 
 export async function loadBlockData(
   block: Block,
@@ -114,6 +122,15 @@ export async function loadBlockData(
   try {
     switch (block.type) {
       case "number": {
+        const src = block.source;
+        if (computedIn(table, [src.field, ...(src.filters ?? []).map((f) => f.field)])) {
+          // Counted after computing (the database doesn't store computed values).
+          const { records } = await queryBlock(blueprint, store, { table: table.id, filters: src.filters ?? [], limit: 5000 }, ctx);
+          const agg = src.agg ?? "count";
+          const nums = records.map((r) => Number(r.data[src.field ?? ""])).filter((n) => Number.isFinite(n));
+          const value = agg === "count" ? records.length : !nums.length ? null : agg === "sum" ? nums.reduce((a, b) => a + b, 0) : agg === "avg" ? nums.reduce((a, b) => a + b, 0) / nums.length : agg === "min" ? Math.min(...nums) : Math.max(...nums);
+          return { kind: "number", table, value, field: table.fields.find((f) => f.id === src.field) };
+        }
         const value = await store.aggregate(buildAggregate(blueprint, block.source, ctx));
         return { kind: "number", table, value, field: table.fields.find((f) => f.id === block.source!.field) };
       }
@@ -138,9 +155,7 @@ export async function loadBlockData(
         }
         const gf = groupField(table, block);
         if (block.type === "board" && !gf) return { kind: "error", message: `Pick a status or choice field to group ${table.label} by.` };
-        const { records, total } = await store.query(
-          buildRecordQuery(blueprint, { table: table.id, filters, sort: block.source.sort ?? [], limit: DEFAULT_LIMITS[block.type] }, ctx),
-        );
+        const { records, total } = await queryBlock(blueprint, store, { table: table.id, filters, sort: block.source.sort ?? [], limit: DEFAULT_LIMITS[block.type] }, ctx);
         const labels = await linkLabels(blueprint, table, records, store);
         const groups = gf ? await groupsFor(blueprint, gf, store, ctx) : undefined;
         return { kind: "records", table, records, total, labels, groups };
@@ -149,9 +164,7 @@ export async function loadBlockData(
       case "table":
       case "list": {
         const limit = Math.min(opt(block.options?.limit, isNum) ?? DEFAULT_LIMITS[block.type], 500);
-        const { records, total } = await store.query(
-          buildRecordQuery(blueprint, { table: table.id, filters: block.source.filters ?? [], sort: block.source.sort ?? [], limit }, ctx),
-        );
+        const { records, total } = await queryBlock(blueprint, store, { table: table.id, filters: block.source.filters ?? [], sort: block.source.sort ?? [], limit }, ctx);
         return { kind: "records", table, records, total, labels: await linkLabels(blueprint, table, records, store) };
       }
     }

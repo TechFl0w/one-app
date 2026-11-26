@@ -89,11 +89,37 @@ const MoneyField = z.strictObject({
   max: z.number().positive().optional(),
 });
 
+/**
+ * A condition on a record's values (rollup filters, derived statuses). Dates may use "@today",
+ * "@now", or "@today+30d" / "@today-7d" (days from today in the business's timezone).
+ */
+export const RollupWhere = z.strictObject({
+  field: FieldId,
+  op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "empty", "not_empty"]),
+  value: z.union([z.string().max(200), z.number(), z.boolean()]).optional(),
+});
+
+const OptionId = z.string().regex(/^opt_[a-z0-9_]{1,60}$/);
+
+/**
+ * A status that follows the record's own values instead of being set by hand: the first rule
+ * whose conditions all hold picks the option, else `otherwise`. Worked out whenever records are
+ * read (like rollups), so it can never drift from the dates it describes — e.g. a lease is
+ * "upcoming" before its start, "active" while today is inside the term, "ending" in its last 30
+ * days and "ended" after. Rules may use other computed fields (rollups) of the same record.
+ */
+export const DeriveRules = z.strictObject({
+  rules: z.array(z.strictObject({ when: z.array(RollupWhere).min(1).max(5), option: OptionId })).min(1).max(12),
+  otherwise: OptionId.optional(),
+});
+export type DeriveRules = z.infer<typeof DeriveRules>;
+
 const ChoiceField = z.strictObject({
   ...fieldBase,
   type: z.enum(["status", "choice"]),
   options: z.array(ChoiceOption).min(1),
   multiple: z.boolean().optional(),
+  derive: DeriveRules.optional(),
 });
 
 const LinkField = z.strictObject({
@@ -109,12 +135,6 @@ const FormulaField = z.strictObject({
   expression: z.string().min(1).max(2000),
 });
 
-/** A condition on the records a rollup looks at. Dates may use "@today" / "@now". */
-export const RollupWhere = z.strictObject({
-  field: FieldId,
-  op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "empty", "not_empty"]),
-  value: z.union([z.string().max(200), z.number(), z.boolean()]).optional(),
-});
 
 /**
  * A value computed from linked records whenever records are read (never stored, never stale).
@@ -142,6 +162,10 @@ export const Field = z.discriminatedUnion("type", [
   FormulaField,
   RollupField,
 ]);
+
+/** Fields nobody types into: worked out on every read (rollups, formulas, derived statuses). */
+export const isComputedField = (f: { type: string; derive?: unknown }) => f.type === "rollup" || f.type === "formula" || !!f.derive;
+
 export type Field = z.infer<typeof Field>;
 
 export const Table = z.strictObject({
@@ -515,6 +539,20 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
       if (!targetFields.has(f.field)) issue([...at, "field"], `unknown field ${f.field} on ${target}`);
       for (const [wi, w] of (f.where ?? []).entries()) if (!targetFields.has(w.field)) issue([...at, "where", wi, "field"], `unknown field ${w.field} on ${target}`);
       if (f.sortBy && !targetFields.has(f.sortBy)) issue([...at, "sortBy"], `unknown field ${f.sortBy} on ${target}`);
+    });
+    t.fields.forEach((f, fi) => {
+      if ((f.type !== "status" && f.type !== "choice") || !f.derive) return;
+      const at = ["tables", ti, "fields", fi, "derive"];
+      const opts = new Set(f.options.map((o) => o.id));
+      if (f.multiple) issue(at, "a derived status picks one option");
+      f.derive.rules.forEach((r, ri) => {
+        if (!opts.has(r.option)) issue([...at, "rules", ri, "option"], `unknown option ${r.option}`);
+        r.when.forEach((w, wi) => {
+          if (!fieldIds.has(w.field)) issue([...at, "rules", ri, "when", wi, "field"], `unknown field ${w.field}`);
+          if (w.field === f.id) issue([...at, "rules", ri, "when", wi, "field"], "a derived status can’t depend on itself");
+        });
+      });
+      if (f.derive.otherwise && !opts.has(f.derive.otherwise)) issue([...at, "otherwise"], `unknown option ${f.derive.otherwise}`);
     });
     if (t.primaryField && !fieldIds.has(t.primaryField)) {
       issue(["tables", ti, "primaryField"], `unknown field ${t.primaryField}`);

@@ -28,6 +28,7 @@ export function formToInput(
       case "choice":
       case "status":
       case "link":
+        if ("derive" in f && f.derive) break; // worked out from other values
         if (f.multiple) out[f.id] = form.getAll(f.id).filter((v): v is string => typeof v === "string" && v !== "");
         else out[f.id] = str === "" ? null : str;
         break;

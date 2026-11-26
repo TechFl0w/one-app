@@ -93,6 +93,51 @@ describe("runner", () => {
     expect(jobs[0].status).toBe("done");
   });
 
+  it("checks again after a wait: no message once the record no longer qualifies", async () => {
+    const bp = blueprint([{
+      id: "aut_follow_up", label: "Follow up", enabled: true,
+      trigger: { type: "record_created", table: "tbl_bookings" },
+      conditions: [{ field: "fld_status", op: "eq", value: "opt_booked" }],
+      actions: [{ type: "wait", duration: "1d" }, { type: "send_message", channel: "email", template: "tpl_reminder" }],
+    }]);
+    const { io, effects, records } = memoryIO(bp, [{ id: BOOKING, tableId: "tbl_bookings", data: { fld_status: "opt_booked" } }]);
+    const { queue, runs } = memoryQueue();
+    await enqueueForEvent(ev({ kind: "created", before: null, after: { fld_status: "opt_booked" } }), io, queue);
+    await runDueJobs(io, queue, new Date("2026-11-24T10:00:00Z"));
+    records[0].data = { fld_status: "opt_cancelled" }; // cancelled while the job waited
+    await runDueJobs(io, queue, new Date("2026-11-25T10:00:01Z"));
+    expect(effects.filter((x) => x.kind === "send_message")).toEqual([]);
+    expect(runs.at(-1)).toMatchObject({ status: "skipped", error: "Conditions no longer match (checked again after waiting)" });
+  });
+
+  it("decides on computed values and relative dates", async () => {
+    const bp = Blueprint.parse({
+      ...demoBlueprint,
+      business: { ...demoBlueprint.business, timezone: "UTC" },
+      tables: [...demoBlueprint.tables, {
+        id: "tbl_leases", label: "Leases", fields: [
+          { id: "fld_end", label: "End", type: "date" },
+          { id: "fld_state", label: "Status", type: "status", options: [{ id: "opt_active", label: "Active" }, { id: "opt_ended", label: "Ended" }], derive: { rules: [{ when: [{ field: "fld_end", op: "lt", value: "@today" }], option: "opt_ended" }], otherwise: "opt_active" } },
+        ],
+      }],
+      automations: [{
+        id: "aut_lease", label: "Lease note", enabled: true,
+        trigger: { type: "record_updated", table: "tbl_leases" },
+        conditions: [{ field: "fld_state", op: "eq", value: "opt_active" }, { field: "fld_end", op: "lte", value: "@today+30d" }],
+        actions: [{ type: "notify", message: "Ending soon" }],
+      }],
+    });
+    const lease = "00000000-0000-4000-8000-000000000077";
+    const at = new Date("2026-11-25T10:00:00Z");
+    for (const [end, n] of [["2026-12-10", 1], ["2026-11-01", 0], ["2027-06-01", 0]] as const) {
+      const { io, effects } = memoryIO(bp, [{ id: lease, tableId: "tbl_leases", data: { fld_end: end } }], () => at);
+      const { queue } = memoryQueue();
+      await enqueueForEvent(ev({ tableId: "tbl_leases", recordId: lease, before: {}, after: { fld_end: end }, at: at.toISOString() }), io, queue);
+      await runDueJobs(io, queue, at);
+      expect(effects.length, end).toBe(n);
+    }
+  });
+
   it("retries failures with backoff without repeating finished steps, then gives up", async () => {
     const bp = blueprint();
     const { io, effects, failNextCalls } = memoryIO(bp, [{ id: BOOKING, tableId: "tbl_bookings", data: { fld_status: "opt_done" } }]);

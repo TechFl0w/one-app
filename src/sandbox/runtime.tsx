@@ -442,7 +442,7 @@ function RecordForm({ table, fields, recordId, submitLabel = "Save", onSaved, cl
     if (record) setValues(record.data);
   }, [record]);
   const shown = useMemo(() => {
-    const all = (t?.fields ?? []).filter((f) => !["rollup", "formula", "hours"].includes(f.type));
+    const all = (t?.fields ?? []).filter((f) => !["rollup", "formula", "hours"].includes(f.type) && !f.computed);
     return fields ? fields.map((id) => all.find((f) => f.id === id)).filter((f): f is NonNullable<typeof f> => !!f) : all;
   }, [t, fields]);
   if (!t) return <Empty>Unknown table {table}</Empty>;
