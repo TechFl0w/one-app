@@ -43,3 +43,5 @@ next-env.d.ts
 !.env.example
 /public/sandbox/
 /*.png
+/ai-test-report.txt
+/ai-explore-report.md
