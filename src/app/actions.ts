@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createBusiness } from "@/server/blueprints";
 import { createRecord } from "@/server/records";
 import { templateById, type Answers } from "@/templates";
+import { resolveSeed } from "@/templates/types";
 
 /** Onboarding "Build it": builds the template on the server from the answers, then seeds it. */
 export async function buildBusiness(input: { templateId: string; name: string; timezone: string; answers: Answers }): Promise<{ error?: string }> {
@@ -24,8 +25,11 @@ export async function buildBusiness(input: { templateId: string; name: string; t
   try {
     const { blueprint, seed } = template.build({ name, timezone }, input.answers ?? {});
     id = await createBusiness(supabase, { name, blueprint });
+    // Seeds may link to earlier seeds ("@ref:<name>"): a sample car belongs to a sample customer.
+    const ids = new Map<string, string>();
     for (const s of seed) {
-      await createRecord(supabase, id, s.table, s.data).catch((e) => console.error("seed failed", s.table, e));
+      const row = await createRecord(supabase, id, s.table, resolveSeed(s.data, ids)).catch((e) => void console.error("seed failed", s.table, e));
+      if (row && s.ref) ids.set(s.ref, row.id);
     }
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Something went wrong" };

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { menuPages } from "@/engine/layout";
-import { demoBlueprint } from "@/demo/salon";
+import { currentDemo } from "@/demo/current";
 
-export default function DemoHome() {
-  redirect(`/demo/p/${menuPages(demoBlueprint)[0].id}`);
+export default async function DemoHome() {
+  redirect(`/demo/p/${menuPages((await currentDemo()).blueprint)[0].id}`);
 }

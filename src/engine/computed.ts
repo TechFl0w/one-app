@@ -145,6 +145,11 @@ function aggregate(f: Rollup, rows: RecordRow[]): unknown {
     const newest = [...rows].sort((a, b) => key(b).localeCompare(key(a)))[0];
     return newest ? (newest.data[f.field] ?? null) : null;
   }
+  // Earliest / latest of dates (ISO strings compare in order).
+  if (f.agg === "min" || f.agg === "max") {
+    const dates = rows.map((r) => r.data[f.field]).filter((v): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v)).sort();
+    if (dates.length) return f.agg === "min" ? dates[0] : dates[dates.length - 1];
+  }
   const nums = rows.map((r) => Number(r.data[f.field])).filter((n) => Number.isFinite(n));
   if (f.agg === "sum") return nums.reduce((a, b) => a + b, 0);
   if (!nums.length) return null;

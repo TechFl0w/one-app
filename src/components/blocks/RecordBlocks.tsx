@@ -73,9 +73,22 @@ function detailFields(table: Table, exclude: (string | undefined)[], max: number
   return table.fields.filter((f) => !skip.has(f.id) && f.type !== "formula" && f.type !== "rollup").sort((a, b) => rank(a) - rank(b)).slice(0, max);
 }
 
-export function ListBlock({ table, records, total, labels, ctx }: RecordsProps) {
+/** Numbers and amounts say what they are ("In stock 3", "Balance $305"); names, badges and dates speak for themselves. */
+function Labelled({ field }: { field: Field }) {
+  const numeric = field.type === "number" || field.type === "money" || field.type === "formula" || (field.type === "rollup" && field.agg !== "latest");
+  return numeric ? <span className="mr-1 text-muted/70">{field.label}</span> : null;
+}
+
+/** Fields a list item or card shows under its title: options.fields, else a sensible few. */
+function shownFields(block: Block, table: Table, exclude: (string | undefined)[], max: number): Field[] {
+  const wanted = strings(block.options?.fields);
+  if (wanted) return wanted.map((id) => table.fields.find((f) => f.id === id)).filter((f): f is Field => !!f && !exclude.includes(f.id));
+  return detailFields(table, exclude, max);
+}
+
+export function ListBlock({ block, table, records, total, labels, ctx }: RecordsProps) {
   if (!records.length) return <Empty>Nothing here right now.</Empty>;
-  const details = detailFields(table, [], 3);
+  const details = shownFields(block, table, [], 3);
   return (
     <div className="h-full overflow-auto">
       <ul className="divide-y divide-line/60">
@@ -86,6 +99,7 @@ export function ListBlock({ table, records, total, labels, ctx }: RecordsProps) 
               {details.map((f) =>
                 r.data[f.id] == null || r.data[f.id] === "" ? null : (
                   <span key={f.id} className="max-w-full truncate">
+                    <Labelled field={f} />
                     <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
                   </span>
                 ),
@@ -101,7 +115,7 @@ export function ListBlock({ table, records, total, labels, ctx }: RecordsProps) 
 
 export function BoardBlock({ block, table, records, labels, ctx, groups = [] }: RecordsProps & { groups?: Group[] }) {
   const gf = groupField(table, block)!;
-  const details = detailFields(table, [gf.id], 2);
+  const details = shownFields(block, table, [gf.id], 2);
   const byGroup = new Map<string | null, RecordRow[]>();
   for (const r of records) {
     const v = r.data[gf.id];
@@ -121,6 +135,7 @@ export function BoardBlock({ block, table, records, labels, ctx, groups = [] }: 
             {details.map((f) =>
               r.data[f.id] == null ? null : (
                 <div key={f.id} className="truncate">
+                  <Labelled field={f} />
                   <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
                 </div>
               ),

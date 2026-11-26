@@ -28,6 +28,14 @@ export type Answers = Record<string, string | string[]>;
 export interface Seed {
   table: string;
   data: Record<string, unknown>;
+  /** A name other seeds use to link to this record: a value "@ref:<name>" becomes its id. */
+  ref?: string;
+}
+
+/** Replaces "@ref:<name>" values with the ids of seeds created earlier. */
+export function resolveSeed(data: Record<string, unknown>, ids: Map<string, string>): Record<string, unknown> {
+  const swap = (v: unknown): unknown => (typeof v === "string" && v.startsWith("@ref:") ? ids.get(v.slice(5)) : Array.isArray(v) ? v.map(swap) : v);
+  return Object.fromEntries(Object.entries(data).map(([k, v]) => [k, swap(v)]).filter(([, v]) => v !== undefined));
 }
 
 export interface Built {

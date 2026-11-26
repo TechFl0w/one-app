@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TEMPLATES, type Answers, type Question } from ".";
+import { resolveSeed } from "./types";
 import { validateRecordInput, tableOrThrow } from "@/engine/records";
 import { loadBlockData } from "@/engine/blockData";
 import { memoryStore } from "@/engine/store";
@@ -38,17 +39,32 @@ describe.each(TEMPLATES.map((t) => [t.id, t] as const))("template %s", (_id, tem
 
   it("seeds records that validate against their tables", () => {
     const { blueprint, seed } = template.build(business, {});
-    for (const s of seed) expect(() => validateRecordInput(tableOrThrow(blueprint, s.table), s.data, "create")).not.toThrow();
+    // Links between seeds ("@ref:x") resolve to ids of seeds created before them.
+    const ids = new Map<string, string>();
+    seed.forEach((s, i) => {
+      for (const v of Object.values(s.data)) if (typeof v === "string" && v.startsWith("@ref:")) expect(ids.has(v.slice(5)), `${s.table} ${v}`).toBe(true);
+      expect(() => validateRecordInput(tableOrThrow(blueprint, s.table), resolveSeed(s.data, ids), "create")).not.toThrow();
+      if (s.ref) ids.set(s.ref, `00000000-0000-4000-8000-${String(900000000000 + i)}`);
+    });
   });
 
   it("every block loads without errors on the seeded data", async () => {
     for (const answers of answerSets(template.questions).slice(0, 12)) {
       const { blueprint, seed } = template.build(business, answers);
-      const rows = seed.map((s, i) => ({ id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, tableId: s.table, data: s.data, createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z" }));
+      const ids = new Map<string, string>();
+      const rows = seed.map((s, i) => {
+        const id = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+        const row = { id, tableId: s.table, data: resolveSeed(s.data, ids), createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z" };
+        if (s.ref) ids.set(s.ref, id);
+        return row;
+      });
       const store = memoryStore(rows);
       for (const p of blueprint.pages) {
+        // Record pages load for one of their records (the first seeded one, if any).
+        const recordId = p.recordOf ? rows.find((r) => r.tableId === p.recordOf)?.id : undefined;
+        if (p.recordOf && !recordId) continue;
         for (const b of p.layout.blocks) {
-          const data = await loadBlockData(b, blueprint, store);
+          const data = await loadBlockData(b, blueprint, store, { recordId });
           expect(data.kind, `${template.id} ${p.id}/${b.id}: ${"message" in data ? data.message : ""}`).not.toBe("error");
         }
       }

@@ -20,8 +20,14 @@ export async function RecordPageView({ tableId, recordId, device, userId, env }:
   const found = recordPageFor(bp, tableId);
   const [record] = table ? await env.store.getMany(tableId, [recordId]) : [];
   const basePath = env.sandbox?.basePath ?? "";
-  // Back to the first menu page that lists this table.
-  const listPage = menuOrder(bp).find((p) => !p.recordOf && !p.hidden && p.layout.blocks.some((b) => b.source?.table === tableId));
+  // Back to the page that lists this table best: a full list of it (no filters) beats a filtered one.
+  const score = (p: (typeof bp.pages)[number]) =>
+    Math.max(-1, ...p.layout.blocks.filter((b) => b.source?.table === tableId && b.type !== "number").map((b) => (b.type === "table" || b.type === "board" ? 2 : 1) + (b.source?.filters?.length ? 0 : 2)));
+  const listPage = menuOrder(bp)
+    .filter((p) => !p.recordOf && !p.hidden)
+    .map((p) => ({ p, s: score(p) }))
+    .filter((x) => x.s >= 0)
+    .sort((a, b) => b.s - a.s)[0]?.p;
   const header = (
     <div className="mb-4 flex items-center gap-2 text-sm text-muted">
       {listPage ? (
