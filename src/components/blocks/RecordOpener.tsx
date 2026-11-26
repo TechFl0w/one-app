@@ -8,7 +8,7 @@ import { useSandbox } from "@/components/sandbox/SandboxProvider";
 import { RecordDialog, type RecordFormRequest } from "@/components/sandbox/RecordDialog";
 import { sandboxSchema } from "@/sandbox/schema";
 import { opensAsPage, recordPath } from "@/engine/recordPage";
-import { filesSupported } from "@/components/sandbox/files";
+import { asFiles, filesSupported } from "@/components/sandbox/files";
 import { MediaGallery, MediaUploader } from "@/components/media/Media";
 
 /**
@@ -128,12 +128,12 @@ export function OpenRecord({
 }
 
 /** Edit (and delete) the record a record page is about. */
-export function EditRecordButton({ table, recordId }: { table: string; recordId: string }) {
+export function EditRecordButton({ table, recordId, label = "Edit" }: { table: string; recordId: string; label?: string }) {
   const open = useContext(Ctx);
   if (!open) return null;
   return (
     <button type="button" className="btn-ghost shrink-0 px-3 py-1.5 text-sm" onClick={() => open.form({ table, recordId })}>
-      <Pencil className="h-3.5 w-3.5" /> Edit
+      <Pencil className="h-3.5 w-3.5" /> {label}
     </button>
   );
 }
@@ -151,7 +151,13 @@ export function RecordFile({ table, recordId, field, file, label, multiple }: { 
   const value = local && local.from === file ? local.value : file;
   const setValue = (v: unknown) => setLocal({ from: file, value: v });
   if (!sandbox) return null;
-  if (!filesSupported(sandbox.bridge)) return <MediaGallery value={value} bridge={sandbox.bridge} label={label} size={multiple ? "h-28 w-28" : "h-40 w-56"} />;
+  if (!filesSupported(sandbox.bridge))
+    return (
+      <div className="min-w-0">
+        <p className="mb-1.5 text-xs text-muted">{label}</p>
+        {asFiles(value).length ? <MediaGallery value={value} bridge={sandbox.bridge} label={label} size={multiple ? "h-28 w-28" : "h-40 w-56"} /> : <p className="rounded-2xl border-2 border-dashed border-line px-4 py-5 text-center text-sm text-muted">Photos and videos go here — drop, paste or snap them (not in the demo).</p>}
+      </div>
+    );
   const save = async (v: unknown) => {
     setValue(v);
     setError(null);

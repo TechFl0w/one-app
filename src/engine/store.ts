@@ -1,4 +1,5 @@
 import type { RecordRow } from "@/schema/records";
+import type { AuditRow } from "./auditText";
 import type { AggregateParams, QueryRecordsParams } from "./records";
 
 /**
@@ -9,6 +10,8 @@ export interface RecordStore {
   query(params: QueryRecordsParams): Promise<{ records: RecordRow[]; total: number }>;
   aggregate(params: AggregateParams): Promise<number | null>;
   getMany(tableId: string, ids: string[]): Promise<RecordRow[]>;
+  /** What happened to these records (newest first), where the store keeps a history. */
+  history?(recordIds: string[], limit: number): Promise<AuditRow[]>;
 }
 
 // ---------- in-memory implementation (mirrors the SQL in query_records / records_where) ----------
@@ -99,5 +102,12 @@ export function memoryStore(rows: RecordRow[]): RecordStore {
     query: async (p) => memoryQuery(rows, p),
     aggregate: async (p) => memoryAggregate(rows, p),
     getMany: async (tableId, ids) => rows.filter((r) => r.tableId === tableId && ids.includes(r.id)),
+    // No log in memory: each record's creation stands in for its history.
+    history: async (ids, limit) =>
+      rows
+        .filter((r) => ids.includes(r.id))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit)
+        .map((r, i) => ({ id: i + 1, actor_id: null, source: "system" as const, action: "record.created", table_id: r.tableId, record_id: r.id, summary: null, details: { after: r.data }, created_at: r.createdAt })),
   };
 }

@@ -4,6 +4,7 @@ import { loadAllVia, queryWithComputed } from "./computed";
 import { RECORD_TOKEN } from "./recordPage";
 import { buildAggregate, buildRecordQuery, RecordError, type QueryContext } from "./records";
 import type { RecordStore } from "./store";
+import type { AuditRow } from "./auditText";
 
 /** Loads what a block needs to render. Pure apart from the store, so the demo and tests can use it. */
 
@@ -16,6 +17,7 @@ export type BlockData =
   | { kind: "form"; table: Table; fields: Field[]; choices: Record<string, { id: string; label: string }[]> }
   | { kind: "details"; table: Table; record: RecordRow; labels: LinkLabels }
   | { kind: "header"; stats: { label: string; value: number | null; field?: Field; tone?: string }[] }
+  | { kind: "activity"; rows: AuditRow[] }
   | { kind: "static" }
   | { kind: "unsupported" }
   | { kind: "error"; message: string };
@@ -40,7 +42,9 @@ export function recordLabel(table: Table, record: RecordRow, labels: LinkLabels 
 }
 
 /** Resolves labels for every link field value in `records`. */
-async function linkLabels(blueprint: Blueprint, table: Table, records: RecordRow[], store: RecordStore): Promise<LinkLabels> {
+async function linkLabels(blueprint: Blueprint, raw: Table, records: RecordRow[], store: RecordStore): Promise<LinkLabels> {
+  // Rollups of a link (a bay's current car) show as that link, so they need labels too.
+  const table = displayTable(blueprint, raw);
   const byTable = new Map<string, Set<string>>();
   for (const f of table.fields) {
     if (f.type !== "link") continue;
@@ -150,13 +154,13 @@ export async function loadBlockData(
 ): Promise<BlockData> {
   if (original.type === "notes") return { kind: "static" };
   if (original.type === "header") return { kind: "header", stats: await headerStats(blueprint, store, original.options?.stats, ctx) };
-  if (!["table", "list", "gallery", "board", "calendar", "number", "form", "details"].includes(original.type)) return { kind: "unsupported" };
+  if (!["table", "list", "gallery", "board", "calendar", "number", "form", "details", "activity"].includes(original.type)) return { kind: "unsupported" };
   if (!original.source) return { kind: "error", message: "This block has no data source yet." };
   const table = blueprint.tables.find((t) => t.id === original.source!.table);
   if (!table) return { kind: "error", message: "The table behind this block no longer exists." };
   // On a record page, "@record" in a filter is the record the page is about.
   const scoped = (original.source.filters ?? []).some((f) => f.value === RECORD_TOKEN);
-  if ((scoped || original.type === "details") && !ctx.recordId) return { kind: "error", message: "This part shows one record; it appears on that record's page." };
+  if ((scoped || original.type === "details" || original.type === "activity") && !ctx.recordId) return { kind: "error", message: "This part shows one record; it appears on that record's page." };
   const block = (scoped ? { ...original, source: { ...original.source, filters: original.source.filters!.map((f) => (f.value === RECORD_TOKEN ? { ...f, value: ctx.recordId } : f)) } } : original) as Block & { source: NonNullable<Block["source"]> };
 
   try {
@@ -164,6 +168,19 @@ export async function loadBlockData(
       case "number": {
         const value = await aggregateOf(blueprint, store, block.source, ctx);
         return { kind: "number", table, value, field: table.fields.find((f) => f.id === block.source!.field) };
+      }
+
+      case "activity": {
+        // The record and what hangs under it: a job's lines and payments, a client's bookings.
+        const ids = [ctx.recordId!];
+        for (const child of blueprint.tables) {
+          for (const f of child.fields) {
+            if (f.type !== "link" || f.to !== table.id || f.multiple) continue;
+            const { records } = await store.query(buildRecordQuery(blueprint, { table: child.id, filters: [{ field: f.id, op: "eq", value: ctx.recordId! }], limit: 50 }, ctx));
+            ids.push(...records.map((r) => r.id));
+          }
+        }
+        return { kind: "activity", rows: store.history ? await store.history(ids, Math.min(opt(block.options?.limit, isNum) ?? 25, 100)) : [] };
       }
 
       case "details": {

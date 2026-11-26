@@ -3,6 +3,9 @@ import type { RecordRow } from "@/schema/records";
 import { groupField, recordLabel, type Group, type LinkLabels } from "@/engine/blockData";
 import { FieldValue, formatMoney, valueText, type FormatCtx } from "./format";
 import { EditRecordButton, OpenRecord, RecordFile, RecordRowLink } from "./RecordOpener";
+import { HeroPhoto, StageStepper } from "./RecordHero";
+import { QuickSet } from "./QuickSet";
+import { singular } from "@/lib/words";
 import { recordPath } from "@/engine/recordPage";
 import { DragBoard } from "./DragBoard";
 import { NextStepButton } from "./NextStep";
@@ -38,8 +41,21 @@ function More({ shown, total }: { shown: number; total: number }) {
   return <p className="px-5 py-2 text-xs text-muted">Showing {shown} of {total}</p>;
 }
 
+/** options.quickSet = { field, buttons: [{ value: option id, label }] }: one-tap buttons in that field's column. */
+function quickSetOf(block: Block, table: Table) {
+  const q = block.options?.quickSet as { field?: unknown; buttons?: unknown } | undefined;
+  const field = table.fields.find((f) => f.id === q?.field);
+  if (!field || (field.type !== "status" && field.type !== "choice") || ("derive" in field && field.derive) || !Array.isArray(q?.buttons)) return undefined;
+  const buttons = (q.buttons as { value?: unknown; label?: unknown }[])
+    .map((b) => field.options.find((o) => o.id === b.value) && { value: String(b.value), label: typeof b.label === "string" ? b.label : field.options.find((o) => o.id === b.value)!.label, color: field.options.find((o) => o.id === b.value)!.color })
+    .filter((b): b is { value: string; label: string; color: string | undefined } => !!b)
+    .slice(0, 3);
+  return buttons.length ? { field, buttons } : undefined;
+}
+
 export function TableBlock({ block, table, records, total, labels, ctx }: RecordsProps) {
   const cols = columnsFor(block, table);
+  const quick = quickSetOf(block, table);
   if (!records.length) return <Empty>No {table.label.toLowerCase()} yet.</Empty>;
   return (
     <div className="h-full overflow-auto">
@@ -58,7 +74,11 @@ export function TableBlock({ block, table, records, total, labels, ctx }: Record
             <RecordRowLink key={r.id} table={table.id} recordId={r.id}>
               {cols.map((f, i) => (
                 <td key={f.id} className={`border-b border-line/60 px-5 py-2.5 ${i === 0 ? "font-medium" : ""}`}>
-                  <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
+                  {quick && quick.field.id === f.id && !quick.buttons.some((b) => b.value === r.data[f.id]) ? (
+                    <QuickSet table={table.id} recordId={r.id} field={f.id} buttons={quick.buttons} current={<FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />} />
+                  ) : (
+                    <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
+                  )}
                 </td>
               ))}
             </RecordRowLink>
@@ -160,23 +180,61 @@ export function ListBlock({ block, table, records, total, labels, ctx }: Records
   );
 }
 
-/** Cards in a grid, each led by its photo: products, cars, rooms, styles. */
+/**
+ * Cards in a grid, each led by its photo: products, cars, rooms, styles. options.colorBy (a
+ * status, or a rollup of one) fills each card with its colour — a bay map, rooms by occupancy;
+ * cards where it's empty show as free spaces.
+ */
 export function GalleryBlock({ block, table, records, total, labels, ctx }: RecordsProps) {
   if (!records.length) return <Empty>No {table.label.toLowerCase()} yet.</Empty>;
+  const colorBy = table.fields.find((f) => f.id === block.options?.colorBy && (f.type === "status" || f.type === "choice"));
   const cover = coverField(block, table);
-  const details = shownFields(block, table, [cover?.id], 3);
+  const details = shownFields(block, table, [cover?.id, colorBy?.id], 3);
   return (
     <div className="h-full overflow-auto px-5 pb-5">
-      <ul className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
-        {records.map((r) => (
-          <OpenRecord as="li" key={r.id} table={table.id} recordId={r.id} className="overflow-hidden rounded-2xl border border-line bg-card shadow-soft transition hover:-translate-y-0.5 hover:border-accent/40">
-            {cover && <CoverImage value={r.data[cover.id]} label={recordLabel(table, r, labels)} className="aspect-[4/3] w-full" />}
-            <div className="p-3.5">
-              <p className="truncate font-bold">{recordLabel(table, r, labels)}</p>
-              <Facts fields={details} record={r} labels={labels} ctx={ctx} />
-            </div>
-          </OpenRecord>
-        ))}
+      <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+        {records.map((r) => {
+          const title = recordLabel(table, r, labels);
+          if (colorBy) {
+            const v = r.data[colorBy.id];
+            const o = colorBy.type === "status" || colorBy.type === "choice" ? colorBy.options.find((x) => x.id === v) : undefined;
+            if (!o)
+              return (
+                <OpenRecord as="li" key={r.id} table={table.id} recordId={r.id} className="flex min-h-56 flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-[#CFC6B6] bg-card p-5 text-center">
+                  <span className="text-xs font-bold uppercase tracking-widest text-muted">{title}</span>
+                  <span className="text-2xl font-extrabold">{typeof block.options?.emptyLabel === "string" ? block.options.emptyLabel : "Free"}</span>
+                </OpenRecord>
+              );
+            const color = o.color ?? "#1F1B14";
+            return (
+              <OpenRecord as="li" key={r.id} table={table.id} recordId={r.id} className="flex min-h-56 flex-col overflow-hidden rounded-3xl text-white shadow-[0_10px_30px_rgba(31,27,20,.18)]" style={{ background: `linear-gradient(160deg, ${color}, color-mix(in srgb, ${color} 55%, #1F1B14))` }}>
+                <div className="flex items-center justify-between px-5 pt-4">
+                  <span className="text-xs font-bold uppercase tracking-widest opacity-80">{title}</span>
+                  <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-bold">{o.label}</span>
+                </div>
+                {cover && <CoverImage value={r.data[cover.id]} label={title} className="mx-5 mt-3 h-28 rounded-2xl !bg-none bg-white/10 text-white/50" />}
+                <div className="space-y-1 px-5 pb-5 pt-3 text-sm [&_a]:text-white [&_span]:!bg-white/15 [&_span]:!text-white">
+                  {details.map((f) =>
+                    r.data[f.id] == null || r.data[f.id] === "" ? null : (
+                      <p key={f.id} className={`truncate ${f === details[0] ? "text-lg font-extrabold" : "opacity-90"}`}>
+                        <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
+                      </p>
+                    ),
+                  )}
+                </div>
+              </OpenRecord>
+            );
+          }
+          return (
+            <OpenRecord as="li" key={r.id} table={table.id} recordId={r.id} className="overflow-hidden rounded-2xl border border-line bg-card shadow-soft transition hover:-translate-y-0.5 hover:border-accent/40">
+              {cover && <CoverImage value={r.data[cover.id]} label={title} className="aspect-[4/3] w-full" />}
+              <div className="p-3.5">
+                <p className="truncate font-bold">{title}</p>
+                <Facts fields={details} record={r} labels={labels} ctx={ctx} />
+              </div>
+            </OpenRecord>
+          );
+        })}
       </ul>
       <More shown={records.length} total={total} />
     </div>
@@ -289,15 +347,32 @@ export function NotesBlock({ block }: { block: Block }) {
   );
 }
 
+/** The status a record moves through in order (a job's stage): options.stepper, else the first status people set with 4+ steps. */
+function pipelineField(table: Table, wanted: unknown): (Field & { type: "status" }) | undefined {
+  const ok = (f: Field): f is Field & { type: "status" } => f.type === "status" && !("derive" in f && f.derive) && f.options.length >= 3;
+  const explicit = table.fields.find((f) => f.id === wanted);
+  if (explicit) return ok(explicit) ? explicit : undefined;
+  return table.fields.find((f): f is Field & { type: "status" } => ok(f) && f.options.length >= 4);
+}
+
 /**
- * A record page's details: every field of the record (computed ones too), links go to the
- * linked record's page, photos show as pictures. Edit opens the record's form.
+ * A record page's details. options.part picks a piece: "hero" (photo, title, where it belongs,
+ * badges, stage stepper), "facts" (the other fields), "photos" (its photo and video fields, add
+ * straight in). Without part, all three in one card.
  */
-export function DetailsBlock({ table, record, labels, ctx, basePath }: { table: Table; record: RecordRow; labels: LinkLabels; ctx: FormatCtx; blueprint?: Blueprint; basePath?: string }) {
+export function DetailsBlock({ table, record, labels, ctx, basePath, options = {} }: { table: Table; record: RecordRow; labels: LinkLabels; ctx: FormatCtx; blueprint?: Blueprint; basePath?: string; options?: Record<string, unknown> }) {
+  const part = options.part === "hero" || options.part === "facts" || options.part === "photos" ? options.part : undefined;
   const title = table.fields.find((f) => f.id === table.primaryField) ?? table.fields.find((f) => f.type === "text");
-  const status = table.fields.filter((f) => f.type === "status" && f.id !== title?.id);
+  const titleText = title ? (title.type === "link" ? labels[String(record.data[title.id])] ?? "—" : valueText(title, record.data[title.id], labels, ctx) || "Untitled") : "Untitled";
   const files = table.fields.filter((f) => f.type === "file");
-  const rest = table.fields.filter((f) => f.id !== title?.id && !status.includes(f) && !files.includes(f) && f.type !== "hours");
+  const cover = files.find((f) => record.data[f.id] != null && (!Array.isArray(record.data[f.id]) || (record.data[f.id] as unknown[]).length > 0)) ?? files[0];
+  const pipeline = pipelineField(table, options.stepper);
+  const chips = table.fields.filter((f) => isChip(f) && f.id !== title?.id && f.id !== pipeline?.id && record.data[f.id] != null && record.data[f.id] !== "");
+  const links = table.fields.filter((f) => f.type === "link" && f.id !== title?.id && record.data[f.id]).slice(0, 3);
+  // Next to a hero, facts skip what the hero already shows and what's still empty.
+  const facts = table.fields.filter(
+    (f) => f.id !== title?.id && !files.includes(f) && f.type !== "hours" && !isChip(f) && f.id !== pipeline?.id && (part !== "facts" || (!links.includes(f) && record.data[f.id] != null && record.data[f.id] !== "")),
+  );
   const value = (f: Field) => {
     const v = record.data[f.id];
     if (f.type === "link" && basePath && v) {
@@ -314,38 +389,81 @@ export function DetailsBlock({ table, record, labels, ctx, basePath }: { table: 
     }
     return <FieldValue field={f} value={v} labels={labels} ctx={ctx} />;
   };
-  return (
-    <div className="card flex h-full flex-col overflow-hidden">
-      <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted">{table.label.replace(/s$/, "")}</p>
-          <h2 className="truncate text-xl font-bold tracking-tight">{title ? (title.type === "link" ? labels[String(record.data[title.id])] ?? "—" : valueText(title, record.data[title.id], labels, ctx) || "Untitled") : "Untitled"}</h2>
-          {status.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {status.map((f) => (
-                <span key={f.id} className="inline-flex items-center gap-1.5 text-xs text-muted">
-                  {f.label} <FieldValue field={f} value={record.data[f.id]} labels={labels} ctx={ctx} />
+
+  const hero = (
+    <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-start">
+      {cover && <HeroPhoto value={record.data[cover.id]} label={titleText} />}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="flex flex-wrap items-center gap-x-2 text-[13px] text-muted">
+              <span className="font-semibold uppercase tracking-wider">{singular(table.label)}</span>
+              {links.map((f) => (
+                <span key={f.id} className="inline-flex items-center gap-2">
+                  <span className="text-muted/50">·</span>
+                  {value(f)}
                 </span>
               ))}
-            </div>
-          )}
+            </p>
+            <h1 className="mt-1 text-2xl font-extrabold tracking-tight md:text-[28px]">{titleText}</h1>
+          </div>
+          <EditRecordButton table={table.id} recordId={record.id} label={`Edit ${singular(table.label).toLowerCase()}`} />
         </div>
-        <EditRecordButton table={table.id} recordId={record.id} />
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        {files.length > 0 && (
-          <div className="mb-5 flex flex-col gap-4">
-            {files.map((f) => <RecordFile key={f.id} table={table.id} recordId={record.id} field={f.id} file={record.data[f.id]} label={f.label} multiple={"multiple" in f && !!f.multiple} />)}
+        {chips.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {chips.map((f) => (
+              <span key={f.id} title={f.label}>
+                <FieldValue field={f} value={record.data[f.id]} labels={labels} ctx={ctx} />
+              </span>
+            ))}
           </div>
         )}
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-          {rest.map((f) => (
-            <div key={f.id} className={`min-w-0 ${f.type === "long_text" ? "sm:col-span-2" : ""}`}>
-              <dt className="text-xs text-muted">{f.label}</dt>
-              <dd className={`mt-0.5 text-sm ${f.type === "long_text" ? "whitespace-pre-wrap" : "truncate"}`}>{value(f)}</dd>
-            </div>
-          ))}
-        </dl>
+        {pipeline && (
+          <StageStepper
+            table={table.id}
+            recordId={record.id}
+            field={pipeline.id}
+            label={pipeline.label}
+            value={typeof record.data[pipeline.id] === "string" ? (record.data[pipeline.id] as string) : null}
+            steps={pipeline.options.map((o, i) => ({ id: o.id, label: o.label, color: o.color ?? COLUMN_COLORS[i % COLUMN_COLORS.length] }))}
+          />
+        )}
+      </div>
+    </div>
+  );
+  const factList = (
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+      {facts.map((f) => (
+        <div key={f.id} className={`min-w-0 ${f.type === "long_text" || part === "facts" ? "sm:col-span-2" : ""} ${part === "facts" && f.type !== "long_text" ? "flex items-baseline justify-between gap-4 border-b border-line/60 pb-2" : ""}`}>
+          <dt className="text-xs text-muted">{f.label}</dt>
+          <dd className={`mt-0.5 text-sm ${f.type === "long_text" ? "whitespace-pre-wrap" : "truncate"} ${part === "facts" && f.type !== "long_text" ? "text-right font-medium" : ""}`}>{value(f)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+  const photos = files.map((f) => <RecordFile key={f.id} table={table.id} recordId={record.id} field={f.id} file={record.data[f.id]} label={f.label} multiple={"multiple" in f && !!f.multiple} />);
+
+  if (part === "hero") return <section className="card h-full overflow-hidden">{hero}</section>;
+  if (part === "facts")
+    return (
+      <section className="card flex h-full flex-col overflow-hidden">
+        <h2 className="px-5 pb-2 pt-4 text-sm font-semibold">{typeof options.title === "string" ? options.title : "Details"}</h2>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">{factList}</div>
+      </section>
+    );
+  if (part === "photos")
+    return (
+      <section className="card flex h-full flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">{photos.length ? photos : <p className="text-sm text-muted">{table.label} have no photo field yet.</p>}</div>
+      </section>
+    );
+  return (
+    <div className="card flex h-full flex-col overflow-hidden">
+      <div className="border-b border-line">{hero}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {files.length > 1 || (files.length === 1 && files[0] !== cover) || files.some((f) => "multiple" in f && f.multiple) ? <div className="mb-5 flex flex-col gap-4">{photos}</div> : null}
+        {files.length === 1 && !("multiple" in files[0] && files[0].multiple) && !record.data[files[0].id] && <div className="mb-5">{photos}</div>}
+        {factList}
       </div>
     </div>
   );

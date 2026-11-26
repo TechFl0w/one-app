@@ -209,6 +209,8 @@ export const BLOCK_TYPES = [
   "notes",
   /** On a record page: the record's own fields, with Edit. */
   "details",
+  /** On a record page: what happened to the record and the records under it (lines, payments). */
+  "activity",
   /** The greeting at the top of a page: hello, today's date, a line of live counts, quick add buttons. */
   "header",
   /** A generated component (blueprint.components), rendered in the browser sandbox. */

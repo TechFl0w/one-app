@@ -213,6 +213,7 @@ export const ADDABLE_BLOCKS: { type: BlockType; label: string; needsTable: boole
   { type: "form", label: "Form", needsTable: true },
   { type: "notes", label: "Note", needsTable: false },
   { type: "header", label: "Greeting", needsTable: false },
+  { type: "activity", label: "Activity (record pages)", needsTable: true },
 ];
 
 const DEFAULT_SIZE: Partial<Record<BlockType, [number, number]>> = {

@@ -1,4 +1,5 @@
 import "server-only";
+import type { AuditRow } from "@/engine/auditText";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RecordStore } from "@/engine/store";
 import type { RecordRow } from "@/schema/records";
@@ -36,6 +37,18 @@ export function supabaseStore(supabase: SupabaseClient, businessId: string): Rec
         .in("id", ids);
       if (error) throw new Error(`Could not load linked records: ${error.message}`);
       return ((data ?? []) as Row[]).map((r) => view(tableId, r));
+    },
+    async history(recordIds, limit) {
+      if (!recordIds.length) return [];
+      const { data, error } = await supabase
+        .from("audit_log")
+        .select("id, actor_id, source, action, table_id, record_id, summary, details, created_at")
+        .eq("business_id", businessId)
+        .in("record_id", recordIds.slice(0, 200))
+        .order("id", { ascending: false })
+        .limit(limit);
+      if (error) throw new Error(`Could not load activity: ${error.message}`);
+      return (data ?? []) as AuditRow[];
     },
   };
 }

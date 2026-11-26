@@ -8,6 +8,7 @@ import { recordDefaults } from "@/engine/recordPage";
 import { AddRecordButton } from "./RecordOpener";
 import { CalendarBlock } from "./CalendarBlock";
 import { HeaderBlock } from "./HeaderBlock";
+import { ActivityBlock } from "./ActivityBlock";
 import { FormBlock, type FormAction } from "./FormBlock";
 import type { FormatCtx } from "./format";
 import { SandboxFrame } from "@/components/sandbox/SandboxFrame";
@@ -91,6 +92,12 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
       const target = typeof block.options?.page === "string" ? blueprint.pages.find((p) => p.id === block.options!.page) : undefined;
       return <NumberBlock value={data.value} field={data.field} agg={block.source?.agg ?? "count"} ctx={ctx} title={title} options={block.options} href={target && env.sandbox ? `${env.sandbox.basePath}/p/${target.id}` : undefined} />;
     }
+    case "activity":
+      return (
+        <BlockFrame title={typeof block.options?.title === "string" ? block.options.title : "Activity"}>
+          <ActivityBlock rows={data.rows} blueprint={blueprint} tableId={block.source!.table} recordId={env.recordId!} ctx={ctx} />
+        </BlockFrame>
+      );
     case "header":
       return <HeaderBlock block={block} blueprint={blueprint} stats={data.stats} ctx={ctx} now={now} />;
     case "form": {
@@ -107,7 +114,7 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
       );
     }
     case "details":
-      return <DetailsBlock table={displayTable(blueprint, data.table)} record={data.record} labels={data.labels} ctx={ctx} blueprint={blueprint} basePath={env.sandbox?.basePath} />;
+      return <DetailsBlock table={displayTable(blueprint, data.table)} record={data.record} labels={data.labels} ctx={ctx} blueprint={blueprint} basePath={env.sandbox?.basePath} options={block.options} />;
     case "records": {
       const props = { block, table: displayTable(blueprint, data.table), records: data.records, total: data.total, labels: data.labels, ctx };
       // Adding from a list on a record page links the new record to it (a line to its job).

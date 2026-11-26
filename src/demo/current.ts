@@ -24,8 +24,10 @@ function fromTemplate(id: string): { blueprint: Blueprint; records: RecordRow[] 
   if (!built.has(id)) built.set(id, blueprint);
   // Stable ids, so a record page link keeps working while the demo is browsed.
   const ids = new Map<string, string>();
-  const at = "2026-01-01T00:00:00.000Z";
+  // Created over the last few days, oldest first, so timelines read naturally.
+  const start = Date.now() - seed.length * 47 * 60_000;
   const records = seed.map((s, i): RecordRow => {
+    const at = new Date(start + i * 47 * 60_000).toISOString();
     const recordId = `00000000-0000-4000-8000-${String(500000 + i).padStart(12, "0")}`;
     const data = resolveSeed(s.data, ids);
     if (s.ref) ids.set(s.ref, recordId);
