@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRecordQuery, linkedIds, projectData, RecordError, validateRecordInput } from "./records";
+import { assertFilesInBusiness, buildRecordQuery, linkedIds, projectData, RecordError, validateRecordInput } from "./records";
 import { salonBlueprint } from "./__tests__/fixtures";
 import type { Table } from "@/schema/blueprint";
 
@@ -24,6 +24,7 @@ const table: Table = {
     { id: "fld_phone", label: "Phone", type: "phone" },
     { id: "fld_email", label: "Email", type: "email" },
     { id: "fld_photo", label: "Photo", type: "file" },
+    { id: "fld_gallery", label: "Gallery", type: "file", multiple: true },
     { id: "fld_total", label: "Total", type: "formula", expression: "fld_qty * fld_price" },
   ],
 };
@@ -196,5 +197,25 @@ describe("amount and number checks on the server", () => {
     expect(fails(nights, { fld_n: 0 })).toMatch(/at least 1/);
     expect(fails(nights, { fld_n: 31 })).toMatch(/at most 30/);
     expect(fails(nights, { fld_n: 3 })).toBeNull();
+  });
+});
+
+describe("photo galleries", () => {
+  const photo = (n: number, extra = {}) => ({ path: `${ID}/tbl_jobs/${ID2}/p${n}.webp`, name: `p${n}.webp`, mime: "image/webp", width: 2400, height: 1600, ...extra });
+  it("a gallery field holds a list; a single file becomes a list of one", () => {
+    expect(validateRecordInput(table, { fld_title: "x", fld_gallery: [photo(1), photo(2)] }, "create").fld_gallery).toHaveLength(2);
+    expect(validateRecordInput(table, { fld_title: "x", fld_gallery: photo(1) }, "create").fld_gallery).toEqual([photo(1)]);
+  });
+  it("videos keep their still frame", () => {
+    const video = { path: `${ID}/tbl_jobs/${ID2}/clip.mov`, name: "clip.mov", mime: "video/quicktime", poster: `${ID}/tbl_jobs/${ID2}/clip.jpg` };
+    expect(validateRecordInput(table, { fld_title: "x", fld_photo: video }, "create").fld_photo).toEqual(video);
+  });
+  it("rejects files that aren't file values", () => {
+    expect(fieldErrors(() => validateRecordInput(table, { fld_title: "x", fld_gallery: ["a.jpg"] }, "create"))).toEqual(["fld_gallery"]);
+  });
+  it("only accepts files (and stills) from the business's own folder", () => {
+    expect(() => assertFilesInBusiness(table, { fld_gallery: [photo(1)] }, ID)).not.toThrow();
+    expect(() => assertFilesInBusiness(table, { fld_gallery: [photo(1), { ...photo(2), path: `${ID2}/tbl_jobs/x/p.webp` }] }, ID)).toThrow();
+    expect(() => assertFilesInBusiness(table, { fld_photo: photo(1, { poster: `${ID2}/tbl_jobs/x/s.jpg` }) }, ID)).toThrow();
   });
 });

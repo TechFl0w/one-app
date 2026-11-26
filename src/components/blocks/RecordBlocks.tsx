@@ -226,9 +226,9 @@ export function DetailsBlock({ table, record, labels, ctx, basePath }: { table: 
         <EditRecordButton table={table.id} recordId={record.id} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        {files.some((f) => record.data[f.id]) && (
-          <div className="mb-4 flex flex-wrap gap-3">
-            {files.map((f) => (record.data[f.id] ? <RecordFile key={f.id} file={record.data[f.id]} label={f.label} /> : null))}
+        {files.length > 0 && (
+          <div className="mb-5 flex flex-col gap-4">
+            {files.map((f) => <RecordFile key={f.id} table={table.id} recordId={record.id} field={f.id} file={record.data[f.id]} label={f.label} multiple={"multiple" in f && !!f.multiple} />)}
           </div>
         )}
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">

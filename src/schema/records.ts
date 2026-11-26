@@ -46,4 +46,12 @@ export const FileValue = z.strictObject({
   name: z.string().min(1).max(255),
   size: z.int().min(0).optional(),
   mime: z.string().max(100).optional(),
+  /** Videos: a still frame (stored like any file) shown before it plays. */
+  poster: z.string().min(1).max(500).optional(),
+  /** Images and videos: pixel size, so layouts don't jump while they load. */
+  width: z.int().min(1).max(20000).optional(),
+  height: z.int().min(1).max(20000).optional(),
 });
+export type FileValue = z.infer<typeof FileValue>;
+/** A gallery field (multiple: true) holds a list, newest last. */
+export const FileList = z.array(FileValue).max(100);

@@ -88,13 +88,16 @@ declare module "@one/kit" {
 
   // ---- Files (file fields: photos, leases, receipts…) ----
   /** What a file field holds. Never build or guess one; it comes from an upload. */
-  export interface FileValue { path: string; name: string; size?: number; mime?: string }
-  /** Uploads a file the owner picked (from an <input type="file">) for a file field; save the result in that field. Forms (openRecordForm, RecordForm) already do this for you. */
+  export interface FileValue { path: string; name: string; size?: number; mime?: string; /** A video's still frame. */ poster?: string; width?: number; height?: number }
+  /** A gallery file field (multiple: true) holds FileValue[]; a single one holds FileValue or null. */
+  /** Uploads one file the owner picked for a file field (photos are shrunk, videos get a still frame); save the result in that field (append it for a gallery). Forms (openRecordForm, RecordForm) and FileInput already do this for you. */
   export function uploadFile(table: string, field: string, file: File): Promise<FileValue>;
   /** A viewable URL for a file field's value (null while loading or when empty). Prefer FileImage. */
   export function useFileUrl(file: unknown): string | null;
   /** Opens a file (e.g. a lease PDF) in a new tab. */
   export function openFile(file: unknown): void;
+  /** Shows photos and videos full screen in One App (swipe through, videos play). FileImage and Gallery do this on tap. */
+  export function viewFiles(files: unknown, index?: number): void;
 
   // ---- UI parts (styled like One App; Tailwind classes also work everywhere) ----
   export function Card(props: { title?: ReactNode; actions?: ReactNode; className?: string; children?: ReactNode; padded?: boolean }): JSX.Element;
@@ -110,10 +113,12 @@ declare module "@one/kit" {
   export function DateTimeInput(props: { value: string; onChange: (v: string) => void; withTime?: boolean; label?: ReactNode; className?: string }): JSX.Element;
   /** An inline form for a record (only when the design shows the form on the page itself — otherwise use openRecordForm). */
   export function RecordForm(props: { table: string; fields?: string[]; recordId?: string; submitLabel?: string; onSaved?: (record: RecordRow) => void; className?: string }): JSX.Element;
-  /** Shows a file field's value: the photo itself (set size/rounding with className), or a chip that opens other files. Empty value: a soft image placeholder. */
-  export function FileImage(props: { file: unknown; alt?: string; className?: string; fit?: "cover" | "contain" }): JSX.Element;
-  /** Pick-and-upload control for a file field, for custom forms. accept="image/*" for photos. */
-  export function FileInput(props: { table: string; field: string; value: unknown; onChange: (v: FileValue | null) => void; label?: ReactNode; accept?: string; className?: string }): JSX.Element;
+  /** Shows a file field's value: the photo, a video's still with a play button, or a chip for other files. Tap opens it full screen. A gallery value shows its first item (a cover). Set size/rounding with className. Empty: a soft image placeholder. */
+  export function FileImage(props: { file: unknown; alt?: string; className?: string; fit?: "cover" | "contain"; onClick?: () => void }): JSX.Element;
+  /** A grid of photos and videos (a gallery field's value); tap one to view all full screen. */
+  export function Gallery(props: { files: unknown; className?: string; itemClassName?: string; empty?: ReactNode }): JSX.Element;
+  /** Upload control for a file field: tap (phones offer the camera), drop or paste; uploads right away. multiple for gallery fields (onChange gets the whole list). accept defaults to photos and videos. */
+  export function FileInput(props: { table: string; field: string; value: unknown; onChange: (v: FileValue | FileValue[] | null) => void; label?: ReactNode; accept?: string; multiple?: boolean; className?: string }): JSX.Element;
   /** THE kanban: cards can always be dragged between columns (saves "field"); columns default to the field's options; a click opens the record's page. Never build a board by hand. */
   export function Board(props: { table: string; field: string; records: RecordRow[]; renderCard: (record: RecordRow) => ReactNode; columns?: { id: string; label: string; color?: string }[]; onCardClick?: (record: RecordRow) => void; className?: string }): JSX.Element;
   export function Spinner(props: { className?: string }): JSX.Element;

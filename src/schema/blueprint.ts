@@ -79,6 +79,8 @@ const SimpleField = z.strictObject({
   /** For number fields: the smallest / largest value allowed. */
   min: z.number().optional(),
   max: z.number().optional(),
+  /** For file fields: a gallery (several photos/videos/files) instead of one file. */
+  multiple: z.boolean().optional(),
 });
 
 const MoneyField = z.strictObject({

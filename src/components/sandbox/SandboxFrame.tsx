@@ -11,7 +11,8 @@ import type { Theme } from "@/schema/blueprint";
 import { sandboxSrcdoc } from "./srcdoc";
 import { registerCapture } from "./captureRegistry";
 import { RecordDialog, parseFormRequest, type RecordFormRequest } from "./RecordDialog";
-import { recordFileUrl, uploadRecordFile } from "./files";
+import { asFiles, recordFileUrl, uploadRecordFile } from "./files";
+import { useMediaViewer } from "@/components/media/Media";
 
 const noop = () => () => {};
 const str = (v: unknown, what: string) => {
@@ -55,6 +56,7 @@ export function SandboxFrame({
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const router = useRouter();
+  const viewer = useMediaViewer();
   // Only known in the browser; the frame is created after hydration.
   const origin = useSyncExternalStore(noop, () => window.location.origin, () => null);
   const [height, setHeight] = useState<number | null>(null);
@@ -177,6 +179,14 @@ export function SandboxFrame({
             window.open(await recordFileUrl(bridge, str(a[0], "path").slice(0, 500)), "_blank", "noopener");
             value = true;
             break;
+          case "files.view": {
+            // Photos and videos open full screen in One App (swipe through, videos play).
+            const files = asFiles(a[0]).slice(0, 100).map((f) => ({ ...f, path: f.path.slice(0, 500) }));
+            if (!files.length) throw new Error("invalid: No files");
+            viewer?.open(files, typeof a[1] === "number" ? a[1] : 0, bridge);
+            value = true;
+            break;
+          }
           case "toast":
             setToast(String(a[0] ?? "").slice(0, 200));
             value = true;
@@ -194,7 +204,7 @@ export function SandboxFrame({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [bridge, schema, basePath, router, autoHeight]);
+  }, [bridge, schema, basePath, router, autoHeight, viewer]);
 
   // Self-check pictures: the frame renders itself to a JPEG on request.
   const captures = useRef(new Map<number, (url: string | null) => void>());
