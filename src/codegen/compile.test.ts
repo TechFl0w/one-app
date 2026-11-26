@@ -43,4 +43,9 @@ describe("compileComponent", () => {
     const noDefault = compileComponent(`export function X() { return <div /> }`);
     expect(noDefault.ok).toBe(false);
   });
+  it("types Icon names from the bundled set", () => {
+    const src = (name: string) => `import { Icon } from "@one/kit";\nexport default function C() { return <p><Icon name=${name} className="h-4 w-4" /> Hi</p>; }`;
+    expect(compileComponent(src('"calendar"')).ok).toBe(true);
+    expect(compileComponent(src('{["user", "phone"][0]}')).ok).toBe(true);
+  });
 });

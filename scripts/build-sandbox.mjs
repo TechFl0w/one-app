@@ -33,6 +33,6 @@ const compiler = await compile(`@import "tailwindcss/preflight.css" layer(base);
     return { path: file, base, content: readFileSync(file, "utf8") };
   },
 });
-const candidates = new Scanner({}).getCandidatesWithPositions({ content: readFileSync("src/sandbox/runtime.tsx", "utf8"), extension: "tsx" }).map((c) => c.candidate);
+const candidates = new Scanner({}).getCandidatesWithPositions({ content: ["src/sandbox/runtime.tsx", "src/sandbox/icons.ts"].map((f) => readFileSync(f, "utf8")).join("\n"), extension: "tsx" }).map((c) => c.candidate);
 writeFileSync("public/sandbox/kit.css", compiler.build(candidates));
 console.log("sandbox runtime built");

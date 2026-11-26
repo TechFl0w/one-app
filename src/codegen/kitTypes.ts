@@ -3,6 +3,10 @@
  * kit ("@one/kit"). Kept self-contained so compiling needs no node_modules typings at runtime.
  * The runtime that implements these lives in src/sandbox/runtime.tsx — keep them in sync.
  */
+import { ICON_NAMES } from "@/sandbox/iconNames";
+
+const ICON_UNION = ICON_NAMES.map((n) => JSON.stringify(n)).join(" | ");
+
 export const KIT_DTS = String.raw`
 declare namespace JSX {
   type Element = any;
@@ -99,6 +103,12 @@ declare module "@one/kit" {
   export function RecordForm(props: { table: string; fields?: string[]; recordId?: string; submitLabel?: string; onSaved?: (record: RecordRow) => void; className?: string }): JSX.Element;
   export function Spinner(props: { className?: string }): JSX.Element;
   export function Empty(props: { children?: ReactNode; className?: string }): JSX.Element;
-  export function Icon(props: { name: string; className?: string }): JSX.Element;
+  /** Icon names (lucide's, kebab-case). Only these are bundled; any other name draws nothing. */
+  export type IconName = ${ICON_UNION};
+  /**
+   * A line icon, 1em square so it follows the text size (size it with h-4 w-4 etc., colour it
+   * with text-*). Decorative unless you give a label (icon-only buttons need one).
+   */
+  export function Icon(props: { name: IconName | (string & {}); className?: string; label?: string }): JSX.Element;
 }
 `;

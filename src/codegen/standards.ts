@@ -1,4 +1,5 @@
 import type { Blueprint } from "@/schema/blueprint";
+import { isIconName, normalizeIconName } from "@/sandbox/iconNames";
 
 /**
  * App rules (docs/app-rules.md) that can be checked in code. `errors` stop a component from
@@ -20,6 +21,15 @@ export function checkStandards(source: string, bp: Blueprint, opts: { inlineForm
     const id = labels.get(text);
     if (id) warnings.push(`If this compares a choice, use the option id "${id}", not the label text "${m[1] ?? m[2]}" (labels can be renamed).`);
   }
+
+  // Icons: only the bundled set draws anything.
+  const unknown = new Set<string>();
+  for (const m of source.matchAll(/<Icon\b[^>]*?\bname=(?:"([^"]*)"|'([^']*)'|\{\s*["'`]([^"'`]*)["'`]\s*\})/g)) {
+    const name = m[1] ?? m[2] ?? m[3];
+    if (!isIconName(normalizeIconName(name))) unknown.add(name);
+  }
+  if (unknown.size)
+    warnings.push(`Unknown icon ${[...unknown].map((n) => `"${n}"`).join(", ")}: it draws nothing. Use one of the IconName names in "@one/kit" (e.g. "calendar", "user", "dollar-sign").`);
 
   // Hierarchy: a list of child records shows its parent (a room shows its building).
   const listed = new Set([...source.matchAll(/useRecords\(\s*\{\s*table:\s*["'](tbl_[a-z0-9_]+)["']/g)].map((m) => m[1]));

@@ -14,4 +14,10 @@ describe("app rules checked in code", () => {
     expect(warnings.join("\n")).toMatch(/Bookings belong to Clients \(fld_client\)/);
     expect(warnings.join("\n")).toMatch(/option id "opt_booked"/);
   });
+  it("warns about icons that aren't bundled", () => {
+    const ok = checkStandards('<Icon name="calendar" /><Icon name={"user"} /><Icon className="h-4" name=\'DollarSign\' />', demoBlueprint);
+    expect(ok.warnings).toEqual([]);
+    const bad = checkStandards('<Icon name="unicorn" /><Icon name={"calender"} />', demoBlueprint);
+    expect(bad.warnings.join("\n")).toMatch(/Unknown icon "unicorn", "calender"/);
+  });
 });

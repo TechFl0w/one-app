@@ -37,6 +37,17 @@ const log = (...a) => console.log("•", ...a);
   const rows = await frame.locator('[data-testid="booking-row"]').count();
   log("rows from the bridge:", rows, `(${Date.now() - t0} ms)`);
   assert.ok(rows > 0);
+  // Kit icons are real SVGs bundled into the runtime (no network in the frame), sized by class.
+  const icon = frame.locator('[data-testid="booking-row"] svg[data-icon="calendar-check"]').first();
+  const box = await icon.boundingBox();
+  const shapes = await icon.locator("path, rect, circle, line, polyline").count();
+  const colour = await icon.evaluate((e) => getComputedStyle(e).color);
+  log("icon:", `${Math.round(box.width)}×${Math.round(box.height)}`, shapes, "shapes,", colour);
+  assert.ok(Math.round(box.width) === 20 && Math.round(box.height) === 20, "h-5 w-5 icon");
+  assert.ok(shapes > 0, "icon draws something");
+  assert.notEqual(colour, await frame.locator("body").evaluate((e) => getComputedStyle(e).color), "coloured by text-accent");
+  assert.equal(await frame.getByRole("button", { name: "Add booking" }).locator('svg[data-icon="plus"]').count(), 1, "icon inside a button");
+  assert.equal(await frame.locator('[data-testid="unknown-icon"]').first().innerHTML(), "", "an unknown icon name draws nothing");
   // Asking for more than one page (limit 1000) still loads everything, page by page.
   await frame.locator('[data-testid="all-count"]').filter({ hasText: "/" }).waitFor();
   const [got, of] = (await frame.locator('[data-testid="all-count"]').textContent()).split("/").map(Number);

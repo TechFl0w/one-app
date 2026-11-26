@@ -7,6 +7,7 @@ import * as React from "react";
 import * as jsxRuntime from "react/jsx-runtime";
 import { createRoot } from "react-dom/client";
 import { toJpeg } from "html-to-image";
+import { Icon } from "./icons";
 import type { CallMethod, FrameToHost, HostToFrame, SandboxRecord, SandboxSchema } from "./protocol";
 
 const { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } = React;
@@ -423,9 +424,6 @@ function Spinner({ className }: { className?: string }) {
 }
 function Empty({ children, className }: Kids) {
   return <p className={cx("py-6 text-center text-sm text-muted", className)}>{children ?? "Nothing here yet."}</p>;
-}
-function Icon({ name, className }: { name: string; className?: string }) {
-  return <span className={cx("inline-block", className)} aria-hidden data-icon={name} />;
 }
 
 /** Create/edit form for any table, with the right input per field type. */
