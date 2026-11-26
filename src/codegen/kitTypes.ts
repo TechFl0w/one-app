@@ -63,7 +63,7 @@ declare module "@one/kit" {
     /** Asks the owner to confirm (One App shows the dialog). Resolves false if they cancel. */
     remove(table: string, id: string): Promise<boolean>;
   };
-  /** Label of a record (its primary field), e.g. for links. */
+  /** Label of a record (its title field; a choice shows its label). If the title is a link (a booking named by its client), show recordLabel of that linked record instead. */
   export function recordLabel(table: string, record: RecordRow): string;
   /** Label of a choice/status option id on a field. */
   export function optionLabel(table: string, field: string, optionId: unknown): string;

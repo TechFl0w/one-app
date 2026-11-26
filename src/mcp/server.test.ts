@@ -55,13 +55,14 @@ describe("MCP server", () => {
   it("answers setup changes that would drift with fix_these_next", async () => {
     const { client } = await connect();
     const table = { id: "tbl_leases", label: "Leases", fields: [
+      { id: "fld_tenant", label: "Tenant", type: "text" },
       { id: "fld_end", label: "End", type: "date" },
       { id: "fld_state", label: "Status", type: "status", options: [{ id: "opt_active", label: "Active" }, { id: "opt_ended", label: "Ended" }] },
     ] };
     const r = await client.callTool({ name: "change_setup", arguments: { summary: "Add leases", ops: [{ op: "addTable", table }] } });
     expect(r.isError).toBeFalsy();
     expect(body(r).result.fix_these_next[0]).toMatch(/Leases › Status .* follow the dates/);
-    const fixed = { ...table, id: "tbl_leases2", fields: [table.fields[0], { ...table.fields[1], derive: { rules: [{ when: [{ field: "fld_end", op: "lt", value: "@today" }], option: "opt_ended" }], otherwise: "opt_active" } }] };
+    const fixed = { ...table, id: "tbl_leases2", fields: [table.fields[0], table.fields[1], { ...table.fields[2], derive: { rules: [{ when: [{ field: "fld_end", op: "lt", value: "@today" }], option: "opt_ended" }], otherwise: "opt_active" } }] };
     const ok = await (await connect()).client.callTool({ name: "change_setup", arguments: { summary: "Add leases", ops: [{ op: "addTable", table: fixed }] } });
     expect(body(ok).applied).toBeTruthy();
     expect(body(ok).result.fix_these_next).toBeUndefined();

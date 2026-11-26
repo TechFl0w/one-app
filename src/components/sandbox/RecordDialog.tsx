@@ -32,7 +32,8 @@ function toLocal(iso: string) {
 export function labelOf(t: Table | undefined, r: SandboxRecord) {
   const f = t?.fields.find((x) => x.id === t.primaryField) ?? t?.fields.find((x) => x.type === "text");
   const v = f ? r.data[f.id] : undefined;
-  return v == null || v === "" ? "Untitled" : String(v);
+  if (v == null || v === "") return "Untitled";
+  return f?.options?.find((o) => o.id === v)?.label ?? String(v);
 }
 
 /** Validates what a frame asked for: known table, known fields. */
@@ -90,10 +91,19 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
       );
     const linked = [...new Set(shown.filter((f) => f.type === "link" && f.to).map((f) => f.to!))];
     for (const to of linked)
-      bridge.list({ table: to, limit: 500 }).then(unwrap).then((res) => {
-        if (!live) return;
+      bridge.list({ table: to, limit: 500 }).then(unwrap).then(async (res) => {
         const lt = schema.tables.find((x) => x.id === to);
-        const opts = res.records.map((r) => ({ value: r.id, label: labelOf(lt, r) })).sort((a, b) => a.label.localeCompare(b.label));
+        // A title that is itself a link (a lease named by its tenant) shows that record's name.
+        const title = lt?.fields.find((f) => f.id === lt.primaryField);
+        const names = new Map<string, string>();
+        if (title?.type === "link" && title.to) {
+          const tt = schema.tables.find((x) => x.id === title.to);
+          const ids = [...new Set(res.records.map((r) => r.data[title.id]).filter((v): v is string => typeof v === "string"))];
+          if (ids.length) for (const r of unwrap(await bridge.list({ table: title.to, limit: 500 })).records) if (ids.includes(r.id)) names.set(r.id, labelOf(tt, r));
+        }
+        if (!live) return;
+        const label = (r: SandboxRecord) => (title?.type === "link" ? names.get(String(r.data[title.id])) ?? "Untitled" : labelOf(lt, r));
+        const opts = res.records.map((r) => ({ value: r.id, label: label(r) })).sort((a, b) => a.label.localeCompare(b.label));
         setLinks((x) => ({ ...x, [to]: opts }));
       }, () => {});
     return () => {

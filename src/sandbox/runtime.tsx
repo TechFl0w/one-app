@@ -153,7 +153,8 @@ function recordLabel(table: string, r: SandboxRecord) {
   const t = tableOf(table);
   const f = t?.fields.find((x) => x.id === t.primaryField) ?? t?.fields.find((x) => x.type === "text");
   const v = f ? r.data[f.id] : undefined;
-  return v == null || v === "" ? "Untitled" : String(v);
+  if (v == null || v === "") return "Untitled";
+  return f?.options?.find((o) => o.id === v)?.label ?? String(v);
 }
 function optionLabel(table: string, field: string, optionId: unknown) {
   const f = tableOf(table)?.fields.find((x) => x.id === field);
