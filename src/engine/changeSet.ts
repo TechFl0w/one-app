@@ -314,6 +314,22 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
       else page.icon = op.icon;
       return [{ op: "setPageIcon", pageId: op.pageId, icon: old }];
     }
+    case "setDocument": {
+      const docs = (bp.documents ??= []);
+      const i = docs.findIndex((d) => d.id === op.document.id);
+      const old = i >= 0 ? structuredClone(docs[i]) : null;
+      if (i >= 0) docs[i] = op.document;
+      else docs.push(op.document);
+      return [old ? { op: "setDocument", document: old } : { op: "removeDocument", documentId: op.document.id }];
+    }
+    case "removeDocument": {
+      const docs = bp.documents ?? [];
+      const i = docs.findIndex((d) => d.id === op.documentId);
+      if (i < 0) throw new ChangeSetError("not_found", `Document ${op.documentId} not found`);
+      const [old] = docs.splice(i, 1);
+      if (!docs.length) delete bp.documents;
+      return [{ op: "setDocument", document: old }];
+    }
     case "setPageBadge": {
       const page = pageOf(bp, op.pageId);
       const old = page.badge ? structuredClone(page.badge) : null;
@@ -512,6 +528,10 @@ function describe(bp: Blueprint, op: Operation): string {
       return `${op.hidden ? "Hide" : "Show"} page ${page(op.pageId)}`;
     case "setPageIcon":
       return `Change icon of page ${page(op.pageId)}`;
+    case "setDocument":
+      return `Set up ${q(op.document.label)} (${op.document.kind}) on ${table(op.document.table)}`;
+    case "removeDocument":
+      return `Remove document ${op.documentId}`;
     case "setPageBadge":
       return `${op.badge ? "Show a count" : "Remove the count"} next to page ${page(op.pageId)}`;
     case "reorderPages":

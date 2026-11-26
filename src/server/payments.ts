@@ -144,6 +144,8 @@ export async function applyStripeEvent(admin: SupabaseClient, event: Stripe.Even
         .select("*")
         .maybeSingle();
       if (p?.kind === "deposit" && p.record_id) await confirmDepositBooking(admin, p.business_id, p.table_id, p.record_id);
+      // An invoice paid online gets its payment record (so its balance and status update).
+      if (p?.kind === "payment") await (await import("./documents")).recordDocumentPayment(admin, p);
       return p ? "paid" : "already handled";
     }
   }

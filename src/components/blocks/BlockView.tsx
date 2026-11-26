@@ -9,6 +9,8 @@ import { AddRecordButton } from "./RecordOpener";
 import { CalendarBlock } from "./CalendarBlock";
 import { HeaderBlock } from "./HeaderBlock";
 import { ActivityBlock } from "./ActivityBlock";
+import { DocumentView } from "@/components/documents/DocumentView";
+import { DocumentActions } from "@/components/documents/DocumentActions";
 import { FormBlock, type FormAction } from "./FormBlock";
 import type { FormatCtx } from "./format";
 import { SandboxFrame } from "@/components/sandbox/SandboxFrame";
@@ -92,6 +94,15 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
       const target = typeof block.options?.page === "string" ? blueprint.pages.find((p) => p.id === block.options!.page) : undefined;
       return <NumberBlock value={data.value} field={data.field} agg={block.source?.agg ?? "count"} ctx={ctx} title={title} options={block.options} href={target && env.sandbox ? `${env.sandbox.basePath}/p/${target.id}` : undefined} />;
     }
+    case "document":
+      return (
+        <section className="card flex h-full flex-col gap-4 overflow-hidden p-4 md:p-6">
+          <DocumentActions table={block.source!.table} recordId={env.recordId!} kind={data.view.kind} label={data.view.label} sent={data.view.state !== "draft"} canInvoice={data.canInvoice} invoice={data.invoice} />
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line p-5 md:p-8">
+            <DocumentView doc={data.view} />
+          </div>
+        </section>
+      );
     case "activity":
       return (
         <BlockFrame title={typeof block.options?.title === "string" ? block.options.title : "Activity"}>

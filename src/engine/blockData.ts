@@ -5,6 +5,8 @@ import { RECORD_TOKEN } from "./recordPage";
 import { buildAggregate, buildRecordQuery, RecordError, type QueryContext } from "./records";
 import type { RecordStore } from "./store";
 import type { AuditRow } from "./auditText";
+import { documentFor, loadDocument, type DocView } from "./documents";
+import { isoDate, localToday } from "./dates";
 
 /** Loads what a block needs to render. Pure apart from the store, so the demo and tests can use it. */
 
@@ -18,6 +20,7 @@ export type BlockData =
   | { kind: "details"; table: Table; record: RecordRow; labels: LinkLabels }
   | { kind: "header"; stats: { label: string; value: number | null; field?: Field; tone?: string }[] }
   | { kind: "activity"; rows: AuditRow[] }
+  | { kind: "document"; view: DocView; invoice?: { table: string; id: string } | null; canInvoice: boolean }
   | { kind: "static" }
   | { kind: "unsupported" }
   | { kind: "error"; message: string };
@@ -119,7 +122,12 @@ export async function aggregateOf(blueprint: Blueprint, store: RecordStore, src:
   const table = blueprint.tables.find((t) => t.id === src.table);
   if (!table) return null;
   if (computedIn(table, [src.field, ...(src.filters ?? []).map((f) => f.field)])) {
-    const { records } = await queryBlock(blueprint, store, { table: table.id, filters: src.filters ?? [], limit: 5000 }, ctx);
+    const records: RecordRow[] = [];
+    for (let offset = 0; offset < 5000; offset += 500) {
+      const page = await queryBlock(blueprint, store, { table: table.id, filters: src.filters ?? [], limit: 500, offset }, ctx);
+      records.push(...page.records);
+      if (page.records.length < 500) break;
+    }
     const agg = src.agg ?? "count";
     const nums = records.map((r) => Number(r.data[src.field ?? ""])).filter((n) => Number.isFinite(n));
     return agg === "count" ? records.length : !nums.length ? null : agg === "sum" ? nums.reduce((a, b) => a + b, 0) : agg === "avg" ? nums.reduce((a, b) => a + b, 0) / nums.length : agg === "min" ? Math.min(...nums) : Math.max(...nums);
@@ -154,13 +162,13 @@ export async function loadBlockData(
 ): Promise<BlockData> {
   if (original.type === "notes") return { kind: "static" };
   if (original.type === "header") return { kind: "header", stats: await headerStats(blueprint, store, original.options?.stats, ctx) };
-  if (!["table", "list", "gallery", "board", "calendar", "number", "form", "details", "activity"].includes(original.type)) return { kind: "unsupported" };
+  if (!["table", "list", "gallery", "board", "calendar", "number", "form", "details", "activity", "document"].includes(original.type)) return { kind: "unsupported" };
   if (!original.source) return { kind: "error", message: "This block has no data source yet." };
   const table = blueprint.tables.find((t) => t.id === original.source!.table);
   if (!table) return { kind: "error", message: "The table behind this block no longer exists." };
   // On a record page, "@record" in a filter is the record the page is about.
   const scoped = (original.source.filters ?? []).some((f) => f.value === RECORD_TOKEN);
-  if ((scoped || original.type === "details" || original.type === "activity") && !ctx.recordId) return { kind: "error", message: "This part shows one record; it appears on that record's page." };
+  if ((scoped || original.type === "details" || original.type === "activity" || original.type === "document") && !ctx.recordId) return { kind: "error", message: "This part shows one record; it appears on that record's page." };
   const block = (scoped ? { ...original, source: { ...original.source, filters: original.source.filters!.map((f) => (f.value === RECORD_TOKEN ? { ...f, value: ctx.recordId } : f)) } } : original) as Block & { source: NonNullable<Block["source"]> };
 
   try {
@@ -168,6 +176,23 @@ export async function loadBlockData(
       case "number": {
         const value = await aggregateOf(blueprint, store, block.source, ctx);
         return { kind: "number", table, value, field: table.fields.find((f) => f.id === block.source!.field) };
+      }
+
+      case "document": {
+        const def = documentFor(blueprint, table.id);
+        if (!def) return { kind: "error", message: `${table.label} isn't set up as a quote or invoice yet.` };
+        const [record] = await store.getMany(table.id, [ctx.recordId!]);
+        if (!record) return { kind: "error", message: "This record was deleted." };
+        const today = isoDate(localToday(ctx.now ?? new Date(), blueprint.business.timezone));
+        const view = await loadDocument(blueprint, def, record, store, today);
+        // An accepted quote can become an invoice (or shows the one it became).
+        const inv = def.kind === "quote" ? blueprint.documents?.find((d) => d.kind === "invoice" && d.from?.document === def.id) : undefined;
+        let invoice: { table: string; id: string } | null | undefined;
+        if (inv) {
+          const { records } = await store.query(buildRecordQuery(blueprint, { table: inv.table, filters: [{ field: inv.from!.link, op: "eq", value: record.id }], limit: 1 }, ctx));
+          invoice = records[0] ? { table: inv.table, id: records[0].id } : null;
+        }
+        return { kind: "document", view, invoice, canInvoice: !!inv && view.state === "accepted" };
       }
 
       case "activity": {

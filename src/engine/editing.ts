@@ -214,6 +214,7 @@ export const ADDABLE_BLOCKS: { type: BlockType; label: string; needsTable: boole
   { type: "notes", label: "Note", needsTable: false },
   { type: "header", label: "Greeting", needsTable: false },
   { type: "activity", label: "Activity (record pages)", needsTable: true },
+  { type: "document", label: "Quote / invoice (record pages)", needsTable: true },
 ];
 
 const DEFAULT_SIZE: Partial<Record<BlockType, [number, number]>> = {

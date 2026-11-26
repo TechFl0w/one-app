@@ -21,6 +21,7 @@ export const PageId = idPattern("pg");
 export const BlockId = idPattern("blk");
 export const AutomationId = idPattern("aut");
 export const ConnectionId = idPattern("con");
+export const DocumentId = idPattern("doc");
 
 export const Label = z.string().trim().min(1).max(80);
 
@@ -209,6 +210,8 @@ export const BLOCK_TYPES = [
   "notes",
   /** On a record page: the record's own fields, with Edit. */
   "details",
+  /** On a record page of a quote or invoice: the document as the customer sees it, with Send. */
+  "document",
   /** On a record page: what happened to the record and the records under it (lines, payments). */
   "activity",
   /** The greeting at the top of a page: hello, today's date, a line of live counts, quick add buttons. */
@@ -524,6 +527,78 @@ export const ServerFunction = z.strictObject({
 });
 export type ServerFunction = z.infer<typeof ServerFunction>;
 
+/**
+ * A document customers receive: a quote (scope of work they accept online) or an invoice (they
+ * pay online). It maps onto ordinary tables — the document's own record, its lines, its
+ * customer — so totals, statuses and history stay plain data (docs/documents.md).
+ */
+export const DocumentDef = z.strictObject({
+  id: DocumentId,
+  kind: z.enum(["quote", "invoice"]),
+  /** "Quote", "Estimate", "Invoice". */
+  label: Label,
+  table: TableId,
+  /** Text field that gets the next number ("Q-0007") when a record is created without one. */
+  number: FieldId.optional(),
+  prefix: z.string().max(10).optional(),
+  /** Link to the customer (their name, email and phone are read from that record). */
+  customer: FieldId,
+  /** Short title, the scope of work / notes, and terms shown at the bottom. */
+  title: FieldId.optional(),
+  intro: FieldId.optional(),
+  terms: FieldId.optional(),
+  /** Fixed small print when there's no terms field. */
+  footer: z.string().max(2000).optional(),
+  /** Dates: issued (defaults to the created date), due (invoices) / valid until (quotes). */
+  issued: FieldId.optional(),
+  due: FieldId.optional(),
+  /** Date field set when it's first sent to the customer (statuses derive from it). */
+  sent: FieldId.optional(),
+  lines: z.strictObject({
+    table: TableId,
+    /** The line's link to the document. */
+    via: FieldId,
+    description: FieldId,
+    qty: FieldId.optional(),
+    unit: FieldId.optional(),
+    price: FieldId.optional(),
+    total: FieldId,
+    /** Optional grouping ("Labour", "Materials"). */
+    group: FieldId.optional(),
+  }),
+  totals: z.strictObject({
+    subtotal: FieldId.optional(),
+    tax: FieldId.optional(),
+    total: FieldId,
+    paid: FieldId.optional(),
+    balance: FieldId.optional(),
+  }),
+  /** Quotes: the customer accepts (or declines) online; these date/text fields record it. */
+  accept: z
+    .strictObject({
+      acceptedOn: FieldId,
+      acceptedBy: FieldId.optional(),
+      declinedOn: FieldId.optional(),
+    })
+    .optional(),
+  /** Invoices: the customer pays online; a paid payment is added as a record here. */
+  pay: z
+    .strictObject({
+      table: TableId,
+      via: FieldId,
+      amount: FieldId,
+      date: FieldId,
+      title: FieldId.optional(),
+      method: FieldId.optional(),
+      /** Option id of the method field for card payments. */
+      card: z.string().optional(),
+    })
+    .optional(),
+  /** Invoices made from an accepted quote: the quote document, and this table's link to it. */
+  from: z.strictObject({ document: DocumentId, link: FieldId }).optional(),
+});
+export type DocumentDef = z.infer<typeof DocumentDef>;
+
 const BlueprintShape = z.strictObject({
   version: z.int().min(1),
   business: BusinessInfo,
@@ -536,6 +611,7 @@ const BlueprintShape = z.strictObject({
   components: z.array(Component).max(200).optional(),
   functions: z.array(ServerFunction).max(100).optional(),
   theme: Theme.optional(),
+  documents: z.array(DocumentDef).max(20).optional(),
 });
 
 /** Full blueprint with referential-integrity checks. */
@@ -639,6 +715,30 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
       }
     });
   };
+
+  (bp.documents ?? []).forEach((d, di) => {
+    claim(d.id, ["documents", di, "id"]);
+    const at = ["documents", di];
+    const own = fieldsOf(d.table);
+    if (!tables.has(d.table)) return issue([...at, "table"], `unknown table ${d.table}`);
+    const need = (path: (string | number)[], table: string, id: string | undefined) => id && !fieldsOf(table).has(id) && issue([...at, ...path], `unknown field ${id} on ${table}`);
+    for (const k of ["number", "customer", "title", "intro", "terms", "issued", "due", "sent"] as const) need([k], d.table, d[k]);
+    for (const [k, v] of Object.entries(d.totals)) need(["totals", k], d.table, v);
+    for (const [k, v] of Object.entries(d.accept ?? {})) need(["accept", k], d.table, v);
+    if (!tables.has(d.lines.table)) issue([...at, "lines", "table"], `unknown table ${d.lines.table}`);
+    else for (const [k, v] of Object.entries(d.lines)) if (k !== "table") need(["lines", k], d.lines.table, v);
+    const via = tables.get(d.lines.table)?.fields.find((f) => f.id === d.lines.via);
+    if (via && (via.type !== "link" || via.to !== d.table)) issue([...at, "lines", "via"], `lines must link to ${d.table}`);
+    if (d.pay) {
+      if (!tables.has(d.pay.table)) issue([...at, "pay", "table"], `unknown table ${d.pay.table}`);
+      else for (const [k, v] of Object.entries(d.pay)) if (k !== "table" && k !== "card") need(["pay", k], d.pay.table, v);
+    }
+    if (d.from) {
+      if (!(bp.documents ?? []).some((x) => x.id === d.from!.document && x.kind === "quote")) issue([...at, "from", "document"], `unknown quote document ${d.from.document}`);
+      if (!own.has(d.from.link)) issue([...at, "from", "link"], `unknown field ${d.from.link} on ${d.table}`);
+    }
+    if ((bp.documents ?? []).filter((x) => x.table === d.table).length > 1) issue([...at, "table"], `${d.table} already has a document`);
+  });
 
   const recordPages = new Set<string>();
   bp.pages.forEach((p, pi) => {

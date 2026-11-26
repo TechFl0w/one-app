@@ -7,7 +7,7 @@ import { supabaseStore } from "@/server/store";
 import { withComputed } from "@/engine/computed";
 import { menuCounts } from "@/engine/menuCounts";
 import { loadConversation } from "@/server/ownerChat";
-import { sandboxComponent, sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "./sandbox-actions";
+import { sandboxComponent, sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "./sandbox-actions";
 
 // The assistant's server actions run here: rebuilding pages from a design can take a few minutes.
 export const maxDuration = 300;
@@ -45,6 +45,9 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
         remove: sandboxRemove.bind(null, businessId),
         uploadTarget: sandboxUploadTarget.bind(null, businessId),
         fileUrl: sandboxFileUrl.bind(null, businessId),
+        sendDocument: sandboxSendDocument.bind(null, businessId),
+        documentLink: sandboxDocumentLink.bind(null, businessId),
+        invoiceFromQuote: sandboxInvoiceFromQuote.bind(null, businessId),
         loadComponent: sandboxComponent.bind(null, businessId),
       }}
       blueprint={forBrowser(blueprint)}

@@ -6,6 +6,9 @@ import { RecordQuery } from "@/schema/records";
 import type { SandboxRecord } from "@/sandbox/protocol";
 import { bridged } from "@/sandbox/result";
 import { getCurrentBlueprint } from "@/server/blueprints";
+import { createInvoiceFromQuote, documentUrl, ensureDocumentLink, sendDocument } from "@/server/documents";
+import { documentFor } from "@/engine/documents";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { FILES_BUCKET, filePathFor, isBusinessFilePath, maxBytesFor, sizeLabel } from "@/lib/files";
 
 /**
@@ -81,4 +84,22 @@ export async function sandboxFileUrl(businessId: string, path: string) {
     if (error || !data) throw Object.assign(new Error("Couldn’t open the file"), { code: "not_found" });
     return data.signedUrl;
   });
+}
+
+/** Quotes and invoices: send to the customer, get the customer link, invoice an accepted quote. */
+export async function sandboxSendDocument(businessId: string, table: string, id: string) {
+  return bridged(async () => sendDocument(await createClient(), businessId, table, id));
+}
+export async function sandboxDocumentLink(businessId: string, table: string, id: string) {
+  return bridged(async () => {
+    const supabase = await createClient();
+    const bp = await getCurrentBlueprint(supabase, businessId);
+    const def = documentFor(bp, table);
+    if (!def) throw new Error("This isn’t a quote or invoice.");
+    await getRecord(supabase, businessId, table, id, bp); // the caller can see it
+    return documentUrl(await ensureDocumentLink(createAdminClient(), businessId, def.id, id));
+  });
+}
+export async function sandboxInvoiceFromQuote(businessId: string, table: string, id: string) {
+  return bridged(async () => createInvoiceFromQuote(await createClient(), businessId, table, id));
 }

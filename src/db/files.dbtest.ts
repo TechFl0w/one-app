@@ -22,7 +22,7 @@ describe.skipIf(!testDbUrl)("record files", () => {
 
   it("is a private bucket", async () => {
     const r = await t.db.query("select public, file_size_limit from storage.buckets where id = 'record-files'");
-    expect(r.rows).toEqual([{ public: false, file_size_limit: "20971520" }]);
+    expect(r.rows).toEqual([{ public: false, file_size_limit: "209715200" }]);
   });
 
   it("members upload into their own business's folder only", async () => {
