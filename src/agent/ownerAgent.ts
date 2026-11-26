@@ -259,11 +259,14 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
   const page = input.pageId ? bp.pages.find((p) => p.id === input.pageId) : undefined;
   const userText = page ? `[The owner is looking at page "${page.label}" (${page.id}).]\n\n${input.message}` : input.message;
   const images = (input.images ?? []).slice(0, MAX_IMAGES);
+  const learned = backend.learnings ? await backend.learnings().catch(() => "") : "";
   const newContent: Anthropic.Beta.BetaContentBlockParam[] = [
     ...images.map((im) => ({ type: "image" as const, source: { type: "base64" as const, media_type: im.mediaType, data: im.data } })),
     { type: "text" as const, text: userText },
     // The setup lives in the conversation (not the system prompt), so the history stays cacheable.
     { type: "text" as const, text: setupNote(bp, now) },
+    // What owners of this kind of business went on to change (approved learnings), when there is any.
+    ...(learned ? [{ type: "text" as const, text: learned }] : []),
   ];
   // A turn that stopped right after tool results leaves a user message last; add to it (roles alternate).
   const last = input.history.at(-1);

@@ -20,8 +20,11 @@ export function AppShell({
   transcript,
   sandbox,
   counts,
+  chat = true,
   children,
 }: {
+  /** The assistant panel (off for control-center previews). */
+  chat?: boolean;
   /** Live numbers next to pages in the menu. */
   counts?: Record<string, MenuCount>;
   /** Data access for generated components rendered in the browser. */
@@ -49,7 +52,7 @@ export function AppShell({
       </div>
     </ShellFrame>
     </RecordOpenerProvider>
-    <ChatPanel mode={mode} initialTranscript={transcript} />
+    {chat && <ChatPanel mode={mode} initialTranscript={transcript} />}
     </SandboxProvider>
     </EditProvider>
   );
