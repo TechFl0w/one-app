@@ -13,6 +13,7 @@ import { overlapFixOps } from "@/engine/editing";
 import { applyChangeSet } from "@/engine/changeSet";
 import { compileComponent, compileFunction } from "@/codegen/compile";
 import { checkDataRules } from "@/engine/dataRules";
+import { describeCondition, describeStep, describeTrigger, planStep } from "@/automations/engine";
 import { checkReferences } from "@/codegen/references";
 import { checkStandards } from "@/codegen/standards";
 import { compileStyles } from "@/codegen/styles";
@@ -448,7 +449,19 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const bp = await b.blueprint();
       const a = bp.automations.find((x) => x.id === i.id);
       if (!a) throw new Error(`Automation ${i.id} not found`);
-      return a;
+      const steps = a.actions.map((x) => describeStep(bp, planStep(x, { tableId: a.trigger.table ?? "", recordId: "", data: {}, automation: a })));
+      const issues = checkDataRules(bp).filter((m) => m.includes(`“${a.label}”`));
+      return {
+        id: a.id,
+        label: a.label,
+        on: a.enabled,
+        when: describeTrigger(bp, a),
+        only_if: a.conditions.map((c) => describeCondition(bp, a, c)),
+        then: steps,
+        note: a.conditions.length ? "The conditions are checked again right before it runs and after every wait." : "No conditions: it runs for every matching record.",
+        ...(issues.length ? { fix_these: issues } : {}),
+        definition: a,
+      };
     },
   }),
 ];
