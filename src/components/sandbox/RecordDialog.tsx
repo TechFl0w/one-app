@@ -54,7 +54,9 @@ export function parseFormRequest(v: unknown, schema: SandboxSchema): RecordFormR
  */
 export function RecordDialog({ request, schema, bridge, onDone }: { request: RecordFormRequest | null; schema: SandboxSchema; bridge: SandboxBridge; onDone: (saved: SandboxRecord | null, deleted?: boolean) => void }) {
   const t = schema.tables.find((x) => x.id === request?.table);
-  const title = request?.title ?? (t ? (request?.recordId ? `Edit ${t.label.toLowerCase()}` : `New ${t.label.toLowerCase()}`) : "");
+  // "Edit client" / "New booking": one record, so the table's name in the singular.
+  const one = t ? singular(t.label).toLowerCase() : "";
+  const title = request?.title ?? (t ? (request?.recordId ? `Edit ${one}` : `New ${one}`) : "");
   return (
     <Dialog open={!!request && !!t} onClose={() => onDone(null)} title={title}>
       {request && t && <Body key={`${request.table}:${request.recordId ?? "new"}`} request={request} table={t} schema={schema} bridge={bridge} onDone={onDone} />}
@@ -292,4 +294,12 @@ function FileField({ id, name, required, initial, table, field, label, bridge }:
       {error && <p className="mt-1 text-sm text-red-700">{error}</p>}
     </div>
   );
+}
+
+/** "Clients" → "Client", "Parts used" → "Part used", "Statuses" → "Status", "Repairs" → "Repair". */
+export function singular(label: string): string {
+  const words = label.split(" ");
+  const w = words[0];
+  const one = /ies$/i.test(w) ? w.replace(/ies$/i, "y") : /(ss|us|is)$/i.test(w) ? w : /(ches|shes|xes|sses|uses)$/i.test(w) ? w.replace(/es$/i, "") : w.replace(/s$/i, "");
+  return [one, ...words.slice(1)].join(" ");
 }

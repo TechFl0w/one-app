@@ -1,8 +1,9 @@
-import type { Block, Field, Table } from "@/schema/blueprint";
+import type { Block, Blueprint, Field, Table } from "@/schema/blueprint";
 import type { RecordRow } from "@/schema/records";
 import { groupField, recordLabel, type Group, type LinkLabels } from "@/engine/blockData";
 import { FieldValue, formatMoney, valueText, type FormatCtx } from "./format";
-import { OpenRecord, RecordRowLink } from "./RecordOpener";
+import { EditRecordButton, OpenRecord, RecordFile, RecordRowLink } from "./RecordOpener";
+import { recordPath } from "@/engine/recordPage";
 
 type RecordsProps = {
   block: Block;
@@ -170,6 +171,68 @@ export function NotesBlock({ block }: { block: Block }) {
   return (
     <div className="h-full overflow-auto whitespace-pre-wrap px-5 pb-5 text-sm leading-relaxed text-muted">
       {text || "Empty note."}
+    </div>
+  );
+}
+
+/**
+ * A record page's details: every field of the record (computed ones too), links go to the
+ * linked record's page, photos show as pictures. Edit opens the record's form.
+ */
+export function DetailsBlock({ table, record, labels, ctx, basePath }: { table: Table; record: RecordRow; labels: LinkLabels; ctx: FormatCtx; blueprint?: Blueprint; basePath?: string }) {
+  const title = table.fields.find((f) => f.id === table.primaryField) ?? table.fields.find((f) => f.type === "text");
+  const status = table.fields.filter((f) => f.type === "status" && f.id !== title?.id);
+  const files = table.fields.filter((f) => f.type === "file");
+  const rest = table.fields.filter((f) => f.id !== title?.id && !status.includes(f) && !files.includes(f) && f.type !== "hours");
+  const value = (f: Field) => {
+    const v = record.data[f.id];
+    if (f.type === "link" && basePath && v) {
+      const ids = (Array.isArray(v) ? v : [v]).map(String);
+      return (
+        <span className="inline-flex flex-wrap gap-x-2">
+          {ids.map((id) => (
+            <a key={id} href={recordPath(basePath, f.to, id)} className="font-medium text-accent hover:underline">
+              {labels[id] ?? "—"}
+            </a>
+          ))}
+        </span>
+      );
+    }
+    return <FieldValue field={f} value={v} labels={labels} ctx={ctx} />;
+  };
+  return (
+    <div className="card flex h-full flex-col overflow-hidden">
+      <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted">{table.label.replace(/s$/, "")}</p>
+          <h2 className="truncate text-xl font-bold tracking-tight">{title ? (title.type === "link" ? labels[String(record.data[title.id])] ?? "—" : valueText(title, record.data[title.id], labels, ctx) || "Untitled") : "Untitled"}</h2>
+          {status.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {status.map((f) => (
+                <span key={f.id} className="inline-flex items-center gap-1.5 text-xs text-muted">
+                  {f.label} <FieldValue field={f} value={record.data[f.id]} labels={labels} ctx={ctx} />
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <EditRecordButton table={table.id} recordId={record.id} />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {files.some((f) => record.data[f.id]) && (
+          <div className="mb-4 flex flex-wrap gap-3">
+            {files.map((f) => (record.data[f.id] ? <RecordFile key={f.id} file={record.data[f.id]} label={f.label} /> : null))}
+          </div>
+        )}
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+          {rest.map((f) => (
+            <div key={f.id} className={`min-w-0 ${f.type === "long_text" ? "sm:col-span-2" : ""}`}>
+              <dt className="text-xs text-muted">{f.label}</dt>
+              <dd className={`mt-0.5 text-sm ${f.type === "long_text" ? "whitespace-pre-wrap" : "truncate"}`}>{value(f)}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </div>
   );
 }

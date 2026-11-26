@@ -25,7 +25,8 @@ export function Sidebar({ basePath, businesses = [], footer }: SidebarProps) {
   const [switching, setSwitching] = useState(false);
   const [addingPage, setAddingPage] = useState(false);
   const businessName = blueprint.business.name;
-  const pages = editing ? menuOrder(blueprint) : menuPages(blueprint);
+  // Record pages (a car's page, a job's page) open from their records, not from the menu.
+  const pages = (editing ? menuOrder(blueprint) : menuPages(blueprint)).filter((p) => !p.recordOf);
   // Only page routes highlight a menu item (Automations / Activity are not pages).
   const activeId = pathname.match(/\/p\/([^/]+)/)?.[1];
   // The theme can move the menu to a top bar, or hide it behind a menu button.

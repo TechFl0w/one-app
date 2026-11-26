@@ -52,7 +52,7 @@ declare module "@one/kit" {
   export function useRecord(table: string, id: string | null | undefined): { record: RecordRow | null; loading: boolean; error: string | null; reload(): void };
   /** The business's tables and fields (ids + labels + choice options). */
   export function useSchema(): { business: BusinessInfo; tables: TableInfo[] };
-  /** Props set on the block that shows this component. */
+  /** Props set on the block that shows this component. On a record page, recordId is the record the page is about. */
   export function useProps<T = Record<string, unknown>>(): T;
 
   export const records: {
@@ -70,6 +70,8 @@ declare module "@one/kit" {
 
   /** Go to another page of the app (page id, e.g. "pg_clients"). */
   export function navigate(pageId: string): void;
+  /** Open a record's own page (its details and everything linked to it). Clicking a record in a list or card should do this. */
+  export function openRecord(table: string, recordId: string): void;
   /**
    * THE way to add or edit a record: One App opens a modal form over the whole page (validated,
    * right input per field, linked-record pickers). Resolves the saved record, or null if cancelled.

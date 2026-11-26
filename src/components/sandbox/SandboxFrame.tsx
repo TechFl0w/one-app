@@ -135,6 +135,21 @@ export function SandboxFrame({
             value = true;
             break;
           }
+          case "record.open": {
+            // A record's own page; tables set to open in a pop-up open their form instead.
+            const table = str(a[0], "table");
+            const id = str(a[1], "id");
+            if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("Unknown record");
+            if (schema.tables.find((t) => t.id === table)?.openIn === "modal") {
+              const request = parseFormRequest({ table, recordId: id }, schema);
+              value = await new Promise<SandboxRecord | null>((resolve) => setForm({ request, resolve }));
+            } else {
+              if (!schema.tables.some((t) => t.id === table)) throw new Error("Unknown table");
+              router.push(`${basePath}/r/${table}/${id}`);
+              value = true;
+            }
+            break;
+          }
           case "form.open": {
             // Add/edit screens are a real modal over the whole page, drawn by One App.
             const request = parseFormRequest(a[0], schema);

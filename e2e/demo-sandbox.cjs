@@ -15,11 +15,11 @@ const log = (...a) => console.log("•", ...a);
   const errors = [];
   p.on("pageerror", (e) => errors.push(e.message));
   await p.goto(BASE + "/demo/p/pg_bookings");
-  // Board cards open their record too (not only table rows).
+  // Board cards open their record's page too (not only table rows).
   await p.locator("article[role=button]").first().click();
-  await p.locator("dialog[open]").getByRole("button", { name: "Delete" }).waitFor();
-  await p.locator("dialog[open]").getByRole("button", { name: "Cancel" }).click();
-  log("board cards open the record pop-up");
+  await p.waitForURL(/\/demo\/r\/tbl_bookings\//);
+  log("board cards open the record's page");
+  await p.goto(BASE + "/demo/p/pg_bookings");
   await p.getByRole("button", { name: "Ask the assistant" }).click();
   await p.getByLabel("Message").fill("make the new booking form collapsible with a chevron");
   await p.getByLabel("Message").press("Enter");
@@ -149,9 +149,16 @@ const log = (...a) => console.log("•", ...a);
   await p.getByLabel("Close assistant").click().catch(() => {});
   await p.goto(BASE + "/demo/p/pg_clients");
   await p.locator("table tbody tr").first().click();
+  // A record opens its own page: details + its bookings, Edit (with Delete) as a pop-up.
+  await p.waitForURL(/\/demo\/r\/tbl_clients\/[0-9a-f-]{36}$/);
+  await p.getByText("Bookings", { exact: true }).first().waitFor();
+  await p.screenshot({ path: `${S}/record-page.png` });
+  await p.locator(".card").getByRole("button", { name: "Edit" }).click();
   const pop = p.locator("dialog[open]");
   await pop.getByRole("button", { name: "Delete" }).waitFor();
   await pop.getByRole("button", { name: "Cancel" }).click();
+  log("rows open the record's own page; Edit opens the pop-up with Delete");
+  await p.goto(BASE + "/demo/p/pg_clients");
   await p.getByRole("button", { name: /^Add / }).first().click();
   await p.locator("dialog[open]").getByText(/^New /).waitFor();
   await p.locator("dialog[open]").getByRole("button", { name: "Cancel" }).click();

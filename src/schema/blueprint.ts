@@ -184,6 +184,8 @@ export const Table = z.strictObject({
   label: Label,
   fields: z.array(Field),
   primaryField: FieldId.optional(),
+  /** What clicking one of its records does: open the record's own page (default) or a quick edit pop-up (small things like invoice lines). */
+  openIn: z.enum(["page", "modal"]).optional(),
 });
 export type Table = z.infer<typeof Table>;
 
@@ -203,6 +205,8 @@ export const BLOCK_TYPES = [
   "messages",
   "buttons",
   "notes",
+  /** On a record page: the record's own fields, with Edit. */
+  "details",
   /** A generated component (blueprint.components), rendered in the browser sandbox. */
   "custom",
 ] as const;
@@ -276,6 +280,12 @@ export const Page = z.strictObject({
   hidden: z.boolean(),
   layout: Layout,
   layoutOverrides: z.partialRecord(LayoutKey, z.strictObject({ blocks: z.array(Block) })).optional(),
+  /**
+   * A record page: the page every record of this table opens (/r/<table>/<record>). Not in the
+   * menu. Its blocks can use the filter value "@record" (e.g. jobs whose vehicle eq @record),
+   * a "details" block shows the record, and generated components get useProps().recordId.
+   */
+  recordOf: TableId.optional(),
 });
 export type Page = z.infer<typeof Page>;
 
@@ -610,8 +620,14 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
     });
   };
 
+  const recordPages = new Set<string>();
   bp.pages.forEach((p, pi) => {
     claim(p.id, ["pages", pi, "id"]);
+    if (p.recordOf) {
+      if (!tables.has(p.recordOf)) issue(["pages", pi, "recordOf"], `unknown table ${p.recordOf}`);
+      if (recordPages.has(p.recordOf)) issue(["pages", pi, "recordOf"], `${p.recordOf} already has a record page`);
+      recordPages.add(p.recordOf);
+    }
     checkBlocks(p.layout.blocks, ["pages", pi, "layout", "blocks"], true);
     for (const [key, override] of Object.entries(p.layoutOverrides ?? {})) {
       // Override blocks may reuse ids from the default layout (same block, different position).

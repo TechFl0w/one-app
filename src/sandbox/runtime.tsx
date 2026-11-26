@@ -161,6 +161,8 @@ function optionLabel(table: string, field: string, optionId: unknown) {
   return f?.options?.find((o) => o.id === optionId)?.label ?? (optionId == null ? "" : String(optionId));
 }
 const navigate = (pageId: string) => void call("navigate", pageId);
+/** Opens a record's own page (or its form, for tables that open in a pop-up). */
+const openRecord = (table: string, recordId: string) => void call("record.open", table, recordId);
 /** "1 tenant", "3 tenants" (or a given plural: plural(n, "person", "people")). */
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /** Add/edit screen as a modal drawn by One App over the whole page. Resolves the saved record, or null if cancelled. */
@@ -630,7 +632,7 @@ function FileInput({ table, field, value, onChange, label, accept, className }: 
 }
 
 const kit = {
-  useRecords, useRecord, useSchema, useProps, records, recordLabel, optionLabel, navigate, openRecordForm, toast, plural, formatMoney, formatDate,
+  useRecords, useRecord, useSchema, useProps, records, recordLabel, optionLabel, navigate, openRecord, openRecordForm, toast, plural, formatMoney, formatDate,
   uploadFile, useFileUrl, openFile,
   Card, Button, Badge, Collapsible, Tabs, Input, Textarea, Select, DateTimeInput, RecordForm, Spinner, Empty, Icon, FileImage, FileInput,
 };
