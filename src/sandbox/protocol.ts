@@ -39,4 +39,10 @@ export interface SandboxBridge {
   update(table: string, id: string, data: Record<string, unknown>, confirmed?: boolean): Promise<BridgeResult<SandboxRecord>>;
   /** Only called after the owner confirmed in One App's own dialog. */
   remove(table: string, id: string): Promise<BridgeResult<void>>;
+  /** A screen's compiled code and styles, for screens the page didn't render (Edit mode drafts). */
+  loadComponent?(componentId: string): Promise<BridgeResult<{ compiled: string; css?: string }>>;
 }
+
+/** Stands in for a screen's compiled code in the browser's copy of the setup; the real code is
+ * rendered with the page, or fetched on demand (SandboxBridge.loadComponent). */
+export const CODE_ON_DEMAND = "/* loaded on demand */";

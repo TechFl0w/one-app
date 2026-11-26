@@ -1,6 +1,5 @@
 import { withComputed } from "@/engine/computed";
 import { getBusinessContext, getDevice } from "@/server/context";
-import { forBrowser } from "@/server/clientBlueprint";
 import { supabaseStore } from "@/server/store";
 import { PageView } from "@/components/page/PageView";
 import { EditablePage } from "@/components/page/EditablePage";
@@ -19,7 +18,8 @@ export default async function BusinessPage({ params }: PageProps<"/b/[businessId
       device={device}
       userId={userId}
       env={{
-        blueprint: forBrowser(blueprint),
+        // Used on the server only (BlockView renders each screen with its own code).
+        blueprint,
         store: withComputed(supabaseStore(supabase, businessId), blueprint),
         formAction: (tableId, fields) => submitRecordForm.bind(null, businessId, tableId, fields),
         sandbox: {

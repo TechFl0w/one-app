@@ -5,6 +5,7 @@ import { createRecord, deleteRecord, getRecord, listRecords, updateRecord } from
 import { RecordQuery } from "@/schema/records";
 import type { SandboxRecord } from "@/sandbox/protocol";
 import { bridged } from "@/sandbox/result";
+import { getCurrentBlueprint } from "@/server/blueprints";
 
 /**
  * Data access for generated components (via the frame host). Runs as the signed-in user, so RLS
@@ -35,6 +36,16 @@ export async function sandboxUpdate(businessId: string, table: string, id: strin
     return view(await updateRecord(await createClient(), businessId, table, id, data, { confirmed: confirmed === true }));
   });
 }
+/** A screen's compiled code, for screens the page didn't render (Edit mode drafts). */
+export async function sandboxComponent(businessId: string, componentId: string) {
+  return bridged(async () => {
+    const bp = await getCurrentBlueprint(await createClient(), businessId);
+    const c = bp.components?.find((x) => x.id === componentId);
+    if (!c) throw Object.assign(new Error("Screen not found"), { code: "not_found" });
+    return { compiled: c.compiled, ...(c.css ? { css: c.css } : {}) };
+  });
+}
+
 /** The host only calls this after the owner pressed Delete in One App's own dialog. */
 export async function sandboxRemove(businessId: string, table: string, id: string) {
   return bridged(async () => {
