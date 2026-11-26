@@ -37,6 +37,8 @@ export function buildMcpServer(input: {
     if (out.kind === "error") return text(out.message, true);
     if (out.kind === "pending") {
       const { approvalUrl } = await requestApproval(out.action);
+      if (out.applied !== undefined)
+        return text({ status: "partly_applied", applied_now: effects.preview ? { result: out.applied, applied: effects.preview.summary } : out.applied, waiting_for_approval: out.action.items, approve_at: approvalUrl, note: "The safe part is done. Tell the owner to approve the rest in One App." });
       return text({ status: "sent_to_owner_for_approval", will_do: out.action.items, approve_at: approvalUrl, note: "Nothing has happened yet. Tell the owner to approve it in One App." });
     }
     // Blueprint changes are applied right away (they're undoable in One App's history).

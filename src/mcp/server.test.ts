@@ -67,6 +67,18 @@ describe("MCP server", () => {
     expect(body(ok).result.fix_these_next).toBeUndefined();
   });
 
+  it("applies the safe part of a mixed setup change now and sends only the rest for approval", async () => {
+    const { client, backend, approvals } = await connect();
+    const table = { id: "tbl_notes", label: "Notes", fields: [{ id: "fld_n_text", label: "Text", type: "text" }] };
+    const automation = { id: "aut_n", label: "Note added", enabled: true, trigger: { type: "record_created", table: "tbl_notes" }, conditions: [], actions: [{ type: "notify", message: "New note" }] };
+    const r = await client.callTool({ name: "change_setup", arguments: { summary: "Notes", ops: [{ op: "addTable", table }, { op: "addAutomation", automation }] } });
+    expect(body(r).status).toBe("partly_applied");
+    expect((await backend.blueprint()).tables.some((t) => t.id === "tbl_notes")).toBe(true);
+    expect((await backend.blueprint()).automations.some((a) => a.id === "aut_n")).toBe(false);
+    expect(approvals).toHaveLength(1);
+    expect((approvals[0].input as { ops: { op: string }[] }).ops.map((o) => o.op)).toEqual(["addAutomation"]);
+  });
+
   it("never runs risky tools — sends them for approval", async () => {
     const { client, backend, approvals } = await connect();
     const { records } = await backend.query({ table: "tbl_clients", limit: 1 });

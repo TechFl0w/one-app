@@ -366,6 +366,7 @@ async function runTool(
   if (out.kind === "error") return result(out.message, true);
   if (out.kind === "pending") {
     pending.push(out.action);
+    if (out.applied !== undefined) return result({ status: "partly_done", done_now: out.applied, waiting_for_owner_confirmation: out.action.items });
     return result({ status: "waiting_for_owner_confirmation", will_do: out.action.items });
   }
   return result(out.value);
