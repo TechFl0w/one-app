@@ -39,3 +39,27 @@ export async function currentDemo(): Promise<{ type: string; blueprint: Blueprin
   const t = type && type !== "salon" ? fromTemplate(type) : null;
   return t ? { type: type!, ...t } : { type: "salon", blueprint: demoBlueprint, records: demoRecords() };
 }
+
+const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+type InboxItem = { id: number; from_address: string; from_name: string; subject: string; text_body: string; received_at: string; read_at: string | null; forwarded_at: string | null };
+
+/** Sample Inbox messages that fit the demo's business. */
+export function demoInbox(type: string, businessName: string): { address: string; items: InboxItem[] } {
+  const address = `${businessName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}@in.buildingwaves.tech`;
+  if (type === "mechanic")
+    return {
+      address,
+      items: [
+        { id: 3, from_address: "sam@example.com", from_name: "Sam Okafor", subject: "Brakes — any update?", text_body: "Hi, just checking if the Corolla will be ready today? I could pick it up after 5. Thanks, Sam", received_at: hoursAgo(1), read_at: null, forwarded_at: hoursAgo(1) },
+        { id: 2, from_address: "dana@example.com", from_name: "Dana Ruiz", subject: "Re: your quote for the 60,000 km service", text_body: "Go ahead with the oil and the inspection, skip the cabin filter for now. Dana", received_at: hoursAgo(4), read_at: null, forwarded_at: hoursAgo(4) },
+        { id: 1, from_address: "orders@coastautoparts.example", from_name: "Coast Auto Parts", subject: "Order CA-20391 dispatched", text_body: "4 × Brake pads (front set) BP-1123 are on the way, expected tomorrow before 10am.", received_at: hoursAgo(20), read_at: hoursAgo(18), forwarded_at: null },
+      ],
+    };
+  return {
+    address: "polished-nail-bar@in.buildingwaves.tech",
+    items: [
+      { id: 2, from_address: "elena@example.com", from_name: "Elena Rossi", subject: "Can I move my appointment?", text_body: "Hi! Could I come at 4 instead of 3:30 tomorrow? Thanks, Elena", received_at: hoursAgo(2), read_at: null, forwarded_at: hoursAgo(2) },
+      { id: 1, from_address: "orders@supplier.example", from_name: "Nail Supply Co", subject: "Your order #4821 has shipped", text_body: "Your gel polish order is on its way. Tracking: 1Z999AA10123456784", received_at: hoursAgo(26), read_at: hoursAgo(20), forwarded_at: null },
+    ],
+  };
+}

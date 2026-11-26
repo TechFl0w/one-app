@@ -22,9 +22,12 @@ export default async function DemoLayout({ children }: LayoutProps<"/demo">) {
             <Inbox className="h-4 w-4" /> Inbox
             <span className="ml-auto rounded-full bg-accent px-2 text-xs font-semibold text-white">1</span>
           </Link>
-          <Link href="/book/demo" className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
-            <CalendarCheck className="h-4 w-4" /> Booking page
-          </Link>
+          {/* Only businesses that take online bookings have a public booking page. */}
+          {demo.blueprint.scheduling && (
+            <Link href="/book/demo" className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
+              <CalendarCheck className="h-4 w-4" /> Booking page
+            </Link>
+          )}
           <Link href="/demo/automations" className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
             <Zap className="h-4 w-4" /> Automations
           </Link>
