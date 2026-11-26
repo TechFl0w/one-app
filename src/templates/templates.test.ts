@@ -5,6 +5,8 @@ import { validateRecordInput, tableOrThrow } from "@/engine/records";
 import { loadBlockData } from "@/engine/blockData";
 import { memoryStore } from "@/engine/store";
 import { checkDataRules } from "@/engine/dataRules";
+import { menuCounts } from "@/engine/menuCounts";
+import { withComputed } from "@/engine/computed";
 
 const business = { name: "Test Co", timezone: "America/Los_Angeles" };
 
@@ -121,5 +123,35 @@ describe("appointments questions", () => {
     expect(hours({ opening: JSON.stringify({ sun: [["10:00", "14:00"]] }) }, opening)).toEqual({ sun: [["10:00", "14:00"]] });
     expect(hours({ opening: "{bad" }, opening)).toEqual(opening.default);
     expect(hours({ opening: JSON.stringify({ funday: [["1", "2"]] }) }, opening)).toEqual(opening.default);
+  });
+});
+
+describe("mechanic dashboard", () => {
+  const mech = TEMPLATES.find((t) => t.id === "mechanic")!;
+  const { blueprint, seed } = mech.build(business, {});
+  const ids = new Map<string, string>();
+  const rows = seed.map((s, i) => {
+    const id = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+    const row = { id, tableId: s.table, data: resolveSeed(s.data, ids), createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z" };
+    if (s.ref) ids.set(s.ref, id);
+    return row;
+  });
+  const store = withComputed(memoryStore(rows), blueprint);
+
+  it("shows live counts next to pages in the menu", async () => {
+    const counts = await menuCounts(blueprint, store);
+    expect(counts.pg_workshop?.value).toBeGreaterThan(0);
+    expect(counts.pg_jobs).toMatchObject({ label: "late", tone: "red" });
+    expect(Object.keys(counts)).not.toContain("pg_calendar");
+  });
+
+  it("the greeting's line counts cars, drop-offs, late jobs and money to collect", async () => {
+    const header = blueprint.pages.find((p) => p.id === "pg_today")!.layout.blocks.find((b) => b.type === "header")!;
+    const data = await loadBlockData(header, blueprint, store);
+    expect(data.kind).toBe("header");
+    if (data.kind !== "header") return;
+    expect(data.stats.map((s) => s.label.split("|").pop())).toEqual(["cars in the shop", "drop-offs today", "late", "to collect"]);
+    expect(data.stats.every((s) => typeof s.value === "number")).toBe(true);
+    expect(data.stats[3].field?.type).toBe("formula");
   });
 });

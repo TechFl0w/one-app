@@ -7,6 +7,8 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import type { SandboxBridge, SandboxRecord, SandboxSchema } from "@/sandbox/protocol";
 import { unwrap } from "@/sandbox/result";
 import { MediaUploader } from "@/components/media/Media";
+import { singular } from "@/lib/words";
+export { singular };
 
 type Table = SandboxSchema["tables"][number];
 type Field = Table["fields"][number];
@@ -243,12 +245,4 @@ function FileField({ id, name, required, initial, table, field, label, multiple,
   const [value, setValue] = useState<unknown>(initial);
   const media = multiple || /photo|picture|image|logo|cover|receipt|video|gallery|before|after/i.test(label);
   return <MediaUploader id={id} name={name} required={required} bridge={bridge} table={table} field={field} value={value} onChange={setValue} multiple={multiple} accept={media ? "image/*,video/*" : "*/*"} />;
-}
-
-/** "Clients" → "Client", "Parts used" → "Part used", "Statuses" → "Status", "Repairs" → "Repair". */
-export function singular(label: string): string {
-  const words = label.split(" ");
-  const w = words[0];
-  const one = /ies$/i.test(w) ? w.replace(/ies$/i, "y") : /(ss|us|is)$/i.test(w) ? w : /(ches|shes|xes|sses|uses)$/i.test(w) ? w.replace(/es$/i, "") : w.replace(/s$/i, "");
-  return [one, ...words.slice(1)].join(" ");
 }

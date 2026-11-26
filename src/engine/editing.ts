@@ -206,15 +206,19 @@ export function newPageOp(bp: Blueprint, label: string, template: PageTemplate, 
 export const ADDABLE_BLOCKS: { type: BlockType; label: string; needsTable: boolean }[] = [
   { type: "table", label: "Table", needsTable: true },
   { type: "list", label: "List", needsTable: true },
+  { type: "gallery", label: "Gallery", needsTable: true },
   { type: "board", label: "Board", needsTable: true },
   { type: "calendar", label: "Calendar", needsTable: true },
   { type: "number", label: "Number", needsTable: true },
   { type: "form", label: "Form", needsTable: true },
   { type: "notes", label: "Note", needsTable: false },
+  { type: "header", label: "Greeting", needsTable: false },
 ];
 
 const DEFAULT_SIZE: Partial<Record<BlockType, [number, number]>> = {
-  number: [4, 1],
+  number: [3, 2],
+  header: [12, 2],
+  gallery: [12, 5],
   form: [4, 5],
   notes: [4, 3],
   calendar: [12, 7],

@@ -5,6 +5,11 @@ import { FieldValue, formatMoney, valueText, type FormatCtx } from "./format";
 import { EditRecordButton, OpenRecord, RecordFile, RecordRowLink } from "./RecordOpener";
 import { recordPath } from "@/engine/recordPage";
 import { DragBoard } from "./DragBoard";
+import { NextStepButton } from "./NextStep";
+import { COLUMN_COLORS, TONE, toneOf } from "./tone";
+import { CoverImage } from "@/components/media/Media";
+import { PageIcon } from "@/components/shell/Icon";
+import Link from "next/link";
 
 type RecordsProps = {
   block: Block;
@@ -86,24 +91,66 @@ function shownFields(block: Block, table: Table, exclude: (string | undefined)[]
   return detailFields(table, exclude, max);
 }
 
+/** The photo a card or row leads with: options.cover (a file field), else the table's first file field. */
+export function coverField(block: Block, table: Table): Field | undefined {
+  if (block.options?.cover === false) return undefined;
+  const explicit = table.fields.find((f) => f.id === block.options?.cover && f.type === "file");
+  return explicit ?? table.fields.find((f) => f.type === "file");
+}
+
+/** Status-like values (badges) go on a row of chips; the rest form a "·" line under the title. */
+const isChip = (f: Field) => f.type === "status" || f.type === "choice" || (f.type === "rollup" && f.agg === "latest");
+
+function Facts({ fields, record, labels, ctx }: { fields: Field[]; record: RecordRow; labels: LinkLabels; ctx: FormatCtx }) {
+  const has = (f: Field) => record.data[f.id] != null && record.data[f.id] !== "";
+  const line = fields.filter((f) => !isChip(f) && has(f));
+  const chips = fields.filter((f) => isChip(f) && has(f));
+  return (
+    <>
+      {line.length > 0 && (
+        <p className="mt-0.5 truncate text-[13px] text-muted">
+          {line.map((f, i) => (
+            <span key={f.id}>
+              {i > 0 && <span className="mx-1.5 text-muted/50">·</span>}
+              <Labelled field={f} />
+              <FieldValue field={f} value={record.data[f.id]} labels={labels} ctx={ctx} />
+            </span>
+          ))}
+        </p>
+      )}
+      {chips.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {chips.map((f) => (
+            <FieldValue key={f.id} field={f} value={record.data[f.id]} labels={labels} ctx={ctx} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Rows with the record's photo (when the table has one), its title, a line of facts and its badges. */
 export function ListBlock({ block, table, records, total, labels, ctx }: RecordsProps) {
   if (!records.length) return <Empty>Nothing here right now.</Empty>;
-  const details = shownFields(block, table, [], 3);
+  const cover = coverField(block, table);
+  const details = shownFields(block, table, [cover?.id], 3);
+  const tone = block.options?.tone ? TONE[toneOf(block.options.tone)] : undefined;
   return (
-    <div className="h-full overflow-auto">
-      <ul className="divide-y divide-line/60">
+    <div className="h-full overflow-auto px-3 pb-3">
+      <ul className="space-y-2">
         {records.map((r) => (
-          <OpenRecord as="li" key={r.id} table={table.id} recordId={r.id} className="px-5 py-3 hover:bg-ground/60">
-            <p className="truncate text-sm font-semibold">{recordLabel(table, r, labels)}</p>
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-              {details.map((f) =>
-                r.data[f.id] == null || r.data[f.id] === "" ? null : (
-                  <span key={f.id} className="max-w-full truncate">
-                    <Labelled field={f} />
-                    <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
-                  </span>
-                ),
-              )}
+          <OpenRecord
+            as="li"
+            key={r.id}
+            table={table.id}
+            recordId={r.id}
+            className="flex items-center gap-3 rounded-2xl p-2.5 transition-colors hover:bg-ground"
+            style={tone ? { background: tone.tint } : { background: "color-mix(in srgb, var(--ground) 55%, transparent)" }}
+          >
+            {cover && <CoverImage value={r.data[cover.id]} label={recordLabel(table, r, labels)} className="h-16 w-24 shrink-0 rounded-xl sm:h-[76px] sm:w-28" />}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[15px] font-bold">{recordLabel(table, r, labels)}</p>
+              <Facts fields={details} record={r} labels={labels} ctx={ctx} />
             </div>
           </OpenRecord>
         ))}
@@ -113,63 +160,123 @@ export function ListBlock({ block, table, records, total, labels, ctx }: Records
   );
 }
 
+/** Cards in a grid, each led by its photo: products, cars, rooms, styles. */
+export function GalleryBlock({ block, table, records, total, labels, ctx }: RecordsProps) {
+  if (!records.length) return <Empty>No {table.label.toLowerCase()} yet.</Empty>;
+  const cover = coverField(block, table);
+  const details = shownFields(block, table, [cover?.id], 3);
+  return (
+    <div className="h-full overflow-auto px-5 pb-5">
+      <ul className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
+        {records.map((r) => (
+          <OpenRecord as="li" key={r.id} table={table.id} recordId={r.id} className="overflow-hidden rounded-2xl border border-line bg-card shadow-soft transition hover:-translate-y-0.5 hover:border-accent/40">
+            {cover && <CoverImage value={r.data[cover.id]} label={recordLabel(table, r, labels)} className="aspect-[4/3] w-full" />}
+            <div className="p-3.5">
+              <p className="truncate font-bold">{recordLabel(table, r, labels)}</p>
+              <Facts fields={details} record={r} labels={labels} ctx={ctx} />
+            </div>
+          </OpenRecord>
+        ))}
+      </ul>
+      <More shown={records.length} total={total} />
+    </div>
+  );
+}
+
+/**
+ * Board columns with a filled, coloured header; cards lead with the record's photo and end with a
+ * one-tap "→ next stage" button. Cards can always be dragged between columns too.
+ */
 export function BoardBlock({ block, table, records, labels, ctx, groups = [] }: RecordsProps & { groups?: Group[] }) {
   const gf = groupField(table, block)!;
-  const details = shownFields(block, table, [gf.id], 2);
-  const byGroup = new Map<string | null, RecordRow[]>();
-  for (const r of records) {
-    const v = r.data[gf.id];
-    const key = typeof v === "string" && groups.some((g) => g.id === v) ? v : null;
-    byGroup.set(key, [...(byGroup.get(key) ?? []), r]);
-  }
-  const columns: Group[] = [...groups, ...(byGroup.has(null) ? [{ id: null, label: `No ${gf.label.toLowerCase()}` }] : [])];
+  const shownCover = coverField(block, table);
+  const details = shownFields(block, table, [gf.id, shownCover?.id], 3);
+  const derived = "derive" in gf && !!gf.derive;
+  const colored = groups.map((g, i) => ({ ...g, color: g.color ?? COLUMN_COLORS[i % COLUMN_COLORS.length] }));
+  const valid = (v: unknown) => typeof v === "string" && colored.some((g) => g.id === v);
+  const hasNone = records.some((r) => !valid(r.data[gf.id]));
+  const columns: Group[] = [...colored, ...(hasNone ? [{ id: null, label: `No ${gf.label.toLowerCase()}`, color: "#8A8273" }] : [])];
+  // A pipeline (options.nextButton: stages run left to right) gets a "→ next stage" button on each card.
+  const steps = gf.type === "status" && !derived && block.options?.nextButton === true ? colored.map((g) => g.id!) : undefined;
   const cards = records.map((r) => {
     const v = r.data[gf.id];
+    const title = recordLabel(table, r, labels);
     return {
       id: r.id,
-      group: typeof v === "string" && groups.some((g) => g.id === v) ? v : null,
+      group: valid(v) ? (v as string) : null,
       node: (
-        <OpenRecord as="article" table={table.id} recordId={r.id} className="rounded-xl border border-line bg-card p-3 shadow-soft hover:border-accent/40">
-          <p className="truncate text-sm font-semibold">{recordLabel(table, r, labels)}</p>
-          <div className="mt-1.5 space-y-1 text-xs text-muted">
-            {details.map((f) =>
-              r.data[f.id] == null ? null : (
-                <div key={f.id} className="truncate">
-                  <Labelled field={f} />
-                  <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
-                </div>
-              ),
-            )}
+        <OpenRecord as="article" table={table.id} recordId={r.id} className="overflow-hidden rounded-2xl border border-line bg-card shadow-soft hover:border-ink/20" style={{ borderTop: "3px solid var(--column, var(--line))" }}>
+          {shownCover && <CoverImage value={r.data[shownCover.id]} label={title} className="h-24 w-full" />}
+          <div className="p-3">
+            <p className="text-[15px] font-bold leading-snug">{title}</p>
+            <Facts fields={details} record={r} labels={labels} ctx={ctx} />
+            {steps && <NextStepButton recordId={r.id} />}
           </div>
         </OpenRecord>
       ),
     };
   });
   // Drag cards between columns to change their stage; a column field that follows rules can't be set by hand.
-  const locked = "derive" in gf && gf.derive ? `${gf.label} follows the dates, so cards move by themselves.` : undefined;
-  return <DragBoard table={table.id} field={gf.id} columns={columns} cards={cards} locked={locked} />;
+  const locked = derived ? `${gf.label} follows the dates, so cards move by themselves.` : undefined;
+  return <DragBoard table={table.id} field={gf.id} columns={columns} cards={cards} locked={locked} steps={steps} />;
 }
 
+/**
+ * A KPI tile: icon, label, big number, a line underneath. `tone` colours it; `alert` makes it
+ * stand out only while the number isn't zero (late jobs, low stock). `page` makes it a link.
+ */
 export function NumberBlock({
   value,
   field,
   agg,
   ctx,
+  title,
+  options = {},
+  href,
 }: {
   value: number | null;
   field?: Field;
   agg: string;
   ctx: FormatCtx;
+  title?: string;
+  options?: Record<string, unknown>;
+  href?: string;
 }) {
   let text: string;
   if (value === null) text = agg === "count" ? "0" : "—";
   else if (agg !== "count" && field?.type === "money") text = formatMoney(value, field.currency ?? ctx.currency, ctx.locale);
   else if (agg !== "count" && field) text = valueText(field, Math.round(value * 100) / 100, {}, ctx);
   else text = new Intl.NumberFormat(ctx.locale ?? "en-CA").format(value);
-  return (
-    <div className="flex h-full items-end px-5 pb-4">
-      <p className="text-3xl font-bold tabular-nums tracking-tight">{text}</p>
-    </div>
+  const tone = TONE[toneOf(options.tone)];
+  const icon = typeof options.icon === "string" ? options.icon : agg !== "count" && field?.type === "money" ? "money" : undefined;
+  const raised = options.alert === true && !!value;
+  const sub = typeof options.sub === "string" ? options.sub : typeof options.subtitle === "string" ? options.subtitle : "";
+  const body = (
+    <>
+      <div className="flex items-center gap-2.5">
+        {icon && (
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ background: raised ? "var(--card)" : tone.tint, color: tone.color }}>
+            <PageIcon name={icon} className="h-[18px] w-[18px]" />
+          </span>
+        )}
+        {title && <span className="truncate text-xs font-bold uppercase tracking-wider text-muted">{title}</span>}
+      </div>
+      <p className="mt-3 text-4xl font-extrabold leading-none tracking-tight tabular-nums" style={{ color: raised || options.alert !== true ? tone.color : undefined }}>
+        {text}
+      </p>
+      {sub && <p className="mt-2 truncate text-[13px] text-muted">{sub}</p>}
+    </>
+  );
+  const cls = "card flex h-full min-h-0 flex-col overflow-hidden px-5 pb-4 pt-4";
+  const style = { borderTop: `4px solid ${tone.color}`, ...(raised ? { background: tone.tint, borderColor: tone.color } : {}) };
+  return href ? (
+    <Link href={href} className={`${cls} transition hover:-translate-y-0.5 hover:shadow-soft`} style={style}>
+      {body}
+    </Link>
+  ) : (
+    <section className={cls} style={style}>
+      {body}
+    </section>
   );
 }
 

@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { createContext, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSandbox } from "@/components/sandbox/SandboxProvider";
+import { soft } from "./tone";
+
+/**
+ * For a card's "→ next stage" button: the stage after the column the card is in now, and a move
+ * that works like a drag (instant, undone if saving fails).
+ */
+export const BoardMove = createContext<{ next: (id: string) => BoardColumn | undefined; move: (id: string, to: string | null) => Promise<void> } | null>(null);
 
 export interface BoardColumn {
   id: string | null;
@@ -21,7 +28,10 @@ export function DragBoard({
   columns,
   cards,
   locked,
+  steps,
 }: {
+  /** Column ids in stage order: cards in them get a "→ next" button (NextStepButton). */
+  steps?: string[];
   table: string;
   field: string;
   columns: BoardColumn[];
@@ -106,6 +116,7 @@ export function DragBoard({
   const dragged = drag?.moved ? cards.find((c) => c.id === drag.id) : undefined;
 
   return (
+    <BoardMove.Provider value={{ move, next: (id) => { const i = steps?.indexOf(where.get(id) ?? "") ?? -1; return i >= 0 && steps && i < steps.length - 1 ? columns.find((c) => c.id === steps[i + 1]) : undefined; } }}>
     <div className="relative flex h-full flex-col">
       {locked && <p className="px-5 pb-2 text-xs text-muted">{locked}</p>}
       <div ref={scroller} className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-5 pb-5" onClickCapture={(e) => suppressClick.current && (e.stopPropagation(), e.preventDefault())}>
@@ -116,14 +127,15 @@ export function DragBoard({
             <div
               key={g.id ?? "_none"}
               data-board-column={g.id ?? "_none"}
-              className={`flex w-64 shrink-0 flex-col rounded-2xl p-2 transition-colors ${over ? "bg-accent-tint ring-2 ring-accent/40" : "bg-ground"}`}
+              className={`flex w-[17rem] shrink-0 flex-col rounded-[20px] p-2 transition-shadow ${over ? "ring-2 ring-offset-2" : ""}`}
+              style={{ background: soft(g.color ?? "", "16"), ["--column" as string]: g.color ?? "var(--line)", ...(over ? { ["--tw-ring-color" as string]: g.color ?? "var(--accent)" } : {}) }}
             >
-              <div className="flex items-center gap-2 px-2 py-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ background: g.color ?? "var(--muted)" }} />
-                <span className="truncate text-sm font-semibold">{g.label}</span>
-                <span className="ml-auto text-xs text-muted">{items.length}</span>
+              <div className="mb-1 flex items-center gap-2 rounded-2xl px-3 py-2.5 text-white" style={{ background: g.color ?? "var(--muted)" }}>
+                <span className="truncate text-sm font-bold">{g.label}</span>
+                <span className="ml-auto rounded-full bg-white/25 px-2 text-xs font-bold">{items.length}</span>
               </div>
-              <div className="min-h-12 flex-1 space-y-2 overflow-y-auto p-0.5">
+              <div className="min-h-16 flex-1 space-y-2.5 overflow-y-auto p-0.5">
+                {!items.length && <p className="m-1 rounded-2xl border-[1.5px] border-dashed border-ink/15 px-3 py-4 text-center text-xs text-muted">{canMove ? "Drop here" : "Nothing here"}</p>}
                 {items.map((c) => (
                   <div
                     key={c.id}
@@ -148,5 +160,6 @@ export function DragBoard({
       )}
       {error && <p role="status" className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-sm text-white shadow-soft">{error}</p>}
     </div>
+    </BoardMove.Provider>
   );
 }

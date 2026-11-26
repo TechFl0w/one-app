@@ -226,6 +226,7 @@ describe("undo", () => {
     ["removePage", [{ op: "removePage", pageId: "pg_today" }]],
     ["setPageHidden", [{ op: "setPageHidden", pageId: "pg_today", hidden: true }]],
     ["setPageIcon", [{ op: "setPageIcon", pageId: "pg_today", icon: null }, { op: "setPageIcon", pageId: "pg_clients", icon: "star" }]],
+    ["setPageBadge", [{ op: "setPageBadge", pageId: "pg_today", badge: { source: { table: "tbl_clients" }, label: "new", tone: "blue" } }]],
     ["reorderPages", [{ op: "reorderPages", pageIds: ["pg_clients", "pg_today"] }]],
     ["addBlock", [{ op: "addBlock", pageId: "pg_today", block, index: 1 }]],
     ["removeBlock", [{ op: "removeBlock", pageId: "pg_today", blockId: "blk_rev" }]],

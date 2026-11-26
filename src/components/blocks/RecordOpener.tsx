@@ -71,9 +71,15 @@ export function RecordRowLink({ table, recordId, children }: { table: string; re
 }
 
 /** "Add" for a block's table (on a record page, prefilled with the link to that record). */
-export function AddRecordButton({ table, label, defaults }: { table: string; label: string; defaults?: Record<string, unknown> }) {
+export function AddRecordButton({ table, label, defaults, big }: { table: string; label: string; defaults?: Record<string, unknown>; big?: boolean }) {
   const open = useContext(Ctx);
   if (!open) return null;
+  if (big)
+    return (
+      <button type="button" className="btn-primary" onClick={() => open.form({ table })}>
+        <Plus className="h-4 w-4" /> New {label}
+      </button>
+    );
   return (
     <button type="button" className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-accent hover:bg-accent-tint" onClick={() => open.form({ table, ...(defaults && Object.keys(defaults).length ? { defaults } : {}) })} aria-label={`Add ${label}`}>
       <Plus className="h-3.5 w-3.5" /> Add

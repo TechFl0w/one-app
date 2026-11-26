@@ -1,4 +1,4 @@
-import { isComputedField, type Block, type Blueprint, type Field, type Table } from "@/schema/blueprint";
+import { DataSource, isComputedField, type Block, type Blueprint, type Field, type Table } from "@/schema/blueprint";
 import type { RecordFilter, RecordQuery, RecordRow } from "@/schema/records";
 import { loadAllVia, queryWithComputed } from "./computed";
 import { RECORD_TOKEN } from "./recordPage";
@@ -15,6 +15,7 @@ export type BlockData =
   | { kind: "number"; table: Table; value: number | null; field?: Field }
   | { kind: "form"; table: Table; fields: Field[]; choices: Record<string, { id: string; label: string }[]> }
   | { kind: "details"; table: Table; record: RecordRow; labels: LinkLabels }
+  | { kind: "header"; stats: { label: string; value: number | null; field?: Field; tone?: string }[] }
   | { kind: "static" }
   | { kind: "unsupported" }
   | { kind: "error"; message: string };
@@ -26,7 +27,7 @@ export interface Group {
   color?: string;
 }
 
-export const DEFAULT_LIMITS = { table: 50, list: 20, board: 200, calendar: 500 } as const;
+export const DEFAULT_LIMITS = { table: 50, list: 20, gallery: 60, board: 200, calendar: 500 } as const;
 
 /** Display label of a record: its primary field, else the first text field, else a short id. */
 export function recordLabel(table: Table, record: RecordRow, labels: LinkLabels = {}): string {
@@ -109,6 +110,38 @@ function queryBlock(blueprint: Blueprint, store: RecordStore, query: RecordQuery
 
 const computedIn = (table: Table, ids: (string | undefined)[]) => ids.some((id) => { const f = table.fields.find((x) => x.id === id); return !!f && isComputedField(f); });
 
+/** A count / sum / … over a data source; computed fields are counted after computing. */
+export async function aggregateOf(blueprint: Blueprint, store: RecordStore, src: DataSource, ctx: QueryContext): Promise<number | null> {
+  const table = blueprint.tables.find((t) => t.id === src.table);
+  if (!table) return null;
+  if (computedIn(table, [src.field, ...(src.filters ?? []).map((f) => f.field)])) {
+    const { records } = await queryBlock(blueprint, store, { table: table.id, filters: src.filters ?? [], limit: 5000 }, ctx);
+    const agg = src.agg ?? "count";
+    const nums = records.map((r) => Number(r.data[src.field ?? ""])).filter((n) => Number.isFinite(n));
+    return agg === "count" ? records.length : !nums.length ? null : agg === "sum" ? nums.reduce((a, b) => a + b, 0) : agg === "avg" ? nums.reduce((a, b) => a + b, 0) / nums.length : agg === "min" ? Math.min(...nums) : Math.max(...nums);
+  }
+  return store.aggregate(buildAggregate(blueprint, src, ctx));
+}
+
+/** A header's live line: options.stats = [{ table, filters?, agg?, field?, label, tone? }]. */
+async function headerStats(blueprint: Blueprint, store: RecordStore, stats: unknown, ctx: QueryContext) {
+  if (!Array.isArray(stats)) return [];
+  const out: { label: string; value: number | null; field?: Field; tone?: string }[] = [];
+  for (const raw of stats.slice(0, 6)) {
+    const s = raw as Record<string, unknown>;
+    const src = DataSource.safeParse({ table: s.table, filters: s.filters, agg: s.agg, field: s.field });
+    if (!src.success || typeof s.label !== "string") continue;
+    try {
+      const value = await aggregateOf(blueprint, store, src.data, ctx);
+      const table = blueprint.tables.find((t) => t.id === src.data.table);
+      out.push({ label: s.label.slice(0, 60), value, field: table?.fields.find((f) => f.id === src.data.field), tone: typeof s.tone === "string" ? s.tone : undefined });
+    } catch (e) {
+      if (!(e instanceof RecordError)) throw e;
+    }
+  }
+  return out;
+}
+
 export async function loadBlockData(
   original: Block,
   blueprint: Blueprint,
@@ -116,7 +149,8 @@ export async function loadBlockData(
   ctx: QueryContext & { recordId?: string } = {},
 ): Promise<BlockData> {
   if (original.type === "notes") return { kind: "static" };
-  if (!["table", "list", "board", "calendar", "number", "form", "details"].includes(original.type)) return { kind: "unsupported" };
+  if (original.type === "header") return { kind: "header", stats: await headerStats(blueprint, store, original.options?.stats, ctx) };
+  if (!["table", "list", "gallery", "board", "calendar", "number", "form", "details"].includes(original.type)) return { kind: "unsupported" };
   if (!original.source) return { kind: "error", message: "This block has no data source yet." };
   const table = blueprint.tables.find((t) => t.id === original.source!.table);
   if (!table) return { kind: "error", message: "The table behind this block no longer exists." };
@@ -128,16 +162,7 @@ export async function loadBlockData(
   try {
     switch (block.type) {
       case "number": {
-        const src = block.source;
-        if (computedIn(table, [src.field, ...(src.filters ?? []).map((f) => f.field)])) {
-          // Counted after computing (the database doesn't store computed values).
-          const { records } = await queryBlock(blueprint, store, { table: table.id, filters: src.filters ?? [], limit: 5000 }, ctx);
-          const agg = src.agg ?? "count";
-          const nums = records.map((r) => Number(r.data[src.field ?? ""])).filter((n) => Number.isFinite(n));
-          const value = agg === "count" ? records.length : !nums.length ? null : agg === "sum" ? nums.reduce((a, b) => a + b, 0) : agg === "avg" ? nums.reduce((a, b) => a + b, 0) / nums.length : agg === "min" ? Math.min(...nums) : Math.max(...nums);
-          return { kind: "number", table, value, field: table.fields.find((f) => f.id === src.field) };
-        }
-        const value = await store.aggregate(buildAggregate(blueprint, block.source, ctx));
+        const value = await aggregateOf(blueprint, store, block.source, ctx);
         return { kind: "number", table, value, field: table.fields.find((f) => f.id === block.source!.field) };
       }
 
@@ -174,6 +199,7 @@ export async function loadBlockData(
       }
 
       case "table":
+      case "gallery":
       case "list": {
         const limit = Math.min(opt(block.options?.limit, isNum) ?? DEFAULT_LIMITS[block.type], 500);
         const { records, total } = await queryBlock(blueprint, store, { table: table.id, filters: block.source.filters ?? [], sort: block.source.sort ?? [], limit }, ctx);

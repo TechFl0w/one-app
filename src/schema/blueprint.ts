@@ -209,6 +209,8 @@ export const BLOCK_TYPES = [
   "notes",
   /** On a record page: the record's own fields, with Edit. */
   "details",
+  /** The greeting at the top of a page: hello, today's date, a line of live counts, quick add buttons. */
+  "header",
   /** A generated component (blueprint.components), rendered in the browser sandbox. */
   "custom",
 ] as const;
@@ -288,8 +290,22 @@ export const Page = z.strictObject({
    * a "details" block shows the record, and generated components get useProps().recordId.
    */
   recordOf: TableId.optional(),
+  /** A live count next to the page in the menu ("4", "1 late"): records matching source.filters. */
+  badge: z
+    .strictObject({
+      source: DataSource,
+      /** Shown after the number ("late", "low"). */
+      label: z.string().max(20).optional(),
+      tone: z.lazy(() => Tone).optional(),
+    })
+    .optional(),
 });
 export type Page = z.infer<typeof Page>;
+
+/** Colour families blocks and badges use (KPI tiles, list headers, menu counts). */
+export const TONES = ["accent", "red", "amber", "blue", "purple", "neutral"] as const;
+export const Tone = z.enum(TONES);
+export type Tone = z.infer<typeof Tone>;
 
 // ---------- automations ----------
 
@@ -630,6 +646,7 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
       if (recordPages.has(p.recordOf)) issue(["pages", pi, "recordOf"], `${p.recordOf} already has a record page`);
       recordPages.add(p.recordOf);
     }
+    if (p.badge) checkSource(p.badge.source, ["pages", pi, "badge", "source"]);
     checkBlocks(p.layout.blocks, ["pages", pi, "layout", "blocks"], true);
     for (const [key, override] of Object.entries(p.layoutOverrides ?? {})) {
       // Override blocks may reuse ids from the default layout (same block, different position).

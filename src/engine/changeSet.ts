@@ -314,6 +314,13 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
       else page.icon = op.icon;
       return [{ op: "setPageIcon", pageId: op.pageId, icon: old }];
     }
+    case "setPageBadge": {
+      const page = pageOf(bp, op.pageId);
+      const old = page.badge ? structuredClone(page.badge) : null;
+      if (op.badge === null) delete page.badge;
+      else page.badge = op.badge;
+      return [{ op: "setPageBadge", pageId: op.pageId, badge: old }];
+    }
     case "reorderPages": {
       const current = menuOrderIds(bp);
       const wanted = new Set(op.pageIds);
@@ -505,6 +512,8 @@ function describe(bp: Blueprint, op: Operation): string {
       return `${op.hidden ? "Hide" : "Show"} page ${page(op.pageId)}`;
     case "setPageIcon":
       return `Change icon of page ${page(op.pageId)}`;
+    case "setPageBadge":
+      return `${op.badge ? "Show a count" : "Remove the count"} next to page ${page(op.pageId)}`;
     case "reorderPages":
       return "Reorder menu";
     case "addBlock":

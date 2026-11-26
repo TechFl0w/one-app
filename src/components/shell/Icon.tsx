@@ -1,4 +1,9 @@
 import {
+  AlertTriangle,
+  Banknote,
+  Camera,
+  CheckCircle2,
+  Clock,
   Box,
   Calendar,
   CalendarClock,
@@ -47,6 +52,11 @@ export const PAGE_ICONS: Record<string, LucideIcon> = {
   clipboard: ClipboardList,
   truck: Truck,
   team: UserCog,
+  alert: AlertTriangle,
+  check: CheckCircle2,
+  clock: Clock,
+  money: Banknote,
+  camera: Camera,
 };
 
 export function PageIcon({ name, className }: { name?: string; className?: string }) {

@@ -8,6 +8,7 @@ import { RecordOpenerProvider } from "@/components/blocks/RecordOpener";
 import { ThemeStyle } from "@/theme/ThemeStyle";
 import { ShellFrame } from "./ShellFrame";
 import type { SandboxBridge } from "@/sandbox/protocol";
+import type { MenuCount } from "@/engine/menuCounts";
 
 export function AppShell({
   blueprint,
@@ -18,8 +19,11 @@ export function AppShell({
   banner,
   transcript,
   sandbox,
+  counts,
   children,
 }: {
+  /** Live numbers next to pages in the menu. */
+  counts?: Record<string, MenuCount>;
   /** Data access for generated components rendered in the browser. */
   sandbox: SandboxBridge;
   /** Owner chat so far (server mode). */
@@ -38,7 +42,7 @@ export function AppShell({
     <ThemeStyle />
     <RecordOpenerProvider>
     <ShellFrame>
-      <Sidebar basePath={basePath} businesses={businesses} footer={footer} />
+      <Sidebar basePath={basePath} businesses={businesses} footer={footer} counts={counts} />
       <div className="flex min-w-0 flex-1 flex-col">
         {banner}
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>

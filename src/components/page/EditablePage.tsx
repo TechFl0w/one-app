@@ -19,6 +19,8 @@ import { BlockSettings } from "@/components/edit/BlockSettings";
 
 /** Height of one grid row in px; must match the gap below for drag math. */
 export const ROW_HEIGHT = 92;
+/** Blocks as tall as their content outside Edit mode (the rest keep their rows). */
+const FITS_CONTENT = new Set(["custom", "header", "number"]);
 const GAP = 16;
 
 type Drag = { id: string; mode: "move" | "resize"; startX: number; startY: number; block: Block; preview: Block };
@@ -131,7 +133,8 @@ export function EditablePage({
   const rows = Math.max(gridRows(blocks), editing ? gridRows(blocks) + 2 : 0);
   // With generated components on the page (and not editing), rows fit their content: a custom
   // block is as tall as it renders (e.g. a collapsed section), standard blocks keep their size.
-  const flow = !editing && blocks.some((b) => b.type === "custom");
+  // Greetings and number tiles also take the height of what they show.
+  const flow = !editing && blocks.some((b) => FITS_CONTENT.has(b.type));
   const fixedHeight = (h: number) => h * ROW_HEIGHT + (h - 1) * GAP;
 
   return (
@@ -238,7 +241,7 @@ export function EditablePage({
           {blocks.map((b) => (
             <div
               key={b.id}
-              className={`relative min-h-0 min-w-0 ${flow && b.type === "custom" ? "self-start" : "max-md:min-h-[calc(var(--h)*60px)]"} ${flow && b.type !== "custom" ? "md:h-[var(--fixed)]" : ""} ${drag?.id === b.id ? "z-10 opacity-90" : ""}`}
+              className={`relative min-h-0 min-w-0 ${flow && b.type === "custom" ? "self-start" : "max-md:min-h-[calc(var(--h)*60px)]"} ${flow && !FITS_CONTENT.has(b.type) ? "md:h-[var(--fixed)]" : ""} ${drag?.id === b.id ? "z-10 opacity-90" : ""}`}
               style={{ gridColumn: `${b.x + 1} / span ${b.w}`, gridRow: `${b.y + 1} / span ${b.h}`, "--h": b.h, "--fixed": `${fixedHeight(b.h)}px` } as React.CSSProperties}
               data-block={b.id}
             >

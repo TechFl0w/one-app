@@ -2,6 +2,9 @@ import Link from "next/link";
 import { CalendarCheck, Inbox, Zap } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { currentDemo } from "@/demo/current";
+import { menuCounts } from "@/engine/menuCounts";
+import { withComputed } from "@/engine/computed";
+import { memoryStore } from "@/engine/store";
 import { demoSandboxCreate, demoSandboxGet, demoSandboxList, demoSandboxRemove, demoSandboxUpdate } from "./sandbox-actions";
 
 /** Sample salon running on in-memory data — no account or Supabase needed. */
@@ -10,10 +13,12 @@ export const maxDuration = 300;
 
 export default async function DemoLayout({ children }: LayoutProps<"/demo">) {
   const demo = await currentDemo();
+  const counts = await menuCounts(demo.blueprint, withComputed(memoryStore(demo.records), demo.blueprint));
   return (
     <AppShell
       blueprint={demo.blueprint}
       mode={{ kind: "local" }}
+      counts={counts}
       basePath="/demo"
       sandbox={{ list: demoSandboxList, get: demoSandboxGet, create: demoSandboxCreate, update: demoSandboxUpdate, remove: demoSandboxRemove }}
       footer={

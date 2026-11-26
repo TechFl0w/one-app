@@ -3,6 +3,9 @@ import { History, Inbox, Settings, ShieldCheck, Zap } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { forBrowser } from "@/server/clientBlueprint";
 import { getBusinessContext } from "@/server/context";
+import { supabaseStore } from "@/server/store";
+import { withComputed } from "@/engine/computed";
+import { menuCounts } from "@/engine/menuCounts";
 import { loadConversation } from "@/server/ownerChat";
 import { sandboxComponent, sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "./sandbox-actions";
 
@@ -29,6 +32,8 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
     .eq("business_id", businessId)
     .eq("origin", "mcp")
     .eq("status", "pending");
+  // A broken count never takes the app down.
+  const counts = await menuCounts(blueprint, withComputed(supabaseStore(supabase, businessId), blueprint)).catch(() => ({}));
   const { transcript } = userId ? await loadConversation(supabase, businessId, userId).catch(() => ({ transcript: [] })) : { transcript: [] };
   return (
     <AppShell
@@ -44,6 +49,7 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
       }}
       blueprint={forBrowser(blueprint)}
       mode={{ kind: "server", businessId }}
+      counts={counts}
       basePath={`/b/${businessId}`}
       businesses={businesses}
       transcript={transcript}

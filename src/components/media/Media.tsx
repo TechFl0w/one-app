@@ -358,3 +358,31 @@ export function FileCell({ value, size = "h-10 w-10" }: { value: unknown; size?:
     </span>
   );
 }
+
+/**
+ * A record's cover picture on cards and list rows (its first photo, or a video's still). Not a
+ * button: tapping the card opens the record. No photo yet: a soft placeholder.
+ */
+export function CoverImage({ value, className = "h-28 w-full", label }: { value: unknown; className?: string; label?: string }) {
+  const bridge = useSandbox()?.bridge;
+  const file = asFiles(value).find((f) => isImageFile(f) || isVideoFile(f));
+  const video = !!file && isVideoFile(file);
+  const url = useFileUrl(bridge, file ? (video ? file.poster : file.path) : undefined);
+  return (
+    <div className={`relative overflow-hidden bg-gradient-to-br from-[#ECE7DD] to-[#DDD5C7] text-[#9A9283] ${className}`} role="img" aria-label={label ? `Photo of ${label}` : "Photo"}>
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- short-lived signed link
+        <img src={url} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center">
+          <ImagePlus className="h-6 w-6 opacity-60" aria-hidden />
+        </span>
+      )}
+      {video && (
+        <span className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-ink/70 text-white">
+          <Play className="ml-0.5 h-3.5 w-3.5" fill="currentColor" />
+        </span>
+      )}
+    </div>
+  );
+}

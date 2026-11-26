@@ -52,6 +52,8 @@ export const Operation = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("removePage"), pageId: PageId }),
   z.strictObject({ op: z.literal("setPageHidden"), pageId: PageId, hidden: z.boolean() }),
   z.strictObject({ op: z.literal("setPageIcon"), pageId: PageId, icon: z.string().max(40).nullable() }),
+  /** The live count next to the page in the menu; null removes it. */
+  z.strictObject({ op: z.literal("setPageBadge"), pageId: PageId, badge: Page.shape.badge.unwrap().nullable() }),
   /** Full menu order: every page id, in the new order. */
   z.strictObject({ op: z.literal("reorderPages"), pageIds: z.array(PageId).min(1) }),
 
@@ -124,6 +126,7 @@ export const OP_RISK: Record<OpName, "safe" | "risky"> = {
   removePage: "safe",
   setPageHidden: "safe",
   setPageIcon: "safe",
+  setPageBadge: "safe",
   reorderPages: "safe",
   addBlock: "safe",
   removeBlock: "safe",
