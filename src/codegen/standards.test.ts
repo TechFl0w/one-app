@@ -44,5 +44,6 @@ describe("app rules checked in code", () => {
     expect(checkStandards(list, withPhotos).warnings.join("\n")).toMatch(/never shows it: show it with FileImage/);
     expect(checkStandards(`${list} <FileImage file={r.data.fld_ph_file} />`, withPhotos).warnings.join("\n")).not.toMatch(/FileImage/);
     expect(checkStandards('<input type="file" />', withPhotos).errors[0]).toMatch(/uploads nothing/);
+    expect(checkStandards('<img src={r.data.fld_ph_file.path} />', withPhotos).errors[0]).toMatch(/FileImage/);
   });
 });

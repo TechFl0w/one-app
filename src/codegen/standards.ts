@@ -55,6 +55,9 @@ export function checkStandards(source: string, bp: Blueprint, opts: { inlineForm
         warnings.push(`${t!.label} have ${f.label} (${f.id}) but this screen never shows it: show it with FileImage (thumbnails in lists and cards, bigger in details; other files open on click).`);
     }
   }
+  const fileIds = bp.tables.flatMap((t) => t.fields.filter((f) => f.type === "file").map((f) => f.id)).filter((id) => source.includes(id));
+  if (fileIds.length && /<img\b|href=\{/.test(source) && !/FileImage|useFileUrl|openFile/.test(source))
+    errors.push("Files have no web address a screen can use: show photos with FileImage (or useFileUrl) and open other files with openFile — not <img src> or links built from the file value.");
   if (/<input[^>]*type=["']file["']/.test(source) && !/uploadFile\(/.test(source))
     errors.push("A file input on its own uploads nothing: use FileInput (or uploadFile) so the file is stored, or let openRecordForm handle it.");
 
