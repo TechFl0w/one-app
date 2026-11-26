@@ -83,6 +83,16 @@ declare module "@one/kit" {
   export function formatMoney(amount: number | null | undefined): string;
   export function formatDate(iso: string | null | undefined, style?: "date" | "datetime" | "time" | "relative"): string;
 
+  // ---- Files (file fields: photos, leases, receipts…) ----
+  /** What a file field holds. Never build or guess one; it comes from an upload. */
+  export interface FileValue { path: string; name: string; size?: number; mime?: string }
+  /** Uploads a file the owner picked (from an <input type="file">) for a file field; save the result in that field. Forms (openRecordForm, RecordForm) already do this for you. */
+  export function uploadFile(table: string, field: string, file: File): Promise<FileValue>;
+  /** A viewable URL for a file field's value (null while loading or when empty). Prefer FileImage. */
+  export function useFileUrl(file: unknown): string | null;
+  /** Opens a file (e.g. a lease PDF) in a new tab. */
+  export function openFile(file: unknown): void;
+
   // ---- UI parts (styled like One App; Tailwind classes also work everywhere) ----
   export function Card(props: { title?: ReactNode; actions?: ReactNode; className?: string; children?: ReactNode; padded?: boolean }): JSX.Element;
   export function Button(props: { variant?: "primary" | "ghost" | "danger" | "link"; size?: "sm" | "md"; type?: "button" | "submit"; disabled?: boolean; onClick?: () => void; className?: string; children?: ReactNode }): JSX.Element;
@@ -97,6 +107,10 @@ declare module "@one/kit" {
   export function DateTimeInput(props: { value: string; onChange: (v: string) => void; withTime?: boolean; label?: ReactNode; className?: string }): JSX.Element;
   /** An inline form for a record (only when the design shows the form on the page itself — otherwise use openRecordForm). */
   export function RecordForm(props: { table: string; fields?: string[]; recordId?: string; submitLabel?: string; onSaved?: (record: RecordRow) => void; className?: string }): JSX.Element;
+  /** Shows a file field's value: the photo itself (set size/rounding with className), or a chip that opens other files. Empty value: a soft image placeholder. */
+  export function FileImage(props: { file: unknown; alt?: string; className?: string; fit?: "cover" | "contain" }): JSX.Element;
+  /** Pick-and-upload control for a file field, for custom forms. accept="image/*" for photos. */
+  export function FileInput(props: { table: string; field: string; value: unknown; onChange: (v: FileValue | null) => void; label?: ReactNode; accept?: string; className?: string }): JSX.Element;
   export function Spinner(props: { className?: string }): JSX.Element;
   export function Empty(props: { children?: ReactNode; className?: string }): JSX.Element;
   export function Icon(props: { name: string; className?: string }): JSX.Element;

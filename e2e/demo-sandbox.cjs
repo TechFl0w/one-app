@@ -88,6 +88,20 @@ const log = (...a) => console.log("•", ...a);
   const dialog = p.locator("dialog[open]");
   await dialog.getByText("New booking").waitFor();
   assert.ok((await dialog.locator("label").count()) >= 3, "modal shows the form fields");
+  // The calendar floats above the modal: never cut off by the form's scroll box.
+  const dateBtn = dialog.locator('button[aria-haspopup="dialog"]').first();
+  if (await dateBtn.count()) {
+    await dateBtn.click();
+    const cal = p.locator('[aria-label="Choose a date"]');
+    await cal.waitFor();
+    const lastDay = cal.locator("button[aria-pressed]").last();
+    const box = await lastDay.boundingBox();
+    const hit = await p.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('[aria-label="Choose a date"]') != null, [box.x + box.width / 2, box.y + box.height / 2]);
+    assert.ok(hit, "the whole calendar is visible above the modal");
+    await p.screenshot({ path: `${S}/sandbox-datepicker.png` });
+    await lastDay.click();
+    log("date picker shows in full inside the modal");
+  }
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await p.waitForTimeout(300);
   assert.equal(await p.locator("dialog[open]").count(), 0);

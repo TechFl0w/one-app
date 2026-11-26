@@ -31,3 +31,11 @@ The owner can ask for something else; the rules are in the owner agent's prompt
   functions, fields or automations; work that waits on a confirmation continues by itself.
 - **Ids, not labels:** compare choices to option ids, never label text.
 - **Inputs:** only the kit's Select / DateTimeInput (never native, never hand-made popovers).
+- **Files:** photos, agreements, receipts are file fields. Forms upload them; screens show them
+  with `FileImage` (thumbnails in lists, large in details, a grid for photo collections).
+- **It works, not just looks right:** every add form can be completed (required fields included,
+  files too), every button does something, and whatever the owner adds shows up afterwards.
+
+Checked in code before a screen is saved (`src/codegen/standards.ts`): inline forms, add forms
+missing a required field, file inputs that don't upload (errors); labels compared as text, child
+records without their parent, file fields never shown (warnings back to the assistant).

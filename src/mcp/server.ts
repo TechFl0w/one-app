@@ -1,7 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { executeOwnerTool, ownerToolDefinitions, type ToolEffects } from "@/agent/ownerTools";
-import { setupSummary } from "@/agent/ownerAgent";
+import { buildGuide, setupSummary } from "@/agent/ownerAgent";
 import type { OwnerBackend, PendingAction } from "@/agent/types";
 
 /**
@@ -17,12 +17,13 @@ export function buildMcpServer(input: {
   const { backend, requestApproval, newId = () => crypto.randomUUID(), now = () => new Date() } = input;
   const server = new Server(
     { name: "one-app", version: "1.0.0" },
-    { capabilities: { tools: {} }, instructions: "Tools for running this small business in One App: its records, setup, bookings, automations and payments. Call get_setup first. Risky actions (deleting, refunds, price or automation changes) are sent to the owner to approve in One App." },
+    { capabilities: { tools: {} }, instructions: "Tools for running this small business in One App: its records, setup, bookings, automations and payments. Call get_setup first, and get_build_guide before building screens, components or server code. Risky actions (deleting, refunds, price or automation changes) are sent to the owner to approve in One App." },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       { name: "get_setup", description: "Summary of the business's setup: tables with field ids, pages, automations, today's date.", inputSchema: { type: "object", properties: {} } },
+      { name: "get_build_guide", description: "How to build in One App: the component kit (@one/kit) API, app rules every screen follows, design guidance, recreating an app from screenshots, and the server kit. Read before write_component, plan_build or write_function.", inputSchema: { type: "object", properties: {} } },
       ...ownerToolDefinitions().map((t) => ({ name: t.name, description: t.description, inputSchema: t.input_schema as { type: "object"; [k: string]: unknown } })),
     ],
   }));
@@ -30,6 +31,7 @@ export function buildMcpServer(input: {
   server.setRequestHandler(CallToolRequestSchema, async (req): Promise<CallToolResult> => {
     const text = (v: unknown, isError = false): CallToolResult => ({ content: [{ type: "text", text: typeof v === "string" ? v : JSON.stringify(v) }], ...(isError ? { isError: true } : {}) });
     if (req.params.name === "get_setup") return text(setupSummary(await backend.blueprint(), now()));
+    if (req.params.name === "get_build_guide") return text(buildGuide({ renderCheck: false }));
     const effects: ToolEffects = {};
     const out = await executeOwnerTool(req.params.name, req.params.arguments, backend, effects, newId);
     if (out.kind === "error") return text(out.message, true);

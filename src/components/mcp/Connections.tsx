@@ -11,6 +11,10 @@ export interface TokenRow {
   last_used_at: string | null;
 }
 
+/** The one-line setup for Claude Code with a personal token. */
+export const claudeCodeCommand = (url: string, token: string) =>
+  `claude mcp add --transport http one-app ${url} --header "Authorization: Bearer ${token}"`;
+
 /** Connect AI apps (Claude and other MCP clients) to this business with a personal token. */
 export function Connections({
   url,
@@ -38,8 +42,8 @@ export function Connections({
           bookings and setup. Deleting, refunds, price and automation changes always wait for you under <span className="font-medium text-ink">Approvals</span>.
         </p>
         <ol className="list-decimal space-y-1 pl-5 text-sm">
-          <li>In your AI app, add a custom connector (Claude: Settings → Connectors → Add custom connector. ChatGPT: Settings → Connectors).</li>
-          <li>Paste the URL below. You’ll be asked to sign in to One App and allow it.</li>
+          <li>In the Claude app (claude.ai or desktop) or ChatGPT, add a custom connector (Claude: Settings → Connectors → Add custom connector. ChatGPT: Settings → Connectors).</li>
+          <li>Paste the URL below and leave Advanced settings (OAuth Client ID and secret) empty. You’ll be asked to sign in to One App and allow it.</li>
         </ol>
         <div>
           <span className="label">Server URL</span>
@@ -51,8 +55,8 @@ export function Connections({
       </section>
 
       <section className="card space-y-4 p-6">
-        <h2 className="font-semibold">Personal access tokens</h2>
-        <p className="text-sm text-muted">For developer tools that can’t sign in, like Claude Code or Cursor: send a token in the Authorization header instead.</p>
+        <h2 className="font-semibold">Claude Code and other developer tools</h2>
+        <p className="text-sm text-muted">Claude Code, Cursor and similar tools connect with a personal access token instead of the connector above. Create one, then copy the command it shows. Don’t paste a token into a connector’s OAuth Client ID; it won’t work there.</p>
         <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); start(async () => { const r = await create(name); if (r.token) { setFresh(r.token); setName(""); setError(null); } else setError(r.message ?? "Couldn’t create it."); }); }}>
           <input className="input flex-1" placeholder="Name, e.g. Claude on my laptop" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} aria-label="Connection name" />
           <button className="btn-primary" disabled={busy || !name.trim()}>Create token</button>
@@ -65,7 +69,12 @@ export function Connections({
               <input className="input flex-1 font-mono text-xs" readOnly value={fresh} aria-label="New token" />
               <button type="button" className="btn-ghost px-3" onClick={() => copy(fresh)} aria-label="Copy token"><Copy className="h-4 w-4" /></button>
             </div>
-            <p className="text-xs text-muted">In your AI app, add the server URL above with the header <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+            <span className="label">Claude Code: run this in your terminal</span>
+            <div className="flex gap-2">
+              <input className="input flex-1 font-mono text-xs" readOnly value={claudeCodeCommand(url, fresh)} aria-label="Claude Code command" />
+              <button type="button" className="btn-ghost px-3" onClick={() => copy(claudeCodeCommand(url, fresh))} aria-label="Copy command"><Copy className="h-4 w-4" /></button>
+            </div>
+            <p className="text-xs text-muted">Other tools: add the server URL above with the header <code>Authorization: Bearer &lt;token&gt;</code>.</p>
           </div>
         )}
       </section>

@@ -24,6 +24,8 @@ describe("MCP server", () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
     expect(names).toContain("get_setup");
+    expect(names).toContain("get_build_guide");
+    expect(names).toContain("write_component");
     expect(names).toContain("query_records");
     expect(names).toContain("delete_record");
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
@@ -38,6 +40,15 @@ describe("MCP server", () => {
     expect(bad.isError).toBe(true);
     const setup = await client.callTool({ name: "get_setup", arguments: {} });
     expect((setup.content as { text: string }[])[0].text).toContain("tbl_clients");
+  });
+
+  it("serves the build guide without the in-app render check", async () => {
+    const { client } = await connect();
+    const r = await client.callTool({ name: "get_build_guide", arguments: {} });
+    const guide = (r.content as { text: string }[])[0].text;
+    expect(guide).toContain("@one/kit");
+    expect(guide).toContain("App rules");
+    expect(guide).not.toContain("[Automatic check]");
   });
 
   it("never runs risky tools — sends them for approval", async () => {

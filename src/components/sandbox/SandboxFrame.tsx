@@ -11,6 +11,7 @@ import type { Theme } from "@/schema/blueprint";
 import { sandboxSrcdoc } from "./srcdoc";
 import { registerCapture } from "./captureRegistry";
 import { RecordDialog, parseFormRequest, type RecordFormRequest } from "./RecordDialog";
+import { recordFileUrl, uploadRecordFile } from "./files";
 
 const noop = () => () => {};
 const str = (v: unknown, what: string) => {
@@ -140,6 +141,27 @@ export function SandboxFrame({
             value = await new Promise<SandboxRecord | null>((resolve) => setForm({ request, resolve }));
             break;
           }
+          case "files.upload": {
+            // A screen hands over a file the owner picked; One App uploads it for that field.
+            const table = str(a[0], "table");
+            const field = str(a[1], "field");
+            if (schema.tables.find((t) => t.id === table)?.fields.find((f) => f.id === field)?.type !== "file") throw new Error("invalid: That isn’t a file field");
+            if (!(a[2] instanceof Blob)) throw new Error("invalid: No file");
+            value = await uploadRecordFile(bridge, table, field, a[2], typeof a[3] === "string" ? a[3].slice(0, 255) : "file");
+            break;
+          }
+          case "files.read": {
+            // The frame can't reach storage itself (its CSP); it gets the bytes and shows them as a blob: URL.
+            const res = await fetch(await recordFileUrl(bridge, str(a[0], "path").slice(0, 500)));
+            if (!res.ok) throw new Error("not_found: Couldn’t open the file");
+            value = await res.blob();
+            break;
+          }
+          case "files.open":
+            // Leases, receipts…: opened by One App in a new tab (the frame can't open windows).
+            window.open(await recordFileUrl(bridge, str(a[0], "path").slice(0, 500)), "_blank", "noopener");
+            value = true;
+            break;
           case "toast":
             setToast(String(a[0] ?? "").slice(0, 200));
             value = true;

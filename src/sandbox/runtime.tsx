@@ -442,7 +442,7 @@ function RecordForm({ table, fields, recordId, submitLabel = "Save", onSaved, cl
     if (record) setValues(record.data);
   }, [record]);
   const shown = useMemo(() => {
-    const all = (t?.fields ?? []).filter((f) => !["rollup", "formula", "file", "hours"].includes(f.type));
+    const all = (t?.fields ?? []).filter((f) => !["rollup", "formula", "hours"].includes(f.type));
     return fields ? fields.map((id) => all.find((f) => f.id === id)).filter((f): f is NonNullable<typeof f> => !!f) : all;
   }, [t, fields]);
   if (!t) return <Empty>Unknown table {table}</Empty>;
@@ -467,7 +467,7 @@ function RecordForm({ table, fields, recordId, submitLabel = "Save", onSaved, cl
   return (
     <form className={cx("grid gap-3", className)} noValidate onSubmit={(e) => { e.preventDefault(); if (!busy) void submit(); }}>
       {shown.map((f) => (
-        <FieldInput key={f.id} field={f} value={values[f.id]} onChange={(v) => set(f.id, v)} />
+        <FieldInput key={f.id} field={f} value={values[f.id]} onChange={(v) => set(f.id, v)} table={table} />
       ))}
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div><Button type="submit" disabled={busy}>{busy ? "Saving…" : submitLabel}</Button></div>
@@ -480,7 +480,7 @@ function LinkOptions({ to, render }: { to: string; render: (o: { value: string; 
   return <>{render(rows.map((r) => ({ value: r.id, label: recordLabel(to, r) })))}</>;
 }
 
-function FieldInput({ field: f, value, onChange }: { field: SandboxSchema["tables"][number]["fields"][number]; value: unknown; onChange: (v: unknown) => void }) {
+function FieldInput({ field: f, value, onChange, table }: { field: SandboxSchema["tables"][number]["fields"][number]; value: unknown; onChange: (v: unknown) => void; table: string }) {
   const label = <>{f.label}{f.required && <span className="text-accent"> *</span>}</>;
   const str = value == null ? "" : String(value);
   switch (f.type) {
@@ -505,6 +505,8 @@ function FieldInput({ field: f, value, onChange }: { field: SandboxSchema["table
       return <Select label={label} value={str} onChange={onChange} options={(f.options ?? []).map((o) => ({ value: o.id, label: o.label }))} />;
     case "link":
       return f.to ? <LinkOptions to={f.to} render={(opts) => <Select label={label} value={str} onChange={onChange} options={opts} />} /> : null;
+    case "file":
+      return <FileInput label={label} table={table} field={f.id} value={value} onChange={onChange} accept={/photo|picture|image|logo|cover/i.test(f.label) ? "image/*" : undefined} />;
     case "email":
       return <Input label={label} type="email" value={str} onChange={onChange} />;
     case "phone":
@@ -520,9 +522,116 @@ function toLocalInput(iso: string) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+// ---------- kit: files ----------
+
+type FileValue = { path: string; name: string; size?: number; mime?: string };
+const asFileValue = (v: unknown): FileValue | null =>
+  v && typeof v === "object" && typeof (v as FileValue).path === "string" && typeof (v as FileValue).name === "string" ? (v as FileValue) : null;
+const isImage = (f: FileValue) => !!f.mime?.startsWith("image/") || /\.(png|jpe?g|gif|webp|avif|heic)$/i.test(f.name);
+
+const Glyph = ({ d, className }: { d: string; className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden className={className}><path d={d} /></svg>
+);
+const IMAGE_D = "M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01";
+const FILE_D = "M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6";
+
+/** Uploads a file the owner picked into a file field's storage; save the result in that field. */
+async function uploadFile(table: string, field: string, file: File): Promise<FileValue> {
+  return call<FileValue>("files.upload", table, field, file, file.name);
+}
+
+// The frame has no network: the host sends the bytes, shown here as blob: URLs (cached per file).
+const fileUrls = new Map<string, Promise<string>>();
+function fileUrlOf(path: string) {
+  let p = fileUrls.get(path);
+  if (!p) {
+    p = call<Blob>("files.read", path).then((b) => URL.createObjectURL(b));
+    p.catch(() => fileUrls.delete(path));
+    fileUrls.set(path, p);
+  }
+  return p;
+}
+function useFileUrl(value: unknown): string | null {
+  const f = asFileValue(value);
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setUrl(null);
+    if (f) fileUrlOf(f.path).then((u) => live && setUrl(u), () => {});
+    return () => {
+      live = false;
+    };
+  }, [f?.path]); // eslint-disable-line react-hooks/exhaustive-deps
+  return url;
+}
+/** Opens a file (a lease, a receipt) in a new tab, from One App. */
+function openFile(value: unknown) {
+  const f = asFileValue(value);
+  if (f) void call("files.open", f.path);
+}
+
+/** Shows a file field: the photo itself, or a file chip that opens it. Empty: a soft placeholder. */
+function FileImage({ file, alt = "", className, fit = "cover" }: { file: unknown; alt?: string; className?: string; fit?: "cover" | "contain" }) {
+  const f = asFileValue(file);
+  const url = useFileUrl(f && isImage(f) ? f : null);
+  if (!f) return <div className={cx("flex items-center justify-center bg-ground text-muted", className ?? "h-24 w-24 rounded-xl")}><Glyph d={IMAGE_D} className="h-6 w-6" /></div>;
+  if (!isImage(f))
+    return (
+      <button type="button" onClick={() => openFile(f)} className={cx("inline-flex max-w-full items-center gap-2 rounded-full border border-line px-3 py-1.5 text-sm hover:bg-ground", className)}>
+        <Glyph d={FILE_D} className="h-4 w-4 shrink-0 text-muted" />
+        <span className="truncate">{f.name}</span>
+      </button>
+    );
+  return url ? (
+    // eslint-disable-next-line @next/next/no-img-element -- runs in the sandbox frame, not Next
+    <img src={url} alt={alt} className={cx(fit === "cover" ? "object-cover" : "object-contain", className ?? "h-24 w-24 rounded-xl")} />
+  ) : (
+    <div className={cx("animate-pulse bg-ground", className ?? "h-24 w-24 rounded-xl")} />
+  );
+}
+
+/** Pick-and-upload control for a file field (used by RecordForm; use it in custom forms too). */
+function FileInput({ table, field, value, onChange, label, accept, className }: { table: string; field: string; value: unknown; onChange: (v: FileValue | null) => void; label?: React.ReactNode; accept?: string; className?: string }) {
+  const f = asFileValue(value);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const pick = async (file: File) => {
+    setBusy(true);
+    setError(null);
+    try {
+      onChange(await uploadFile(table, field, file));
+    } catch (e) {
+      setError(e instanceof Error ? e.message.replace(/^[a-z_]+: /, "") : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Labelled label={label} className={className} popover>
+      <input ref={input} type="file" className="hidden" accept={accept} onChange={(e) => { const x = e.target.files?.[0]; if (x) void pick(x); e.target.value = ""; }} />
+      {f || busy ? (
+        <div className="flex items-center gap-3 rounded-xl border border-line p-2">
+          {f && isImage(f) ? <FileImage file={f} className="h-14 w-14 rounded-lg" /> : <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-ground"><Glyph d={FILE_D} className="h-5 w-5 text-muted" /></span>}
+          <span className="min-w-0 flex-1 truncate text-sm">{busy ? "Uploading…" : f?.name}</span>
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => input.current?.click()}>Replace</Button>
+          {f && !busy && <button type="button" className="px-2 text-sm text-muted hover:text-ink" onClick={() => onChange(null)}>Remove</button>}
+        </div>
+      ) : (
+        <button type="button" onClick={() => input.current?.click()} className="flex w-full flex-col items-center gap-1 rounded-xl border border-dashed border-line px-4 py-6 text-sm text-muted hover:border-accent hover:text-accent">
+          <span className="font-medium text-ink">{accept?.startsWith("image") ? "Choose a photo" : "Choose a file"}</span>
+          <span className="text-xs">Up to 20 MB</span>
+        </button>
+      )}
+      {error && <p className="mt-1 text-sm text-red-700">{error}</p>}
+    </Labelled>
+  );
+}
+
 const kit = {
   useRecords, useRecord, useSchema, useProps, records, recordLabel, optionLabel, navigate, openRecordForm, toast, plural, formatMoney, formatDate,
-  Card, Button, Badge, Collapsible, Tabs, Input, Textarea, Select, DateTimeInput, RecordForm, Spinner, Empty, Icon,
+  uploadFile, useFileUrl, openFile,
+  Card, Button, Badge, Collapsible, Tabs, Input, Textarea, Select, DateTimeInput, RecordForm, Spinner, Empty, Icon, FileImage, FileInput,
 };
 
 // ---------- boot ----------
