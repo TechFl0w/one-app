@@ -15,6 +15,11 @@ const log = (...a) => console.log("•", ...a);
   const errors = [];
   p.on("pageerror", (e) => errors.push(e.message));
   await p.goto(BASE + "/demo/p/pg_bookings");
+  // Board cards open their record too (not only table rows).
+  await p.locator("article[role=button]").first().click();
+  await p.locator("dialog[open]").getByRole("button", { name: "Delete" }).waitFor();
+  await p.locator("dialog[open]").getByRole("button", { name: "Cancel" }).click();
+  log("board cards open the record pop-up");
   await p.getByRole("button", { name: "Ask the assistant" }).click();
   await p.getByLabel("Message").fill("make the new booking form collapsible with a chevron");
   await p.getByLabel("Message").press("Enter");

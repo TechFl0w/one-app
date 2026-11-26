@@ -75,12 +75,18 @@ const SimpleField = z.strictObject({
     "email",
     "hours",
   ]),
+  /** For number fields: the smallest / largest value allowed. */
+  min: z.number().optional(),
+  max: z.number().optional(),
 });
 
 const MoneyField = z.strictObject({
   ...fieldBase,
   type: z.literal("money"),
   currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  /** Amounts are never negative unless the field is for credits/refunds and says so. */
+  allowNegative: z.boolean().optional(),
+  max: z.number().positive().optional(),
 });
 
 const ChoiceField = z.strictObject({

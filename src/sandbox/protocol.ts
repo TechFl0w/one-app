@@ -50,4 +50,10 @@ export interface SandboxBridge {
   /** File fields. Missing where files can't be stored (the demo). */
   uploadTarget?(table: string, field: string, name: string, size: number): Promise<BridgeResult<{ path: string; token: string }>>;
   fileUrl?(path: string): Promise<BridgeResult<string>>;
+  /** A screen's compiled code and styles, for screens the page didn't render (Edit mode drafts). */
+  loadComponent?(componentId: string): Promise<BridgeResult<{ compiled: string; css?: string }>>;
 }
+
+/** Stands in for a screen's compiled code in the browser's copy of the setup; the real code is
+ * rendered with the page, or fetched on demand (SandboxBridge.loadComponent). */
+export const CODE_ON_DEMAND = "/* loaded on demand */";

@@ -32,6 +32,8 @@ const COMPUTED: Field["type"][] = ["formula", "rollup"];
 const uuid = z.uuid();
 const email = z.email();
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** A sanity limit on any amount (typos like 900000000 instead of 900). */
+const MAX_AMOUNT = 100_000_000;
 const PHONE_RE = /^\+?[0-9 ()\-.]{5,25}$/;
 
 const isValidDate = (s: string) => {
@@ -60,9 +62,14 @@ export function checkValue(field: Field, value: unknown): Check {
         ? ok(value.trim().toLowerCase())
         : bad("must be an email address");
     case "number":
-      return typeof value === "number" && Number.isFinite(value) ? ok(value) : bad("must be a number");
+      if (typeof value !== "number" || !Number.isFinite(value)) return bad("must be a number");
+      if (field.min !== undefined && value < field.min) return bad(`must be at least ${field.min}`);
+      if (field.max !== undefined && value > field.max) return bad(`must be at most ${field.max}`);
+      return ok(value);
     case "money":
       if (typeof value !== "number" || !Number.isFinite(value)) return bad("must be an amount");
+      if (value < 0 && !field.allowNegative) return bad("can't be negative");
+      if (Math.abs(value) > (field.max ?? MAX_AMOUNT)) return bad(`is too large (at most ${field.max ?? MAX_AMOUNT})`);
       return Math.abs(Math.round(value * 100) - value * 100) > 1e-6 ? bad("must have at most 2 decimals") : ok(value);
     case "checkbox":
       return typeof value === "boolean" ? ok(value) : bad("must be true or false");

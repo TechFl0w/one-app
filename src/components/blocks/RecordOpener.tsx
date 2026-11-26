@@ -69,3 +69,43 @@ export function AddRecordButton({ table, label }: { table: string; label: string
     </button>
   );
 }
+
+/** Any list item, card or calendar entry that opens its record (rendered as the given element). */
+export function OpenRecord({
+  table,
+  recordId,
+  as: Tag = "div",
+  className = "",
+  style,
+  title,
+  children,
+}: {
+  table: string;
+  recordId: string;
+  as?: "li" | "article" | "div";
+  className?: string;
+  style?: React.CSSProperties;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  const open = useContext(Ctx);
+  if (!open) return <Tag className={className} style={style} title={title}>{children}</Tag>;
+  return (
+    <Tag
+      className={`${className} cursor-pointer focus-visible:outline-2 focus-visible:outline-accent`}
+      style={style}
+      title={title}
+      role="button"
+      tabIndex={0}
+      onClick={() => open({ table, recordId })}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          open({ table, recordId });
+        }
+      }}
+    >
+      {children}
+    </Tag>
+  );
+}
