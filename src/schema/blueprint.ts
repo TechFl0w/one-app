@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { compiledFormula, formulaFields, FormulaError } from "@/engine/formula";
 
 /**
  * The blueprint is a business's whole configuration: tables, fields, pages, layouts,
@@ -129,10 +130,18 @@ const LinkField = z.strictObject({
   multiple: z.boolean().optional(),
 });
 
+/** How a computed number is shown. */
+export const NumberFormat = z.enum(["number", "money", "percent"]);
+
+/**
+ * A number worked out from the record's other values on every read (src/engine/formula.ts):
+ * "fld_qty * fld_unit_price", "fld_total - fld_paid", "round(fld_hours * fld_rate, 2)".
+ */
 const FormulaField = z.strictObject({
   ...fieldBase,
   type: z.literal("formula"),
   expression: z.string().min(1).max(2000),
+  format: NumberFormat.optional(),
 });
 
 
@@ -152,6 +161,8 @@ const RollupField = z.strictObject({
   agg: z.enum(["sum", "count", "avg", "min", "max", "latest"]),
   where: z.array(RollupWhere).max(5).optional(),
   sortBy: FieldId.optional(),
+  /** How the number shows; by default like the field it adds up (money stays money). */
+  format: NumberFormat.optional(),
 });
 
 export const Field = z.discriminatedUnion("type", [
@@ -553,6 +564,18 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
         });
       });
       if (f.derive.otherwise && !opts.has(f.derive.otherwise)) issue([...at, "otherwise"], `unknown option ${f.derive.otherwise}`);
+    });
+    t.fields.forEach((f, fi) => {
+      if (f.type !== "formula") return;
+      const at = ["tables", ti, "fields", fi, "expression"];
+      const node = compiledFormula(f.expression);
+      if (node instanceof FormulaError) return issue(at, `formula: ${node.message}`);
+      for (const id of formulaFields(node)) {
+        const used = t.fields.find((x) => x.id === id);
+        if (!used) issue(at, `unknown field ${id}`);
+        else if (id === f.id) issue(at, "a formula can't use itself");
+        else if ("derive" in used && used.derive) issue(at, `${id} is a status, not a number`);
+      }
     });
     if (t.primaryField && !fieldIds.has(t.primaryField)) {
       issue(["tables", ti, "primaryField"], `unknown field ${t.primaryField}`);
