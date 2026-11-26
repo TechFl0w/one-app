@@ -5,7 +5,7 @@ import { cleanImages, runConfirmedAction, runOwnerTurn, withoutImages, type Mess
 import { memoryBackend } from "@/agent/memoryBackend";
 import { hasModelCredentials, MISSING_KEY_TEXT } from "@/agent/chatFlow";
 import type { AgentResponse, PendingAction } from "@/agent/types";
-import { demoRecords } from "@/demo/salon";
+import { currentDemo } from "@/demo/current";
 
 /**
  * Demo chat: the browser keeps the conversation, pending actions and blueprint (nothing is
@@ -28,7 +28,7 @@ export async function sendDemoMessage(blueprint: unknown, history: Message[], te
     return { ok: true, response: { text: MISSING_KEY_TEXT, changed: false }, history, pending: [], blueprint: bp.data };
   }
   try {
-    const { backend, state } = memoryBackend({ blueprint: bp.data, records: demoRecords() });
+    const { backend, state } = memoryBackend({ blueprint: bp.data, records: (await currentDemo()).records });
     const turn = await runOwnerTurn({ backend, history: Array.isArray(history) && history.length <= MAX_DEMO_HISTORY ? history : [], message, pageId, images });
     return { ok: true, response: turn.response, history: withoutImages(turn.history), pending: turn.pending, blueprint: state.blueprint };
   } catch (e) {
@@ -40,7 +40,7 @@ export async function sendDemoMessage(blueprint: unknown, history: Message[], te
 export async function confirmDemoActions(blueprint: unknown, actions: PendingAction[]): Promise<{ ok: true; blueprint: Blueprint; notes: string[] } | { ok: false; error: string }> {
   const bp = Blueprint.safeParse(blueprint);
   if (!bp.success) return { ok: false, error: "The demo got out of sync. Reload the page." };
-  const { backend, state } = memoryBackend({ blueprint: bp.data, records: demoRecords() });
+  const { backend, state } = memoryBackend({ blueprint: bp.data, records: (await currentDemo()).records });
   const notes: string[] = [];
   for (const a of actions.slice(0, 10)) notes.push((await runConfirmedAction(backend, a)).note);
   return { ok: true, blueprint: state.blueprint, notes };

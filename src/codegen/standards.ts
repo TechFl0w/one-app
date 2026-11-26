@@ -22,7 +22,7 @@ export function checkStandards(source: string, bp: Blueprint, opts: { inlineForm
   }
 
   // Hierarchy: a list of child records shows its parent (a room shows its building).
-  const listed = new Set([...source.matchAll(/useRecords\(\s*\{\s*table:\s*["'](tbl_[a-z0-9_]+)["']/g)].map((m) => m[1]));
+  const listed = listedTables(source);
   for (const tid of listed) {
     const t = bp.tables.find((x) => x.id === tid);
     for (const f of t?.fields ?? []) {
@@ -72,4 +72,22 @@ function formCall(source: string, open: number): string {
     else if (source[i] === "}" && --depth === 0) return source.slice(open, i + 1);
   }
   return source.slice(open, open + 4000);
+}
+
+/**
+ * Tables whose records a screen actually lists. Tables loaded only to look things up (a payment
+ * showing its room's name) don't count, so the parent/photo rules don't ask for clutter.
+ * `const x = useRecords({ table })` counts when x.records is mapped or filtered;
+ * destructured `const { records } = useRecords(...)` and table constants always count.
+ */
+function listedTables(source: string): Set<string> {
+  const out = new Set<string>();
+  const consts = new Map([...source.matchAll(/const\s+([A-Za-z_$][\w$]*)\s*=\s*["'](tbl_[a-z0-9_]+)["']/g)].map((m) => [m[1], m[2]]));
+  for (const m of source.matchAll(/(?:const\s+([A-Za-z_$][\w$]*)\s*=\s*)?useRecords\(\s*\{\s*table:\s*(?:["'](tbl_[a-z0-9_]+)["']|([A-Za-z_$][\w$]*))/g)) {
+    const table = m[2] ?? consts.get(m[3] ?? "");
+    if (!table) continue;
+    const v = m[1];
+    if (!v || new RegExp(`\\b${v.replace(/\$/g, "\\$")}\\.records\\s*\\.\\s*(map|filter|flatMap|forEach|slice|sort)\\(`).test(source)) out.add(table);
+  }
+  return out;
 }

@@ -153,13 +153,16 @@ function recordLabel(table: string, r: SandboxRecord) {
   const t = tableOf(table);
   const f = t?.fields.find((x) => x.id === t.primaryField) ?? t?.fields.find((x) => x.type === "text");
   const v = f ? r.data[f.id] : undefined;
-  return v == null || v === "" ? "Untitled" : String(v);
+  if (v == null || v === "") return "Untitled";
+  return f?.options?.find((o) => o.id === v)?.label ?? String(v);
 }
 function optionLabel(table: string, field: string, optionId: unknown) {
   const f = tableOf(table)?.fields.find((x) => x.id === field);
   return f?.options?.find((o) => o.id === optionId)?.label ?? (optionId == null ? "" : String(optionId));
 }
 const navigate = (pageId: string) => void call("navigate", pageId);
+/** Opens a record's own page (or its form, for tables that open in a pop-up). */
+const openRecord = (table: string, recordId: string) => void call("record.open", table, recordId);
 /** "1 tenant", "3 tenants" (or a given plural: plural(n, "person", "people")). */
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /** Add/edit screen as a modal drawn by One App over the whole page. Resolves the saved record, or null if cancelled. */
@@ -628,10 +631,105 @@ function FileInput({ table, field, value, onChange, label, accept, className }: 
   );
 }
 
+// ---------- kit: board ----------
+
+/**
+ * A kanban board whose cards can always be dragged between columns (mouse, touch, pen):
+ * dropping saves the card's `field`. Columns default to the field's options. Clicking a card
+ * opens its record page unless onCardClick is given.
+ */
+function Board({ table, field, records: rows, renderCard, columns, onCardClick, className }: { table: string; field: string; records: SandboxRecord[]; renderCard: (r: SandboxRecord) => React.ReactNode; columns?: { id: string; label: string; color?: string }[]; onCardClick?: (r: SandboxRecord) => void; className?: string }) {
+  const schema = useContext(KitContext).schema;
+  const f = schema.tables.find((t) => t.id === table)?.fields.find((x) => x.id === field);
+  const cols = columns ?? (f?.options ?? []).map((o) => ({ id: o.id, label: o.label, color: o.color }));
+  const locked = !!f?.computed;
+  const [moved, setMoved] = useState<Record<string, string>>({});
+  const [drag, setDrag] = useState<{ id: string; x: number; y: number; dx: number; dy: number; w: number; sx: number; sy: number; live: boolean; over?: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const groupOf = (r: SandboxRecord) => moved[r.id] ?? String(r.data[field] ?? "");
+  const colAt = (x: number, y: number) => (document.elementFromPoint(x, y)?.closest("[data-col]") as HTMLElement | null)?.dataset.col;
+  const drop = async (id: string, to: string) => {
+    const r = rows.find((x) => x.id === id);
+    if (!r || String(r.data[field] ?? "") === to && !moved[id]) return;
+    if (groupOf(r) === to) return;
+    setMoved((m) => ({ ...m, [id]: to }));
+    try {
+      await records.update(table, id, { [field]: to });
+    } catch (e) {
+      setError(e instanceof Error ? e.message.replace(/^[a-z_]+: /, "") : "Couldn’t move it");
+      setTimeout(() => setError(null), 4000);
+    } finally {
+      setMoved((m) => {
+        const n = { ...m };
+        delete n[id];
+        return n;
+      });
+    }
+  };
+  const dragged = drag?.live ? rows.find((r) => r.id === drag.id) : undefined;
+  return (
+    <div className={cx("relative", className)}>
+      {locked && <p className="mb-2 text-xs text-muted">{f?.label} follows the dates, so cards move by themselves.</p>}
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {cols.map((c) => {
+          const items = rows.filter((r) => groupOf(r) === c.id);
+          return (
+            <div key={c.id} data-col={c.id} className={cx("flex w-64 shrink-0 flex-col rounded-2xl p-2 transition-colors", drag?.live && drag.over === c.id ? "bg-accent-tint ring-2 ring-accent/40" : "bg-ground")}>
+              <div className="flex items-center gap-2 px-2 py-1.5">
+                <span className="h-2 w-2 rounded-full" style={{ background: c.color ?? "var(--color-muted)" }} />
+                <span className="truncate text-sm font-semibold">{c.label}</span>
+                <span className="ml-auto text-xs text-muted">{items.length}</span>
+              </div>
+              <div className="min-h-12 space-y-2 p-0.5">
+                {items.map((r) => (
+                  <div
+                    key={r.id}
+                    className={cx(!locked && "cursor-grab touch-none select-none", drag?.live && drag.id === r.id && "opacity-30")}
+                    onPointerDown={(e) => {
+                      if (locked || e.button !== 0) return;
+                      e.preventDefault();
+                      const b = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                      setDrag({ id: r.id, x: e.clientX, y: e.clientY, dx: e.clientX - b.left, dy: e.clientY - b.top, w: b.width, sx: e.clientX, sy: e.clientY, live: false });
+                    }}
+                    onPointerMove={(e) => {
+                      if (!drag) return;
+                      const live = drag.live || Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 6;
+                      if (live) setDrag({ ...drag, x: e.clientX, y: e.clientY, live, over: colAt(e.clientX, e.clientY) });
+                    }}
+                    onPointerUp={(e) => {
+                      const d = drag;
+                      setDrag(null);
+                      if (!d) return;
+                      if (!d.live) return void (onCardClick ? onCardClick(r) : openRecord(table, r.id));
+                      const to = colAt(e.clientX, e.clientY);
+                      if (to) void drop(r.id, to);
+                    }}
+                    onPointerCancel={() => setDrag(null)}
+                    onClick={() => locked && (onCardClick ? onCardClick(r) : openRecord(table, r.id))}
+                  >
+                    {renderCard(r)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {dragged && drag && (
+        <div className="pointer-events-none fixed z-50 rotate-2 opacity-90 shadow-lg" style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.w }}>
+          {renderCard(dragged)}
+        </div>
+      )}
+      {error && <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+    </div>
+  );
+}
+
 const kit = {
-  useRecords, useRecord, useSchema, useProps, records, recordLabel, optionLabel, navigate, openRecordForm, toast, plural, formatMoney, formatDate,
+  useRecords, useRecord, useSchema, useProps, records, recordLabel, optionLabel, navigate, openRecord, openRecordForm, toast, plural, formatMoney, formatDate,
   uploadFile, useFileUrl, openFile,
-  Card, Button, Badge, Collapsible, Tabs, Input, Textarea, Select, DateTimeInput, RecordForm, Spinner, Empty, Icon, FileImage, FileInput,
+  Card, Button, Badge, Collapsible, Tabs, Input, Textarea, Select, DateTimeInput, RecordForm, Spinner, Empty, Icon, FileImage, FileInput, Board,
 };
 
 // ---------- boot ----------

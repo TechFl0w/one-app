@@ -52,7 +52,7 @@ declare module "@one/kit" {
   export function useRecord(table: string, id: string | null | undefined): { record: RecordRow | null; loading: boolean; error: string | null; reload(): void };
   /** The business's tables and fields (ids + labels + choice options). */
   export function useSchema(): { business: BusinessInfo; tables: TableInfo[] };
-  /** Props set on the block that shows this component. */
+  /** Props set on the block that shows this component. On a record page, recordId is the record the page is about. */
   export function useProps<T = Record<string, unknown>>(): T;
 
   export const records: {
@@ -63,13 +63,15 @@ declare module "@one/kit" {
     /** Asks the owner to confirm (One App shows the dialog). Resolves false if they cancel. */
     remove(table: string, id: string): Promise<boolean>;
   };
-  /** Label of a record (its primary field), e.g. for links. */
+  /** Label of a record (its title field; a choice shows its label). If the title is a link (a booking named by its client), show recordLabel of that linked record instead. */
   export function recordLabel(table: string, record: RecordRow): string;
   /** Label of a choice/status option id on a field. */
   export function optionLabel(table: string, field: string, optionId: unknown): string;
 
   /** Go to another page of the app (page id, e.g. "pg_clients"). */
   export function navigate(pageId: string): void;
+  /** Open a record's own page (its details and everything linked to it). Clicking a record in a list or card should do this. */
+  export function openRecord(table: string, recordId: string): void;
   /**
    * THE way to add or edit a record: One App opens a modal form over the whole page (validated,
    * right input per field, linked-record pickers). Resolves the saved record, or null if cancelled.
@@ -112,6 +114,8 @@ declare module "@one/kit" {
   export function FileImage(props: { file: unknown; alt?: string; className?: string; fit?: "cover" | "contain" }): JSX.Element;
   /** Pick-and-upload control for a file field, for custom forms. accept="image/*" for photos. */
   export function FileInput(props: { table: string; field: string; value: unknown; onChange: (v: FileValue | null) => void; label?: ReactNode; accept?: string; className?: string }): JSX.Element;
+  /** THE kanban: cards can always be dragged between columns (saves "field"); columns default to the field's options; a click opens the record's page. Never build a board by hand. */
+  export function Board(props: { table: string; field: string; records: RecordRow[]; renderCard: (record: RecordRow) => ReactNode; columns?: { id: string; label: string; color?: string }[]; onCardClick?: (record: RecordRow) => void; className?: string }): JSX.Element;
   export function Spinner(props: { className?: string }): JSX.Element;
   export function Empty(props: { children?: ReactNode; className?: string }): JSX.Element;
   export function Icon(props: { name: string; className?: string }): JSX.Element;

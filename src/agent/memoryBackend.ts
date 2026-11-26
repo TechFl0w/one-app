@@ -39,7 +39,7 @@ export function memoryBackend(initial: { blueprint: Blueprint; records: RecordRo
       const now = new Date().toISOString();
       const row: RecordRow = { id: newId(), tableId: t, data: Object.fromEntries(Object.entries(data).filter(([, v]) => v !== null)), createdAt: now, updatedAt: now };
       state.records.push(row);
-      return view(row);
+      return (await computed(state.blueprint, t, [view(row)]))[0];
     },
     updateRecord: async (t, id, input, opts = {}) => {
       const patch = validateRecordInput(tableOrThrow(state.blueprint, t), input, "update");
@@ -52,7 +52,7 @@ export function memoryBackend(initial: { blueprint: Blueprint; records: RecordRo
       for (const [k, v] of Object.entries(patch)) if (v === null) delete data[k];
       row.data = data;
       row.updatedAt = new Date().toISOString();
-      return view(row);
+      return (await computed(state.blueprint, t, [view(row)]))[0];
     },
     deleteRecord: async (t, id) => {
       find(t, id);

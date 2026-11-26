@@ -58,6 +58,15 @@ export function valueText(field: Field, value: unknown, labels: LinkLabels, ctx:
     }
     case "hours":
       return hoursSummary(value as Record<string, [string, string][]>);
+    case "formula":
+    case "rollup": {
+      // Computed numbers show as money / percent / number (format), else as they are.
+      if (typeof value !== "number") return String(value);
+      const fmt = field.format ?? "number";
+      if (fmt === "money") return formatMoney(value, ctx.currency, ctx.locale);
+      if (fmt === "percent") return new Intl.NumberFormat(ctx.locale ?? DEFAULT_LOCALE, { style: "percent", maximumFractionDigits: 1 }).format(value / 100);
+      return new Intl.NumberFormat(ctx.locale ?? DEFAULT_LOCALE, { maximumFractionDigits: 2 }).format(value);
+    }
     case "file":
       return typeof value === "object" && value && "name" in value ? String((value as { name: unknown }).name) : "File";
     default:

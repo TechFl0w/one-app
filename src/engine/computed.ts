@@ -3,6 +3,7 @@ import type { RecordQuery, RecordRow } from "@/schema/records";
 import type { RecordStore } from "./store";
 import { buildRecordQuery } from "./records";
 import { isoDate, localToday } from "./dates";
+import { compiledFormula, evaluateFormula, formulaFields, FormulaError } from "./formula";
 
 /**
  * Rollup fields, computed whenever records are read: "open repairs" on a room counts its
@@ -18,16 +19,23 @@ export type LoadTable = (tableId: string) => Promise<RecordRow[]>;
 
 const MAX_ROWS = 5000;
 
-export async function addComputed(bp: Blueprint, tableId: string, records: RecordRow[], loadTable: LoadTable, now = new Date()): Promise<RecordRow[]> {
+/** How deep linked records are worked out (a customer's balance → its jobs' balances → their lines). */
+const MAX_DEPTH = 2;
+
+export async function addComputed(bp: Blueprint, tableId: string, records: RecordRow[], loadTable: LoadTable, now = new Date(), depth = 0): Promise<RecordRow[]> {
   const table = bp.tables.find((t) => t.id === tableId);
-  const rollups = (table?.fields ?? []).filter((f): f is Rollup => f.type === "rollup");
-  const derived = (table?.fields ?? []).filter((f): f is Derived => "derive" in f && !!f.derive);
-  if (!table || (!rollups.length && !derived.length) || !records.length) return records;
+  const fields = table?.fields ?? [];
+  const rollups = depth < MAX_DEPTH ? fields.filter((f): f is Rollup => f.type === "rollup") : [];
+  const formulas = fields.filter((f): f is Formula => f.type === "formula");
+  const derived = fields.filter((f): f is Derived => "derive" in f && !!f.derive);
+  if (!table || (!rollups.length && !formulas.length && !derived.length) || !records.length) return records;
+  if (depth === 0) loadTable = memo(loadTable); // each table is read from storage once per read
   const cache = new Map<string, Promise<RecordRow[]>>();
   const today = isoDate(localToday(now, bp.business.timezone));
-  // Linked records come with their derived statuses (a rent payment can look at its renter's status).
+  // Linked records come worked out too (a job's lines with their totals, a payment's lease status),
+  // one level less deep each time, so chains end and cycles can't loop.
   const load = (t: string) => {
-    if (!cache.has(t)) cache.set(t, loadTable(t).then((rows) => withDerived(bp, t, rows, today, now)));
+    if (!cache.has(t)) cache.set(t, loadTable(t).then((rows) => addComputed(bp, t, rows, loadTable, now, depth + 1)));
     return cache.get(t)!;
   };
   const out = records.map((r) => ({ ...r, data: { ...r.data } }));
@@ -42,22 +50,54 @@ export async function addComputed(bp: Blueprint, tableId: string, records: Recor
       r.data[f.id] = aggregate(f, linked);
     }
   }
-  // Derived statuses last: their rules may use rollups. Never stored, so never out of date.
-  for (const f of derived) for (const r of out) r.data[f.id] = deriveOption(f, r.data, today, now);
+  // Then formulas (they may use rollups and each other), then derived statuses (they may use both).
+  const order = formulaOrder(formulas);
+  for (const r of out) {
+    for (const f of formulas) r.data[f.id] = null;
+    for (const f of order) {
+      const node = compiledFormula(f.expression);
+      r.data[f.id] = node instanceof FormulaError ? null : evaluateFormula(node, r.data);
+    }
+    for (const f of derived) r.data[f.id] = deriveOption(f, r.data, today, now);
+  }
+  return out;
+}
+
+type Formula = Extract<Field, { type: "formula" }>;
+
+function memo(load: LoadTable): LoadTable {
+  const raw = new Map<string, Promise<RecordRow[]>>();
+  return (t) => {
+    if (!raw.has(t)) raw.set(t, load(t));
+    return raw.get(t)!;
+  };
+}
+
+/** Formulas in dependency order; ones caught in a cycle are left out (they show no value). */
+function formulaOrder(formulas: Formula[]): Formula[] {
+  const byId = new Map(formulas.map((f) => [f.id, f]));
+  const done = new Set<string>();
+  const visiting = new Set<string>();
+  const out: Formula[] = [];
+  const visit = (f: Formula): boolean => {
+    if (done.has(f.id)) return true;
+    if (visiting.has(f.id)) return false;
+    visiting.add(f.id);
+    const node = compiledFormula(f.expression);
+    const deps = node instanceof FormulaError ? [] : [...formulaFields(node)].map((id) => byId.get(id)).filter((x): x is Formula => !!x);
+    const ok = deps.every(visit);
+    visiting.delete(f.id);
+    if (ok) {
+      done.add(f.id);
+      out.push(f);
+    }
+    return ok;
+  };
+  formulas.forEach(visit);
   return out;
 }
 
 type Derived = Field & { derive: DeriveRules };
-
-function withDerived(bp: Blueprint, tableId: string, rows: RecordRow[], today: string, now: Date): RecordRow[] {
-  const derived = (bp.tables.find((t) => t.id === tableId)?.fields ?? []).filter((f): f is Derived => "derive" in f && !!f.derive);
-  if (!derived.length) return rows;
-  return rows.map((r) => {
-    const data = { ...r.data };
-    for (const f of derived) data[f.id] = deriveOption(f, data, today, now);
-    return { ...r, data };
-  });
-}
 
 /** The option a derived status shows for these values: the first rule that fully holds. */
 export function deriveOption(f: Derived, data: Record<string, unknown>, today: string, now: Date): string | null {
@@ -104,6 +144,11 @@ function aggregate(f: Rollup, rows: RecordRow[]): unknown {
     const key = (r: RecordRow) => String((f.sortBy ? r.data[f.sortBy] : r.createdAt) ?? "");
     const newest = [...rows].sort((a, b) => key(b).localeCompare(key(a)))[0];
     return newest ? (newest.data[f.field] ?? null) : null;
+  }
+  // Earliest / latest of dates (ISO strings compare in order).
+  if (f.agg === "min" || f.agg === "max") {
+    const dates = rows.map((r) => r.data[f.field]).filter((v): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v)).sort();
+    if (dates.length) return f.agg === "min" ? dates[0] : dates[dates.length - 1];
   }
   const nums = rows.map((r) => Number(r.data[f.field])).filter((n) => Number.isFinite(n));
   if (f.agg === "sum") return nums.reduce((a, b) => a + b, 0);

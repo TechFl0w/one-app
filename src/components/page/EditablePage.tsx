@@ -151,7 +151,8 @@ export function EditablePage({
         }
       />
       {/* A page that is one full-screen component owns its design: no app title, just Edit. */}
-      {!editing && isFullPageComponent(blocks) ? (
+      {/* A record page's title is the record itself (its details block): just Edit here. */}
+      {!editing && (isFullPageComponent(blocks) || page.recordOf) ? (
         <div className="mb-2 flex justify-end"><EditButton /></div>
       ) : (
       <div className="mb-6 flex items-center gap-3">

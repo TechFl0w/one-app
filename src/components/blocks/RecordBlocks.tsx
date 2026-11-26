@@ -1,8 +1,10 @@
-import type { Block, Field, Table } from "@/schema/blueprint";
+import type { Block, Blueprint, Field, Table } from "@/schema/blueprint";
 import type { RecordRow } from "@/schema/records";
 import { groupField, recordLabel, type Group, type LinkLabels } from "@/engine/blockData";
 import { FieldValue, formatMoney, valueText, type FormatCtx } from "./format";
-import { OpenRecord, RecordRowLink } from "./RecordOpener";
+import { EditRecordButton, OpenRecord, RecordFile, RecordRowLink } from "./RecordOpener";
+import { recordPath } from "@/engine/recordPage";
+import { DragBoard } from "./DragBoard";
 
 type RecordsProps = {
   block: Block;
@@ -71,9 +73,22 @@ function detailFields(table: Table, exclude: (string | undefined)[], max: number
   return table.fields.filter((f) => !skip.has(f.id) && f.type !== "formula" && f.type !== "rollup").sort((a, b) => rank(a) - rank(b)).slice(0, max);
 }
 
-export function ListBlock({ table, records, total, labels, ctx }: RecordsProps) {
+/** Numbers and amounts say what they are ("In stock 3", "Balance $305"); names, badges and dates speak for themselves. */
+function Labelled({ field }: { field: Field }) {
+  const numeric = field.type === "number" || field.type === "money" || field.type === "formula" || (field.type === "rollup" && field.agg !== "latest");
+  return numeric ? <span className="mr-1 text-muted/70">{field.label}</span> : null;
+}
+
+/** Fields a list item or card shows under its title: options.fields, else a sensible few. */
+function shownFields(block: Block, table: Table, exclude: (string | undefined)[], max: number): Field[] {
+  const wanted = strings(block.options?.fields);
+  if (wanted) return wanted.map((id) => table.fields.find((f) => f.id === id)).filter((f): f is Field => !!f && !exclude.includes(f.id));
+  return detailFields(table, exclude, max);
+}
+
+export function ListBlock({ block, table, records, total, labels, ctx }: RecordsProps) {
   if (!records.length) return <Empty>Nothing here right now.</Empty>;
-  const details = detailFields(table, [], 3);
+  const details = shownFields(block, table, [], 3);
   return (
     <div className="h-full overflow-auto">
       <ul className="divide-y divide-line/60">
@@ -84,6 +99,7 @@ export function ListBlock({ table, records, total, labels, ctx }: RecordsProps) 
               {details.map((f) =>
                 r.data[f.id] == null || r.data[f.id] === "" ? null : (
                   <span key={f.id} className="max-w-full truncate">
+                    <Labelled field={f} />
                     <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
                   </span>
                 ),
@@ -99,7 +115,7 @@ export function ListBlock({ table, records, total, labels, ctx }: RecordsProps) 
 
 export function BoardBlock({ block, table, records, labels, ctx, groups = [] }: RecordsProps & { groups?: Group[] }) {
   const gf = groupField(table, block)!;
-  const details = detailFields(table, [gf.id], 2);
+  const details = shownFields(block, table, [gf.id], 2);
   const byGroup = new Map<string | null, RecordRow[]>();
   for (const r of records) {
     const v = r.data[gf.id];
@@ -107,39 +123,31 @@ export function BoardBlock({ block, table, records, labels, ctx, groups = [] }: 
     byGroup.set(key, [...(byGroup.get(key) ?? []), r]);
   }
   const columns: Group[] = [...groups, ...(byGroup.has(null) ? [{ id: null, label: `No ${gf.label.toLowerCase()}` }] : [])];
-
-  return (
-    <div className="flex h-full gap-3 overflow-x-auto px-5 pb-5">
-      {columns.map((g) => {
-        const items = byGroup.get(g.id) ?? [];
-        return (
-          <div key={g.id ?? "_none"} className="flex w-64 shrink-0 flex-col rounded-2xl bg-ground p-2">
-            <div className="flex items-center gap-2 px-2 py-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ background: g.color ?? "var(--muted)" }} />
-              <span className="truncate text-sm font-semibold">{g.label}</span>
-              <span className="ml-auto text-xs text-muted">{items.length}</span>
-            </div>
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-0.5">
-              {items.map((r) => (
-                <OpenRecord as="article" key={r.id} table={table.id} recordId={r.id} className="rounded-xl border border-line bg-card p-3 shadow-soft hover:border-accent/40">
-                  <p className="truncate text-sm font-semibold">{recordLabel(table, r, labels)}</p>
-                  <div className="mt-1.5 space-y-1 text-xs text-muted">
-                    {details.map((f) =>
-                      r.data[f.id] == null ? null : (
-                        <div key={f.id} className="truncate">
-                          <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
-                        </div>
-                      ),
-                    )}
-                  </div>
-                </OpenRecord>
-              ))}
-            </div>
+  const cards = records.map((r) => {
+    const v = r.data[gf.id];
+    return {
+      id: r.id,
+      group: typeof v === "string" && groups.some((g) => g.id === v) ? v : null,
+      node: (
+        <OpenRecord as="article" table={table.id} recordId={r.id} className="rounded-xl border border-line bg-card p-3 shadow-soft hover:border-accent/40">
+          <p className="truncate text-sm font-semibold">{recordLabel(table, r, labels)}</p>
+          <div className="mt-1.5 space-y-1 text-xs text-muted">
+            {details.map((f) =>
+              r.data[f.id] == null ? null : (
+                <div key={f.id} className="truncate">
+                  <Labelled field={f} />
+                  <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
+                </div>
+              ),
+            )}
           </div>
-        );
-      })}
-    </div>
-  );
+        </OpenRecord>
+      ),
+    };
+  });
+  // Drag cards between columns to change their stage; a column field that follows rules can't be set by hand.
+  const locked = "derive" in gf && gf.derive ? `${gf.label} follows the dates, so cards move by themselves.` : undefined;
+  return <DragBoard table={table.id} field={gf.id} columns={columns} cards={cards} locked={locked} />;
 }
 
 export function NumberBlock({
@@ -170,6 +178,68 @@ export function NotesBlock({ block }: { block: Block }) {
   return (
     <div className="h-full overflow-auto whitespace-pre-wrap px-5 pb-5 text-sm leading-relaxed text-muted">
       {text || "Empty note."}
+    </div>
+  );
+}
+
+/**
+ * A record page's details: every field of the record (computed ones too), links go to the
+ * linked record's page, photos show as pictures. Edit opens the record's form.
+ */
+export function DetailsBlock({ table, record, labels, ctx, basePath }: { table: Table; record: RecordRow; labels: LinkLabels; ctx: FormatCtx; blueprint?: Blueprint; basePath?: string }) {
+  const title = table.fields.find((f) => f.id === table.primaryField) ?? table.fields.find((f) => f.type === "text");
+  const status = table.fields.filter((f) => f.type === "status" && f.id !== title?.id);
+  const files = table.fields.filter((f) => f.type === "file");
+  const rest = table.fields.filter((f) => f.id !== title?.id && !status.includes(f) && !files.includes(f) && f.type !== "hours");
+  const value = (f: Field) => {
+    const v = record.data[f.id];
+    if (f.type === "link" && basePath && v) {
+      const ids = (Array.isArray(v) ? v : [v]).map(String);
+      return (
+        <span className="inline-flex flex-wrap gap-x-2">
+          {ids.map((id) => (
+            <a key={id} href={recordPath(basePath, f.to, id)} className="font-medium text-accent hover:underline">
+              {labels[id] ?? "—"}
+            </a>
+          ))}
+        </span>
+      );
+    }
+    return <FieldValue field={f} value={v} labels={labels} ctx={ctx} />;
+  };
+  return (
+    <div className="card flex h-full flex-col overflow-hidden">
+      <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted">{table.label.replace(/s$/, "")}</p>
+          <h2 className="truncate text-xl font-bold tracking-tight">{title ? (title.type === "link" ? labels[String(record.data[title.id])] ?? "—" : valueText(title, record.data[title.id], labels, ctx) || "Untitled") : "Untitled"}</h2>
+          {status.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {status.map((f) => (
+                <span key={f.id} className="inline-flex items-center gap-1.5 text-xs text-muted">
+                  {f.label} <FieldValue field={f} value={record.data[f.id]} labels={labels} ctx={ctx} />
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <EditRecordButton table={table.id} recordId={record.id} />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {files.some((f) => record.data[f.id]) && (
+          <div className="mb-4 flex flex-wrap gap-3">
+            {files.map((f) => (record.data[f.id] ? <RecordFile key={f.id} file={record.data[f.id]} label={f.label} /> : null))}
+          </div>
+        )}
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+          {rest.map((f) => (
+            <div key={f.id} className={`min-w-0 ${f.type === "long_text" ? "sm:col-span-2" : ""}`}>
+              <dt className="text-xs text-muted">{f.label}</dt>
+              <dd className={`mt-0.5 text-sm ${f.type === "long_text" ? "whitespace-pre-wrap" : "truncate"}`}>{value(f)}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </div>
   );
 }

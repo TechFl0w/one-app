@@ -8,7 +8,7 @@ export type Device = "phone" | "tablet" | "desktop";
 export function menuPages(blueprint: Blueprint): Page[] {
   return blueprint.pages
     .map((p, i) => ({ p, i }))
-    .filter(({ p }) => !p.hidden)
+    .filter(({ p }) => !p.hidden && !p.recordOf)
     .sort((a, b) => a.p.menuOrder - b.p.menuOrder || a.i - b.i)
     .map(({ p }) => p);
 }

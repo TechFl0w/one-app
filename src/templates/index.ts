@@ -3,6 +3,7 @@ import type { Template } from "./types";
 import { appointments } from "./appointments";
 import { chairRental } from "./chairRental";
 import { makerShop } from "./makerShop";
+import { mechanic } from "./mechanic";
 
 export type { Answers, Built, Question, Seed, Template } from "./types";
 
@@ -16,5 +17,5 @@ const blank: Template = {
   build: (business) => ({ blueprint: emptyBlueprint({ ...business, type: "other" }), seed: [] }),
 };
 
-export const TEMPLATES: Template[] = [appointments, chairRental, makerShop, blank];
+export const TEMPLATES: Template[] = [appointments, mechanic, chairRental, makerShop, blank];
 export const templateById = (id: string) => TEMPLATES.find((t) => t.id === id);

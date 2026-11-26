@@ -2,7 +2,9 @@ import type { Block, Blueprint } from "@/schema/blueprint";
 import type { RecordStore } from "@/engine/store";
 import { loadBlockData } from "@/engine/blockData";
 import { BlockFrame } from "./BlockFrame";
-import { BoardBlock, Empty, ListBlock, NotesBlock, NumberBlock, TableBlock } from "./RecordBlocks";
+import { BoardBlock, DetailsBlock, Empty, ListBlock, NotesBlock, NumberBlock, TableBlock } from "./RecordBlocks";
+import { displayTable } from "@/engine/blockData";
+import { recordDefaults } from "@/engine/recordPage";
 import { AddRecordButton } from "./RecordOpener";
 import { CalendarBlock } from "./CalendarBlock";
 import { FormBlock, type FormAction } from "./FormBlock";
@@ -27,6 +29,8 @@ export interface BlockEnv {
   now?: Date;
   /** Data access for generated components (server actions) and where the app's pages live. */
   sandbox?: { bridge: SandboxBridge; basePath: string };
+  /** On a record page: the record the page is about. */
+  recordId?: string;
 }
 
 export async function BlockView({ block, env, fullPage = false }: { block: Block; env: BlockEnv; fullPage?: boolean }) {
@@ -43,7 +47,7 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
         </BlockFrame>
       );
     }
-    const props = block.options?.props && typeof block.options.props === "object" ? (block.options.props as Record<string, unknown>) : {};
+    const props = { ...(block.options?.props && typeof block.options.props === "object" ? (block.options.props as Record<string, unknown>) : {}), ...(env.recordId ? { recordId: env.recordId } : {}) };
     return (
       // Sized to its content: outside Edit mode the page lets rows shrink and grow around it.
       <div className={fullPage ? "" : "h-full overflow-hidden rounded-card"}>
@@ -61,7 +65,7 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
       </div>
     );
   }
-  const data = await loadBlockData(block, blueprint, store, { now });
+  const data = await loadBlockData(block, blueprint, store, { now, recordId: env.recordId });
 
   switch (data.kind) {
     case "error":
@@ -101,10 +105,14 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
         </BlockFrame>
       );
     }
+    case "details":
+      return <DetailsBlock table={displayTable(blueprint, data.table)} record={data.record} labels={data.labels} ctx={ctx} blueprint={blueprint} basePath={env.sandbox?.basePath} />;
     case "records": {
-      const props = { block, table: data.table, records: data.records, total: data.total, labels: data.labels, ctx };
+      const props = { block, table: displayTable(blueprint, data.table), records: data.records, total: data.total, labels: data.labels, ctx };
+      // Adding from a list on a record page links the new record to it (a line to its job).
+      const defaults = recordDefaults(block.source?.filters, env.recordId);
       return (
-        <BlockFrame title={title} action={<span className="flex items-center gap-2 text-xs text-muted">{data.total}<AddRecordButton table={data.table.id} label={data.table.label.toLowerCase()} /></span>}>
+        <BlockFrame title={title} action={<span className="flex items-center gap-2 text-xs text-muted">{data.total}<AddRecordButton table={data.table.id} label={data.table.label.toLowerCase()} defaults={defaults} /></span>}>
           {block.type === "table" && <TableBlock {...props} />}
           {block.type === "list" && <ListBlock {...props} />}
           {block.type === "board" && <BoardBlock {...props} groups={data.groups} />}

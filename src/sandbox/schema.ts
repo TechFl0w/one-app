@@ -9,6 +9,7 @@ export function sandboxSchema(bp: Blueprint): SandboxSchema {
       id: t.id,
       label: t.label,
       primaryField: t.primaryField,
+      ...(t.openIn ? { openIn: t.openIn } : {}),
       fields: t.fields.map((f) => ({
         id: f.id,
         label: f.label,

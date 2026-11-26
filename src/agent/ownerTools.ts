@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type Anthropic from "@anthropic-ai/sdk";
 import { FieldId, TableId, type Blueprint } from "@/schema/blueprint";
-import { Operation } from "@/schema/changeSet";
+import { OP_RISK, Operation } from "@/schema/changeSet";
 import { RecordFilter, RecordId } from "@/schema/records";
 import { previewChangeSet, type OpPreview } from "@/engine/changeSet";
 import { recordLabel } from "@/engine/blockData";
@@ -13,6 +13,7 @@ import { overlapFixOps } from "@/engine/editing";
 import { applyChangeSet } from "@/engine/changeSet";
 import { compileComponent, compileFunction } from "@/codegen/compile";
 import { checkDataRules } from "@/engine/dataRules";
+import { describeCondition, describeStep, describeTrigger, planStep } from "@/automations/engine";
 import { checkReferences } from "@/codegen/references";
 import { checkStandards } from "@/codegen/standards";
 import { compileStyles } from "@/codegen/styles";
@@ -45,6 +46,8 @@ export interface OwnerTool<I = unknown> {
   /** Plain-language lines for a confirmation, for risky calls. */
   describe?: (input: I, bp: Blueprint) => string[];
   run: (backend: OwnerBackend, input: I, effects: ToolEffects, opts: { confirmed: boolean }) => Promise<unknown>;
+  /** For risky calls that mix safe and risky parts: run `now` right away, confirm only `later`. Null when it can't be split. */
+  split?: (input: I, bp: Blueprint) => { now: I; later: I } | null;
   /** After a confirmed run: a short message for the owner about the result (e.g. a test run's output). */
   report?: (result: unknown) => string | null;
 }
@@ -156,6 +159,14 @@ export const OWNER_TOOLS: OwnerTool[] = [
     describe: (i, bp) => {
       const p = previewChangeSet(bp, { baseVersion: bp.version, source: "ai", ops: i.ops });
       return p.ok ? p.ops.map((o) => o.description) : [i.summary];
+    },
+    split: (i, bp) => {
+      const now = i.ops.filter((o) => OP_RISK[o.op] === "safe");
+      const later = i.ops.filter((o) => OP_RISK[o.op] !== "safe");
+      if (!now.length || !later.length) return null;
+      // Only when the safe part stands on its own (it mustn't need anything from the risky part).
+      const p = previewChangeSet(bp, { baseVersion: bp.version, source: "ai", ops: now });
+      return p.ok && !p.requiresConfirmation ? { now: { ...i, ops: now }, later: { ...i, ops: later } } : null;
     },
     run: async (b, i, fx, { confirmed }) => {
       const bp = await b.blueprint();
@@ -438,7 +449,19 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const bp = await b.blueprint();
       const a = bp.automations.find((x) => x.id === i.id);
       if (!a) throw new Error(`Automation ${i.id} not found`);
-      return a;
+      const steps = a.actions.map((x) => describeStep(bp, planStep(x, { tableId: a.trigger.table ?? "", recordId: "", data: {}, automation: a })));
+      const issues = checkDataRules(bp).filter((m) => m.includes(`“${a.label}”`));
+      return {
+        id: a.id,
+        label: a.label,
+        on: a.enabled,
+        when: describeTrigger(bp, a),
+        only_if: a.conditions.map((c) => describeCondition(bp, a, c)),
+        then: steps,
+        note: a.conditions.length ? "The conditions are checked again right before it runs and after every wait." : "No conditions: it runs for every matching record.",
+        ...(issues.length ? { fix_these: issues } : {}),
+        definition: a,
+      };
     },
   }),
 ];
@@ -461,7 +484,8 @@ export function labelFor(bp: Blueprint, tableId: string, record: Parameters<type
   return t ? recordLabel(t, record) : record.id;
 }
 
-export type ToolOutcome = { kind: "result"; value: unknown } | { kind: "error"; message: string } | { kind: "pending"; action: PendingAction };
+/** `applied`: what already ran right away when only part of the call needed confirmation. */
+export type ToolOutcome = { kind: "result"; value: unknown } | { kind: "error"; message: string } | { kind: "pending"; action: PendingAction; applied?: unknown };
 
 /**
  * Validates and runs one owner tool call. Risky calls don't run: they come back as a
@@ -478,7 +502,16 @@ export async function executeOwnerTool(name: string, rawInput: unknown, backend:
   try {
     const bp = await backend.blueprint();
     const risk = typeof t.risk === "function" ? t.risk(parsed.data, bp) : t.risk;
-    if (risk === "risky") return { kind: "pending", action: { id: newId(), tool: t.name, input: parsed.data, items: t.describe?.(parsed.data, bp) ?? [name] } };
+    if (risk === "risky") {
+      // Mixed calls (new tables + one automation): the safe part runs now, only the rest waits.
+      const parts = t.split?.(parsed.data, bp);
+      if (parts) {
+        const applied = await t.run(backend, parts.now, effects, { confirmed: false });
+        const after = await backend.blueprint();
+        return { kind: "pending", applied, action: { id: newId(), tool: t.name, input: parts.later, items: t.describe?.(parts.later, after) ?? [name] } };
+      }
+      return { kind: "pending", action: { id: newId(), tool: t.name, input: parsed.data, items: t.describe?.(parsed.data, bp) ?? [name] } };
+    }
     return { kind: "result", value: await t.run(backend, parsed.data, effects, { confirmed: false }) };
   } catch (e) {
     return { kind: "error", message: e instanceof Error ? e.message : String(e) };

@@ -5,6 +5,7 @@ import { checkDataRules } from "./dataRules";
 
 const leases = (derive: boolean) => ({
   id: "tbl_leases", label: "Leases", fields: [
+    { id: "fld_tenant", label: "Tenant", type: "text" },
     { id: "fld_end", label: "End", type: "date" },
     { id: "fld_email", label: "Email", type: "email" },
     { id: "fld_state", label: "Status", type: "status", options: [{ id: "opt_active", label: "Active" }, { id: "opt_ended", label: "Ended" }],
@@ -17,6 +18,11 @@ describe("data rules", () => {
   it("asks for statuses that describe dates to follow them", () => {
     expect(checkDataRules(bp(false, [])).join("\n")).toMatch(/Leases › Status .* follow the dates/);
     expect(checkDataRules(bp(true, []))).toEqual([]);
+  });
+
+  it("asks for a readable title", () => {
+    const bad = Blueprint.parse({ ...demoBlueprint, tables: [...demoBlueprint.tables, { id: "tbl_x", label: "Readings", fields: [{ id: "fld_v", label: "Value", type: "number" }] }], automations: [] });
+    expect(checkDataRules(bad).join("\n")).toMatch(/Readings has no readable title/);
   });
 
   it("flags automations that would act on stale facts", () => {

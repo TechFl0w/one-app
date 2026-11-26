@@ -250,3 +250,19 @@ describe("guards", () => {
     }
   });
 });
+
+describe("plain words", () => {
+  it("describes conditions, including statuses pulled from a linked record and relative dates", async () => {
+    const { describeCondition } = await import("./engine");
+    const bp = Blueprint.parse({
+      ...demoBlueprint,
+      tables: [...demoBlueprint.tables,
+        { id: "tbl_l", label: "Leases", fields: [{ id: "fld_end", label: "Ends", type: "date" }, { id: "fld_st", label: "Status", type: "status", options: [{ id: "opt_ended", label: "Ended" }] }] },
+        { id: "tbl_p", label: "Payments", fields: [{ id: "fld_lease", label: "Lease", type: "link", to: "tbl_l" }, { id: "fld_ls", label: "Lease status", type: "rollup", via: "fld_lease", field: "fld_st", agg: "latest" }, { id: "fld_due", label: "Due", type: "date" }] },
+      ],
+    });
+    const a = { id: "aut_x", label: "X", enabled: true, trigger: { type: "date_reached", table: "tbl_p", field: "fld_due" }, conditions: [], actions: [{ type: "notify" }] } as unknown as Automation;
+    expect(describeCondition(bp, a, { field: "fld_ls", op: "neq", value: "opt_ended" })).toBe("Lease status is not Ended");
+    expect(describeCondition(bp, a, { field: "fld_due", op: "lte", value: "@today+30d" })).toBe("Due is on or before 30 days from today");
+  });
+});

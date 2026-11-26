@@ -273,3 +273,31 @@ export function describeTrigger(bp: Blueprint, a: Automation): string {
       return `When ${a.trigger.type.replace(/_/g, " ")} (not available yet)`;
   }
 }
+
+/** "Status is not Paid", "Ends is on or before 30 days from today" — plain words for a condition. */
+export function describeCondition(bp: Blueprint, a: Automation, c: Automation["conditions"][number]): string {
+  const table = bp.tables.find((t) => t.id === a.trigger.table);
+  const f = table?.fields.find((x) => x.id === c.field);
+  const label = f?.label ?? c.field;
+  // A rollup of a status (a payment's lease status) uses that status's option labels.
+  const source = f?.type === "rollup" ? (() => {
+    const via = f.from ? undefined : table?.fields.find((x) => x.id === f.via);
+    const target = bp.tables.find((t) => t.id === (f.from ?? (via?.type === "link" ? via.to : undefined)));
+    return target?.fields.find((x) => x.id === f.field);
+  })() : f;
+  const val = (v: unknown) => {
+    if (source && "options" in source) return source.options.find((o) => o.id === v)?.label ?? String(v);
+    if (typeof v === "string" && v.startsWith("@today")) {
+      const m = /^@today([+-])(\d+)d$/.exec(v);
+      return m ? `${m[2]} days ${m[1] === "+" ? "from" : "before"} today` : "today";
+    }
+    if (v === "@now") return "now";
+    if (typeof v === "boolean") return v ? "ticked" : "not ticked";
+    return String(v);
+  };
+  if (f?.type === "checkbox" && c.op === "eq") return `${label} is ${val(c.value)}`;
+  const ops: Record<string, string> = { eq: "is", neq: "is not", gt: "is after", gte: "is on or after", lt: "is before", lte: "is on or before", contains: "contains", empty: "is empty", not_empty: "is filled in" };
+  const isDate = f?.type === "date" || f?.type === "datetime";
+  const word = !isDate && ["gt", "gte", "lt", "lte"].includes(c.op) ? { gt: "is more than", gte: "is at least", lt: "is less than", lte: "is at most" }[c.op as "gt"] : ops[c.op];
+  return c.op === "empty" || c.op === "not_empty" ? `${label} ${word}` : `${label} ${word} ${val(c.value)}`;
+}

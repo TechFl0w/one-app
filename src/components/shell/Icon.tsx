@@ -18,6 +18,8 @@ import {
   Sun,
   Users,
   Wrench,
+  Truck,
+  UserCog,
   type LucideIcon,
 } from "lucide-react";
 
@@ -41,6 +43,10 @@ export const PAGE_ICONS: Record<string, LucideIcon> = {
   car: Car,
   tools: Wrench,
   box: Box,
+  wrench: Wrench,
+  clipboard: ClipboardList,
+  truck: Truck,
+  team: UserCog,
 };
 
 export function PageIcon({ name, className }: { name?: string; className?: string }) {

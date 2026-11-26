@@ -1,17 +1,18 @@
 import Link from "next/link";
 import { CalendarCheck, Inbox, Zap } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
-import { demoBlueprint } from "@/demo/salon";
+import { currentDemo } from "@/demo/current";
 import { demoSandboxCreate, demoSandboxGet, demoSandboxList, demoSandboxRemove, demoSandboxUpdate } from "./sandbox-actions";
 
 /** Sample salon running on in-memory data — no account or Supabase needed. */
 // The assistant's server actions run here: rebuilding pages from a design can take a few minutes.
 export const maxDuration = 300;
 
-export default function DemoLayout({ children }: LayoutProps<"/demo">) {
+export default async function DemoLayout({ children }: LayoutProps<"/demo">) {
+  const demo = await currentDemo();
   return (
     <AppShell
-      blueprint={demoBlueprint}
+      blueprint={demo.blueprint}
       mode={{ kind: "local" }}
       basePath="/demo"
       sandbox={{ list: demoSandboxList, get: demoSandboxGet, create: demoSandboxCreate, update: demoSandboxUpdate, remove: demoSandboxRemove }}
@@ -31,7 +32,7 @@ export default function DemoLayout({ children }: LayoutProps<"/demo">) {
       }
       banner={
         <div className="border-b border-line bg-accent-tint px-4 py-2 text-center text-sm text-accent md:px-8">
-          Demo salon with sample data. <Link href="/login" className="font-semibold underline">Create your own</Link>
+          {demo.type === "salon" ? "Demo salon" : `Demo: ${demo.blueprint.business.name}`} with sample data. <Link href="/login" className="font-semibold underline">Create your own</Link>
         </div>
       }
     >

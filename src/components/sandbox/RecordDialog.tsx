@@ -32,7 +32,8 @@ function toLocal(iso: string) {
 export function labelOf(t: Table | undefined, r: SandboxRecord) {
   const f = t?.fields.find((x) => x.id === t.primaryField) ?? t?.fields.find((x) => x.type === "text");
   const v = f ? r.data[f.id] : undefined;
-  return v == null || v === "" ? "Untitled" : String(v);
+  if (v == null || v === "") return "Untitled";
+  return f?.options?.find((o) => o.id === v)?.label ?? String(v);
 }
 
 /** Validates what a frame asked for: known table, known fields. */
@@ -53,7 +54,9 @@ export function parseFormRequest(v: unknown, schema: SandboxSchema): RecordFormR
  */
 export function RecordDialog({ request, schema, bridge, onDone }: { request: RecordFormRequest | null; schema: SandboxSchema; bridge: SandboxBridge; onDone: (saved: SandboxRecord | null, deleted?: boolean) => void }) {
   const t = schema.tables.find((x) => x.id === request?.table);
-  const title = request?.title ?? (t ? (request?.recordId ? `Edit ${t.label.toLowerCase()}` : `New ${t.label.toLowerCase()}`) : "");
+  // "Edit client" / "New booking": one record, so the table's name in the singular.
+  const one = t ? singular(t.label).toLowerCase() : "";
+  const title = request?.title ?? (t ? (request?.recordId ? `Edit ${one}` : `New ${one}`) : "");
   return (
     <Dialog open={!!request && !!t} onClose={() => onDone(null)} title={title}>
       {request && t && <Body key={`${request.table}:${request.recordId ?? "new"}`} request={request} table={t} schema={schema} bridge={bridge} onDone={onDone} />}
@@ -90,10 +93,19 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
       );
     const linked = [...new Set(shown.filter((f) => f.type === "link" && f.to).map((f) => f.to!))];
     for (const to of linked)
-      bridge.list({ table: to, limit: 500 }).then(unwrap).then((res) => {
-        if (!live) return;
+      bridge.list({ table: to, limit: 500 }).then(unwrap).then(async (res) => {
         const lt = schema.tables.find((x) => x.id === to);
-        const opts = res.records.map((r) => ({ value: r.id, label: labelOf(lt, r) })).sort((a, b) => a.label.localeCompare(b.label));
+        // A title that is itself a link (a lease named by its tenant) shows that record's name.
+        const title = lt?.fields.find((f) => f.id === lt.primaryField);
+        const names = new Map<string, string>();
+        if (title?.type === "link" && title.to) {
+          const tt = schema.tables.find((x) => x.id === title.to);
+          const ids = [...new Set(res.records.map((r) => r.data[title.id]).filter((v): v is string => typeof v === "string"))];
+          if (ids.length) for (const r of unwrap(await bridge.list({ table: title.to, limit: 500 })).records) if (ids.includes(r.id)) names.set(r.id, labelOf(tt, r));
+        }
+        if (!live) return;
+        const label = (r: SandboxRecord) => (title?.type === "link" ? names.get(String(r.data[title.id])) ?? "Untitled" : labelOf(lt, r));
+        const opts = res.records.map((r) => ({ value: r.id, label: label(r) })).sort((a, b) => a.label.localeCompare(b.label));
         setLinks((x) => ({ ...x, [to]: opts }));
       }, () => {});
     return () => {
@@ -282,4 +294,12 @@ function FileField({ id, name, required, initial, table, field, label, bridge }:
       {error && <p className="mt-1 text-sm text-red-700">{error}</p>}
     </div>
   );
+}
+
+/** "Clients" → "Client", "Parts used" → "Part used", "Statuses" → "Status", "Repairs" → "Repair". */
+export function singular(label: string): string {
+  const words = label.split(" ");
+  const w = words[0];
+  const one = /ies$/i.test(w) ? w.replace(/ies$/i, "y") : /(ss|us|is)$/i.test(w) ? w : /(ches|shes|xes|sses|uses)$/i.test(w) ? w.replace(/es$/i, "") : w.replace(/s$/i, "");
+  return [one, ...words.slice(1)].join(" ");
 }

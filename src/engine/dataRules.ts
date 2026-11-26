@@ -23,6 +23,14 @@ export function checkDataRules(bp: Blueprint): string[] {
     }
   }
 
+  // 0. Every table needs a readable title: links and ids make pickers and lists unreadable.
+  for (const t of bp.tables) {
+    const title = t.fields.find((f) => f.id === t.primaryField) ?? t.fields.find((f) => f.type === "text");
+    // Text, contact details, a link (shown as the linked record's name) or a choice (its label) all read well.
+    if (!title || !["text", "email", "phone", "link", "status", "choice"].includes(title.type))
+      out.push(`${t.label} has no readable title${title ? ` (${title.label} is a ${title.type})` : ""}. Add a short text field people recognise it by (e.g. “Maya — Room 1”) and make it the title field.`);
+  }
+
   for (const a of bp.automations) {
     if (!a.enabled) continue;
     const t = table(a.trigger.table);

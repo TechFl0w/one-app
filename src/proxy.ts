@@ -8,6 +8,12 @@ const PUBLIC_PATHS = ["/login", "/auth"];
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   // The demo and the onboarding preview run without a session or database.
+  // /demo?type=mechanic picks which business type the demo shows (remembered in a cookie).
+  if (path === "/demo" && request.nextUrl.searchParams.has("type")) {
+    const res = NextResponse.redirect(new URL("/demo", request.url));
+    res.cookies.set("demo_type", request.nextUrl.searchParams.get("type")!.replace(/[^a-z_]/g, "").slice(0, 30), { path: "/demo", sameSite: "lax" });
+    return res;
+  }
   if (path === "/demo" || path.startsWith("/demo/") || path === "/start" || path.startsWith("/book/") || path === "/paid") return NextResponse.next();
   // Cron routes (CRON_SECRET) and webhooks (signatures) authenticate themselves, not with a session.
   if (path.startsWith("/api/cron/") || path.startsWith("/api/webhooks/") || path.startsWith("/api/hooks/") || path === "/api/fn/kit") return NextResponse.next(); // signed or token, no session

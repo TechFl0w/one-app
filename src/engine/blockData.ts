@@ -1,6 +1,7 @@
 import { isComputedField, type Block, type Blueprint, type Field, type Table } from "@/schema/blueprint";
 import type { RecordFilter, RecordQuery, RecordRow } from "@/schema/records";
 import { loadAllVia, queryWithComputed } from "./computed";
+import { RECORD_TOKEN } from "./recordPage";
 import { buildAggregate, buildRecordQuery, RecordError, type QueryContext } from "./records";
 import type { RecordStore } from "./store";
 
@@ -13,6 +14,7 @@ export type BlockData =
   | { kind: "records"; table: Table; records: RecordRow[]; total: number; labels: LinkLabels; groups?: Group[] }
   | { kind: "number"; table: Table; value: number | null; field?: Field }
   | { kind: "form"; table: Table; fields: Field[]; choices: Record<string, { id: string; label: string }[]> }
+  | { kind: "details"; table: Table; record: RecordRow; labels: LinkLabels }
   | { kind: "static" }
   | { kind: "unsupported" }
   | { kind: "error"; message: string };
@@ -108,16 +110,20 @@ function queryBlock(blueprint: Blueprint, store: RecordStore, query: RecordQuery
 const computedIn = (table: Table, ids: (string | undefined)[]) => ids.some((id) => { const f = table.fields.find((x) => x.id === id); return !!f && isComputedField(f); });
 
 export async function loadBlockData(
-  block: Block,
+  original: Block,
   blueprint: Blueprint,
   store: RecordStore,
-  ctx: QueryContext = {},
+  ctx: QueryContext & { recordId?: string } = {},
 ): Promise<BlockData> {
-  if (block.type === "notes") return { kind: "static" };
-  if (!["table", "list", "board", "calendar", "number", "form"].includes(block.type)) return { kind: "unsupported" };
-  if (!block.source) return { kind: "error", message: "This block has no data source yet." };
-  const table = blueprint.tables.find((t) => t.id === block.source!.table);
+  if (original.type === "notes") return { kind: "static" };
+  if (!["table", "list", "board", "calendar", "number", "form", "details"].includes(original.type)) return { kind: "unsupported" };
+  if (!original.source) return { kind: "error", message: "This block has no data source yet." };
+  const table = blueprint.tables.find((t) => t.id === original.source!.table);
   if (!table) return { kind: "error", message: "The table behind this block no longer exists." };
+  // On a record page, "@record" in a filter is the record the page is about.
+  const scoped = (original.source.filters ?? []).some((f) => f.value === RECORD_TOKEN);
+  if ((scoped || original.type === "details") && !ctx.recordId) return { kind: "error", message: "This part shows one record; it appears on that record's page." };
+  const block = (scoped ? { ...original, source: { ...original.source, filters: original.source.filters!.map((f) => (f.value === RECORD_TOKEN ? { ...f, value: ctx.recordId } : f)) } } : original) as Block & { source: NonNullable<Block["source"]> };
 
   try {
     switch (block.type) {
@@ -133,6 +139,12 @@ export async function loadBlockData(
         }
         const value = await store.aggregate(buildAggregate(blueprint, block.source, ctx));
         return { kind: "number", table, value, field: table.fields.find((f) => f.id === block.source!.field) };
+      }
+
+      case "details": {
+        const [record] = await store.getMany(table.id, [ctx.recordId!]);
+        if (!record) return { kind: "error", message: "This record was deleted." };
+        return { kind: "details", table, record, labels: await linkLabels(blueprint, table, [record], store) };
       }
 
       case "form": {
@@ -173,4 +185,23 @@ export async function loadBlockData(
     throw e;
   }
   return { kind: "unsupported" };
+}
+
+/**
+ * The table as blocks should show it: a rollup of a status/choice/date shows like that field (a
+ * payment's "Lease status" is a coloured badge), a sum of money shows as money.
+ */
+export function displayTable(bp: Blueprint, table: Table): Table {
+  const fields = table.fields.map((f): Field => {
+    if (f.type !== "rollup") return f;
+    const via = f.from ? undefined : table.fields.find((x) => x.id === f.via);
+    const target = bp.tables.find((t) => t.id === (f.from ?? (via?.type === "link" ? via.to : undefined)));
+    const src = target?.fields.find((x) => x.id === f.field);
+    if (!src) return f;
+    if (f.agg === "latest" || ((f.agg === "min" || f.agg === "max") && (src.type === "date" || src.type === "datetime")))
+      return { ...src, id: f.id, label: f.label, required: false, ...("derive" in src ? { derive: undefined } : {}) } as Field;
+    if (!f.format && src.type === "money" && f.agg !== "count") return { ...f, format: "money" };
+    return f;
+  });
+  return { ...table, fields };
 }

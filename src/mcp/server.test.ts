@@ -55,16 +55,29 @@ describe("MCP server", () => {
   it("answers setup changes that would drift with fix_these_next", async () => {
     const { client } = await connect();
     const table = { id: "tbl_leases", label: "Leases", fields: [
+      { id: "fld_tenant", label: "Tenant", type: "text" },
       { id: "fld_end", label: "End", type: "date" },
       { id: "fld_state", label: "Status", type: "status", options: [{ id: "opt_active", label: "Active" }, { id: "opt_ended", label: "Ended" }] },
     ] };
     const r = await client.callTool({ name: "change_setup", arguments: { summary: "Add leases", ops: [{ op: "addTable", table }] } });
     expect(r.isError).toBeFalsy();
     expect(body(r).result.fix_these_next[0]).toMatch(/Leases › Status .* follow the dates/);
-    const fixed = { ...table, id: "tbl_leases2", fields: [table.fields[0], { ...table.fields[1], derive: { rules: [{ when: [{ field: "fld_end", op: "lt", value: "@today" }], option: "opt_ended" }], otherwise: "opt_active" } }] };
+    const fixed = { ...table, id: "tbl_leases2", fields: [table.fields[0], table.fields[1], { ...table.fields[2], derive: { rules: [{ when: [{ field: "fld_end", op: "lt", value: "@today" }], option: "opt_ended" }], otherwise: "opt_active" } }] };
     const ok = await (await connect()).client.callTool({ name: "change_setup", arguments: { summary: "Add leases", ops: [{ op: "addTable", table: fixed }] } });
     expect(body(ok).applied).toBeTruthy();
     expect(body(ok).result.fix_these_next).toBeUndefined();
+  });
+
+  it("applies the safe part of a mixed setup change now and sends only the rest for approval", async () => {
+    const { client, backend, approvals } = await connect();
+    const table = { id: "tbl_notes", label: "Notes", fields: [{ id: "fld_n_text", label: "Text", type: "text" }] };
+    const automation = { id: "aut_n", label: "Note added", enabled: true, trigger: { type: "record_created", table: "tbl_notes" }, conditions: [], actions: [{ type: "notify", message: "New note" }] };
+    const r = await client.callTool({ name: "change_setup", arguments: { summary: "Notes", ops: [{ op: "addTable", table }, { op: "addAutomation", automation }] } });
+    expect(body(r).status).toBe("partly_applied");
+    expect((await backend.blueprint()).tables.some((t) => t.id === "tbl_notes")).toBe(true);
+    expect((await backend.blueprint()).automations.some((a) => a.id === "aut_n")).toBe(false);
+    expect(approvals).toHaveLength(1);
+    expect((approvals[0].input as { ops: { op: string }[] }).ops.map((o) => o.op)).toEqual(["addAutomation"]);
   });
 
   it("never runs risky tools — sends them for approval", async () => {

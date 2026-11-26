@@ -4,7 +4,7 @@ import type { BridgeResult } from "./result";
 
 export interface SandboxSchema {
   business: { name: string; timezone: string; currency: string };
-  tables: { id: string; label: string; primaryField?: string; fields: { id: string; label: string; type: string; required?: boolean; computed?: boolean; options?: { id: string; label: string; color?: string }[]; to?: string }[] }[];
+  tables: { id: string; label: string; primaryField?: string; openIn?: "page" | "modal"; fields: { id: string; label: string; type: string; required?: boolean; computed?: boolean; options?: { id: string; label: string; color?: string }[]; to?: string }[] }[];
 }
 
 export interface SandboxRecord {
@@ -21,7 +21,7 @@ export type HostToFrame =
   /** Asks the frame for a picture of what it shows (the assistant's self-check). */
   | { type: "capture"; id: number };
 
-export type CallMethod = "records.list" | "records.get" | "records.create" | "records.update" | "records.remove" | "navigate" | "toast" | "form.open" | "files.upload" | "files.read" | "files.open";
+export type CallMethod = "records.list" | "records.get" | "records.create" | "records.update" | "records.remove" | "navigate" | "toast" | "form.open" | "files.upload" | "files.read" | "files.open" | "record.open";
 
 /** What a file field holds (schema/records FileValue). */
 export interface SandboxFile {
