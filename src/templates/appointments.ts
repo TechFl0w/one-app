@@ -182,6 +182,8 @@ export const appointments: Template = {
           id: "aut_review",
           label: "Ask for a review after a visit",
           trigger: { type: "status_changed", table: "tbl_bookings", field: "fld_status", to: optId("Done") },
+          // Checked again after the wait (a visit changed back from Done gets no request).
+          conditions: [{ field: "fld_status", op: "eq", value: optId("Done") }],
           actions: [
             { type: "wait", duration: "2h" },
             { type: "send_message", channel: "auto", to: "fld_client", template: "tpl_review" },

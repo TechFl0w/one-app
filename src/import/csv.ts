@@ -1,4 +1,4 @@
-import type { Field, Table } from "@/schema/blueprint";
+import { isComputedField, type Field, type Table } from "@/schema/blueprint";
 import { newId } from "@/engine/editing";
 import { localDateTimeToIso } from "@/engine/dates";
 
@@ -128,7 +128,7 @@ export function inferField(header: string, values: string[], taken: Set<string>,
 /** Which existing field each CSV column fills (by label), or null to skip it. */
 export function autoMap(headers: string[], table: Table): (string | null)[] {
   const used = new Set<string>();
-  const editable = table.fields.filter((f) => !["formula", "rollup", "file", "hours", "person"].includes(f.type));
+  const editable = table.fields.filter((f) => !isComputedField(f) && !["file", "hours", "person"].includes(f.type));
   // Compare without spaces/punctuation: "E-mail" = "Email", "Full name" contains "Name".
   const key = (s: string) => norm(s).replace(/ /g, "");
   return headers.map((h) => {

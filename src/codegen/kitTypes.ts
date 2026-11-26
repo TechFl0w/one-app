@@ -37,7 +37,8 @@ declare module "@one/kit" {
   export interface Filter { field: string; op: FilterOp; value?: string | number | boolean }
   export interface Query { table: string; filters?: Filter[]; sort?: { field: string; dir: "asc" | "desc" }[]; limit?: number; offset?: number }
 
-  export interface FieldInfo { id: string; label: string; type: string; required?: boolean; options?: { id: string; label: string; color?: string }[]; to?: string }
+  /** computed: worked out by One App (rollups, statuses that follow dates) — read it, never write it. */
+  export interface FieldInfo { id: string; label: string; type: string; required?: boolean; computed?: boolean; options?: { id: string; label: string; color?: string }[]; to?: string }
   export interface TableInfo { id: string; label: string; primaryField?: string; fields: FieldInfo[] }
   export interface BusinessInfo { name: string; timezone: string; currency: string }
 

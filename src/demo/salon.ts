@@ -163,7 +163,8 @@ export const demoBlueprint: Blueprint = Blueprint.parse({
       label: "Ask for a review after a visit",
       enabled: true,
       trigger: { type: "status_changed", table: "tbl_bookings", field: "fld_status", to: "opt_done" },
-      conditions: [],
+      // Checked again after the wait: a visit marked done by mistake and changed back gets no request.
+      conditions: [{ field: "fld_status", op: "eq", value: "opt_done" }],
       actions: [
         { type: "wait", duration: "2h" },
         { type: "send_message", channel: "auto", to: "fld_client", template: "tpl_review" },

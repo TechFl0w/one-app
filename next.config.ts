@@ -15,7 +15,9 @@ const nextConfig: NextConfig = {
   // its standard library typings from disk at runtime.
   serverExternalPackages: ["typescript", "tailwindcss", "@tailwindcss/oxide"],
   // Chat messages can carry a few design images (resized in the browser; Vercel caps bodies at 4.5 MB).
-  experimental: { serverActions: { bodySizeLimit: "4mb" } },
+  // Dynamic pages are never reused from the browser's router cache: an operations tool must show
+  // what's true now after navigating back (docs/data-rules.md). 0 is Next's default; kept explicit.
+  experimental: { serverActions: { bodySizeLimit: "4mb" }, staleTimes: { dynamic: 0 } },
   // Screen styles are compiled on the server from these stylesheets.
   outputFileTracingIncludes: { "/**": ["./node_modules/typescript/lib/lib.*.d.ts", "./src/sandbox/tailwind-theme.css", "./node_modules/tailwindcss/*.css"] },
   // OAuth discovery for the MCP server (RFC 9728) lives under /.well-known.

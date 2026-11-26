@@ -1,4 +1,4 @@
-import type { Blueprint } from "@/schema/blueprint";
+import { isComputedField, type Blueprint } from "@/schema/blueprint";
 import type { SandboxSchema } from "./protocol";
 
 /** What a generated component sees of the business: names, tables, fields, options (no code, no automations). */
@@ -14,6 +14,7 @@ export function sandboxSchema(bp: Blueprint): SandboxSchema {
         label: f.label,
         type: f.type,
         ...("required" in f && f.required ? { required: true } : {}),
+        ...(isComputedField(f) ? { computed: true } : {}),
         ...("options" in f ? { options: f.options.map((o) => ({ id: o.id, label: o.label, ...(o.color ? { color: o.color } : {}) })) } : {}),
         ...(f.type === "link" ? { to: f.to } : {}),
       })),

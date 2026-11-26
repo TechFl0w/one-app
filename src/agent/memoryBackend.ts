@@ -4,7 +4,7 @@ import { applyChangeSet } from "@/engine/changeSet";
 import { errorResult, okResult } from "@/engine/commit";
 import { buildRecordQuery, linkedIds, projectData, RecordError, tableOrThrow, validateRecordInput } from "@/engine/records";
 import { memoryQuery } from "@/engine/store";
-import { addComputed } from "@/engine/computed";
+import { addComputed, queryWithComputed } from "@/engine/computed";
 import type { OwnerBackend } from "./types";
 import { recordUpdateIsRisky } from "@/engine/risk";
 
@@ -27,10 +27,11 @@ export function memoryBackend(initial: { blueprint: Blueprint; records: RecordRo
 
   const backend: OwnerBackend = {
     blueprint: async () => state.blueprint,
-    query: async (q) => {
-      const { records, total } = memoryQuery(state.records, buildRecordQuery(state.blueprint, q));
-      return { records: await computed(state.blueprint, records[0]?.tableId ?? q.table, records.map(view)), total };
-    },
+    query: async (q) =>
+      queryWithComputed(state.blueprint, q, async (sq) => {
+        const { records, total } = memoryQuery(state.records, buildRecordQuery(state.blueprint, sq));
+        return { records: records.map(view), total };
+      }, async (table) => state.records.filter((r) => r.tableId === table).map(view)),
     getRecord: async (t, id) => (await computed(state.blueprint, t, [view(find(t, id))]))[0],
     createRecord: async (t, input) => {
       const data = validateRecordInput(tableOrThrow(state.blueprint, t), input, "create");

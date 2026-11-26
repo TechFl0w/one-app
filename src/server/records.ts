@@ -12,7 +12,7 @@ import {
   validateRecordInput,
 } from "@/engine/records";
 import { getCurrentBlueprint } from "./blueprints";
-import { addComputed, loadAllVia } from "@/engine/computed";
+import { addComputed, loadAllVia, queryWithComputed } from "@/engine/computed";
 import { supabaseStore } from "./store";
 import { recordUpdateIsRisky } from "@/engine/risk";
 
@@ -43,15 +43,14 @@ export async function listRecords(
   blueprint?: Blueprint,
 ): Promise<{ records: RecordRow[]; total: number }> {
   const bp = blueprint ?? (await getCurrentBlueprint(supabase, businessId));
-  const params = buildRecordQuery(bp, query);
-  const { data, error } = await supabase.rpc("query_records", { p_business_id: businessId, ...params });
-  if (error) throw new Error(`Could not load records: ${error.message}`);
-  const rows = (data ?? []) as (Row & { total: number })[];
-  const records = rows.map((r) => toView(bp, params.p_table_id, r));
-  return {
-    records: await addComputed(bp, params.p_table_id, records, loadAllVia(supabaseStore(supabase, businessId), bp)),
-    total: rows.length ? Number(rows[0].total) : 0,
-  };
+  // Filters/sorts on computed fields (derived statuses, rollups) run after computing.
+  return queryWithComputed(bp, query, async (q) => {
+    const params = buildRecordQuery(bp, q);
+    const { data, error } = await supabase.rpc("query_records", { p_business_id: businessId, ...params });
+    if (error) throw new Error(`Could not load records: ${error.message}`);
+    const rows = (data ?? []) as (Row & { total: number })[];
+    return { records: rows.map((r) => toView(bp, params.p_table_id, r)), total: rows.length ? Number(rows[0].total) : 0 };
+  }, loadAllVia(supabaseStore(supabase, businessId), bp));
 }
 
 export async function getRecord(

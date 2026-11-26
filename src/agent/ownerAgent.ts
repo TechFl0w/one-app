@@ -4,6 +4,7 @@ import { menuOrder } from "@/engine/editing";
 import { localToday, isoDate } from "@/engine/dates";
 import { KIT_DTS } from "@/codegen/kitTypes";
 import { checkStandards } from "@/codegen/standards";
+import { checkDataRules } from "@/engine/dataRules";
 import { SERVER_KIT_DTS } from "@/codegen/serverKitTypes";
 import { executeOwnerTool, OWNER_TOOLS, ownerToolDefinitions, type ToolEffects } from "./ownerTools";
 import type { AgentResponse, OwnerBackend, PendingAction } from "./types";
@@ -97,6 +98,16 @@ App rules — every screen you build follows these unless the owner asks otherwi
 - Files (photos, signed agreements, receipts, documents) live in file fields. Forms upload them by themselves: put the file field in openRecordForm's fields. Show them with FileImage: a thumbnail in lists and cards, large in a detail view, a grid (gallery) for a collection of photos; other files show as a chip that opens them. Never show a file's name where the owner expects the picture.
 - Works on a phone: stack columns below md, tables become cards or scroll horizontally, tap targets at least 40px.
 
+Data that stays true (docs/data-rules.md — learned from real apps that sent rent reminders to people who had moved out). Design the data so it can't drift:
+- Store facts, derive summaries. Store what happened or what someone decided (start/end dates, paid on, signed on, cancelled). A status that only says where the dates are (upcoming / active / ending / ended, due / late / paid) gets derive rules on the status field: { rules: [{ when: [{ field, op, value }], option }], otherwise }, first match wins; values may be "@today", "@now", "@today+30d", "@today-7d". It's worked out on every read, can't be set by hand and is never moved by an automation. Put decisions people make (cancelled, on hold) in their own stored field and make them the first rule.
+- Values that come from other records (a payment's renter status, a room's open repairs, a lease's latest payment) are rollups — never copied.
+- One field means one thing at all times: "Rent" is today's rent; a change that starts later is "Next rent" + "Next rent from". A change that needs someone's agreement (an extension, a new price, a signature) is its own record ("pending") until confirmed — the live record changes only then.
+- Things that repeat per parent (renewals, move-outs, notices) are child records with a status; only one is open at a time (check for an open one before adding; show and act on the open one).
+- Never delete settled history (paid, signed): give it a "void"/"archived" status. Ending something (cancel, move out, end) also closes everything hanging off it in the same change — open follow-ups, pending requests.
+- Automations that message or charge people state who still qualifies in their conditions (status active, not paid, renter not ended — add a rollup to see the parent's status). One App checks conditions again right before every run and after every wait, so someone who left, cancelled or paid gets nothing. Don't use a condition the automation's own steps would break.
+- Time-based behaviour uses date triggers (with an offset like -30d) on the date itself, never "status changed" on a status that follows dates.
+- change_setup may answer with fix_these_next: fix those in your next step. The setup summary lists data rules not met yet.
+
 Before you call a screen done, walk through it as the owner would — it must work, not just look right:
 - Every add form can be completed: all required fields are in fields (or prefilled in defaults), including file fields.
 - Every button does something; every record opens; edit and delete work through openRecordForm.
@@ -133,7 +144,10 @@ export function setupSummary(bp: Blueprint, now = new Date()): string {
     lines.push(`- ${t.id} "${t.label}"${t.primaryField ? ` (title field ${t.primaryField})` : ""}`);
     for (const f of t.fields) {
       let extra = "";
-      if (f.type === "status" || f.type === "choice") extra = ` options: ${f.options.map((o) => `${o.id}="${o.label}"`).join(", ")}${f.multiple ? " (multiple)" : ""}`;
+      if (f.type === "status" || f.type === "choice") {
+        extra = ` options: ${f.options.map((o) => `${o.id}="${o.label}"`).join(", ")}${f.multiple ? " (multiple)" : ""}`;
+        if (f.derive) extra += ` — follows: ${f.derive.rules.map((r) => `${r.option} when ${r.when.map((w) => `${w.field} ${w.op} ${w.value ?? ""}`.trim()).join(" and ")}`).join("; ")}${f.derive.otherwise ? `; else ${f.derive.otherwise}` : ""} (computed, read-only)`;
+      }
       if (f.type === "link") extra = ` → ${f.to}${f.multiple ? " (multiple)" : ""}`;
       if (f.type === "money" && f.currency) extra = ` ${f.currency}`;
       if (f.type === "rollup") extra = ` = ${f.agg} of ${f.field} ${f.from ? `from ${f.from} records whose ${f.via} is this record` : `via ${f.via}`}${f.where?.length ? ` where ${f.where.map((w) => `${w.field} ${w.op} ${w.value ?? ""}`.trim()).join(" and ")}` : ""} (computed, read-only)`;
@@ -167,6 +181,11 @@ export function setupSummary(bp: Blueprint, now = new Date()): string {
       const todo = [...errors.map(() => "add/edit form not in a pop-up"), ...warnings.filter((w) => w.includes("belong to")).map((w) => `show ${w.split(" belong to ")[1].split(" (")[0]}`)];
       lines.push(`- ${c.id} "${c.label}"${todo.length ? ` — doesn't meet the app rules yet: ${todo.join("; ")}` : ""}`);
     }
+  }
+  const checks = checkDataRules(bp);
+  if (checks.length) {
+    lines.push("", "Data rules not met yet (fix when you touch these, or all when asked to tidy up):");
+    for (const c of checks.slice(0, 8)) lines.push(`- ${c}`);
   }
   lines.push("", "The grid has 12 columns; blocks have x, y, w (width in columns) and h (height in rows).");
   return lines.join("\n");

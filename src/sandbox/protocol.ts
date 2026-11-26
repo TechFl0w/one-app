@@ -4,7 +4,7 @@ import type { BridgeResult } from "./result";
 
 export interface SandboxSchema {
   business: { name: string; timezone: string; currency: string };
-  tables: { id: string; label: string; primaryField?: string; fields: { id: string; label: string; type: string; required?: boolean; options?: { id: string; label: string; color?: string }[]; to?: string }[] }[];
+  tables: { id: string; label: string; primaryField?: string; fields: { id: string; label: string; type: string; required?: boolean; computed?: boolean; options?: { id: string; label: string; color?: string }[]; to?: string }[] }[];
 }
 
 export interface SandboxRecord {

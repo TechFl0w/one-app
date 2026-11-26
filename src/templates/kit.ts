@@ -29,6 +29,15 @@ export function status(id: string, label: string, options: [string, string?][], 
 }
 export const optId = (label: string) => newId("opt", label, new Set());
 
+/**
+ * Makes a status follow the record's values (docs/data-rules.md): rules are [conditions, option
+ * label], the first match wins, else `otherwise`. Worked out on every read, never stored.
+ */
+export function derived(field: Field, rules: [RollupWhere[], string][], otherwise?: string): Field {
+  return { ...field, derive: { rules: rules.map(([when, label]) => ({ when, option: optId(label) })), ...(otherwise ? { otherwise: optId(otherwise) } : {}) } } as Field;
+}
+type RollupWhere = { field: string; op: "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "empty" | "not_empty"; value?: string | number | boolean };
+
 export const block = (
   id: string,
   type: Block["type"],

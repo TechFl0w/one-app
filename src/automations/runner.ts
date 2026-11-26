@@ -84,7 +84,7 @@ export interface AutomationIO {
 export async function enqueueForEvent(e: RecordEvent, io: AutomationIO, queue: JobQueue): Promise<number> {
   const bp = await io.blueprint(e.businessId);
   let n = 0;
-  for (const a of matchEvent(bp, e)) {
+  for (const a of matchEvent(bp, e, new Date(e.at))) {
     if (await queue.enqueue({ businessId: e.businessId, automationId: a.id, tableId: e.tableId, recordId: e.recordId, key: eventJobKey(a, e), runAt: e.at, depth: e.depth ?? 0 })) n++;
   }
   return n;
@@ -137,10 +137,13 @@ export async function runJob(job: Job, io: AutomationIO, queue: JobQueue, now: D
   const table = bp.tables.find((t) => t.id === job.tableId);
   if (!table) return finishSkipped("The table was removed");
 
-  if (job.step === 0) {
-    // Re-check at run time: the record may have changed since the job was queued.
-    if (automation.trigger.type === "date_reached" && dateJobKey(automation, job.recordId, data) !== job.key) return finishSkipped("The date changed; a new run is scheduled");
-    if (!conditionsHold(automation, table, data)) return finishSkipped("Conditions no longer match");
+  // Re-check on the live record every time the job runs — when it starts AND when it resumes
+  // after a wait: the person may have moved out, cancelled or paid in the meantime. Nothing is
+  // sent on the strength of what was true when the job was queued.
+  {
+    const resumed = job.step > 0 ? " (checked again after waiting)" : "";
+    if (automation.trigger.type === "date_reached" && dateJobKey(automation, job.recordId, data) !== job.key) return finishSkipped(`The date changed; a new run is scheduled${resumed}`);
+    if (!conditionsHold(automation, table, data, { now, timezone: bp.business.timezone })) return finishSkipped(`Conditions no longer match${resumed}`);
     if (automation.guards?.includes("no_upcoming_booking") && io.hasUpcomingBooking) {
       try {
         if (await io.hasUpcomingBooking(job.businessId, { tableId: job.tableId, recordId: job.recordId, data }, now)) return finishSkipped("They already have a booking coming up");
@@ -239,7 +242,7 @@ export async function runDueJobs(io: AutomationIO, queue: JobQueue, now: Date, l
 export function testAutomation(bp: Blueprint, automation: Automation, record: { id: string; data: Record<string, unknown> }): { matches: boolean; steps: string[]; dueAt?: string } {
   const table = bp.tables.find((t) => t.id === automation.trigger.table);
   if (!table) return { matches: false, steps: [] };
-  const matches = conditionsHold(automation, table, record.data);
+  const matches = conditionsHold(automation, table, record.data, { timezone: bp.business.timezone });
   const steps = automation.actions.map((a) => describeStep(bp, planStep(a, { tableId: table.id, recordId: record.id, data: record.data, automation })));
   const due = dueAt(automation, record.data);
   return { matches, steps, ...(due ? { dueAt: due.toISOString() } : {}) };

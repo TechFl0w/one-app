@@ -7,6 +7,7 @@ import { Select } from "@/components/ui/Select";
 import { autoMap, MAX_IMPORT_ROWS, parseCsv, type DateOrder } from "@/import/csv";
 import type { Table } from "@/schema/blueprint";
 import type { ImportRequest, ImportResult } from "@/app/b/[businessId]/import-actions";
+import { isComputedField } from "@/schema/blueprint";
 
 const NEW = "__new__";
 
@@ -116,7 +117,7 @@ export function ImportWizard({ tables, basePath, run }: { tables: Table[]; baseP
                       value={mapping[i] ?? ""}
                       onChange={(v) => setMapping((m) => m.map((x, j) => (j === i ? (v as string) || null : x)))}
                       ariaLabel={`Field for ${h}`}
-                      options={[{ value: "", label: "Don’t import" }, ...table.fields.filter((f) => !["formula", "rollup", "file", "hours", "person"].includes(f.type)).map((f) => ({ value: f.id, label: f.label }))]}
+                      options={[{ value: "", label: "Don’t import" }, ...table.fields.filter((f) => !isComputedField(f) && !["file", "hours", "person"].includes(f.type)).map((f) => ({ value: f.id, label: f.label }))]}
                     />
                   </li>
                 ))}

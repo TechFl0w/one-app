@@ -1,4 +1,6 @@
-import type { Automation, Blueprint, Field, Table } from "@/schema/blueprint";
+import { isComputedField, type Automation, type Blueprint, type Field, type Table } from "@/schema/blueprint";
+import { resolveDateToken } from "@/engine/computed";
+import { isoDate, localToday } from "@/engine/dates";
 
 /**
  * Pure automation logic: which automations an event triggers, when date triggers are due,
@@ -51,9 +53,18 @@ function compare(field: Field | undefined, a: unknown, b: unknown): number | nul
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
-export function conditionsHold(automation: Automation, table: Table, data: Record<string, unknown>): boolean {
-  return automation.conditions.every((c) => {
-    const field = table.fields.find((f) => f.id === c.field);
+/**
+ * Whether an automation's conditions hold for a record. Values may be "@today", "@now" or
+ * "@today+30d" (business timezone). `skipComputed` ignores conditions on computed fields (when
+ * only stored values are at hand); the runner always checks everything on the live record.
+ */
+export function conditionsHold(automation: Automation, table: Table, data: Record<string, unknown>, opts: { now?: Date; timezone?: string; skipComputed?: boolean } = {}): boolean {
+  const now = opts.now ?? new Date();
+  const today = isoDate(localToday(now, opts.timezone ?? "UTC"));
+  return automation.conditions.every((cond) => {
+    const field = table.fields.find((f) => f.id === cond.field);
+    if (opts.skipComputed && field && isComputedField(field)) return true;
+    const c = { ...cond, value: resolveDateToken(cond.value, today, now) as typeof cond.value };
     const v = data[c.field];
     switch (c.op) {
       case "empty":
@@ -84,7 +95,7 @@ const changed = (e: RecordEvent, fieldId: string) =>
   JSON.stringify(e.before?.[fieldId] ?? null) !== JSON.stringify(e.after?.[fieldId] ?? null);
 
 /** Automations an event triggers right away (date triggers are handled by dueDateJobs). */
-export function matchEvent(bp: Blueprint, e: RecordEvent): Automation[] {
+export function matchEvent(bp: Blueprint, e: RecordEvent, now = new Date()): Automation[] {
   const table = bp.tables.find((t) => t.id === e.tableId);
   const after = e.after;
   if (!table || !after) return [];
@@ -105,7 +116,8 @@ export function matchEvent(bp: Blueprint, e: RecordEvent): Automation[] {
         break;
       }
     }
-    return fires && conditionsHold(a, table, after);
+    // Events carry stored values only; computed conditions are checked when the job runs.
+    return fires && conditionsHold(a, table, after, { now, timezone: bp.business.timezone, skipComputed: true });
   });
 }
 

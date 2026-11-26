@@ -78,7 +78,7 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
     setError(r.error);
     setDeleting("no");
   };
-  const all = t.fields.filter((f) => !SKIP.has(f.type));
+  const all = t.fields.filter((f) => !SKIP.has(f.type) && !f.computed);
   const shown = request.fields ? request.fields.map((id) => all.find((f) => f.id === id)).filter((f): f is Field => !!f) : all;
 
   useEffect(() => {

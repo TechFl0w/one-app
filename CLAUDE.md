@@ -31,6 +31,9 @@ Read `docs/` before building a feature. Build order: `docs/roadmap.md`.
    (text, preview, buttons, confirmation) so the in-app chat renders them as UI and WhatsApp/Telegram can later
    render them as image + buttons. Start with **in-app chat only**.
 7. **Multi-tenant from day one.** Every row carries `business_id`; Supabase row-level security enforces isolation.
+8. **Data stays true.** Store facts, derive summaries: statuses that describe dates follow rules (computed on
+   read), values from other records are rollups, automations re-check the live record before every run and
+   after every wait. Generated setups are checked against these rules. See `docs/data-rules.md`.
 
 ## Stack
 - Next.js (App Router, TypeScript, server actions) on Vercel

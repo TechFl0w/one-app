@@ -12,6 +12,7 @@ import { availableSlots, bookSlot } from "@/booking/service";
 import { overlapFixOps } from "@/engine/editing";
 import { applyChangeSet } from "@/engine/changeSet";
 import { compileComponent, compileFunction } from "@/codegen/compile";
+import { checkDataRules } from "@/engine/dataRules";
 import { checkReferences } from "@/codegen/references";
 import { checkStandards } from "@/codegen/standards";
 import { compileStyles } from "@/codegen/styles";
@@ -164,7 +165,9 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const p = previewChangeSet(bp, { baseVersion: bp.version, source: "ai", ops: i.ops });
       fx.changed = true;
       fx.preview = { summary: i.summary, ops: p.ok ? p.ops : [], undo: r.undo };
-      return { applied: r.summary, version: r.blueprint.version };
+      // Data rules (docs/data-rules.md): drifting statuses, sends that don't re-check who they're for.
+      const checks = checkDataRules(r.blueprint);
+      return { applied: r.summary, version: r.blueprint.version, ...(checks.length ? { fix_these_next: checks.slice(0, 5) } : {}) };
     },
   }),
 

@@ -1,4 +1,5 @@
 import type { Blueprint } from "@/schema/blueprint";
+import { addComputed } from "@/engine/computed";
 import type { AutomationIO, Job, JobQueue, NewJob, RunLog } from "./runner";
 
 /** In-memory queue + IO for tests (and a reference for the Supabase versions). */
@@ -29,7 +30,7 @@ export function memoryQueue() {
   return { queue, jobs, runs };
 }
 
-export function memoryIO(blueprint: Blueprint, records: { id: string; tableId: string; data: Record<string, unknown> }[]) {
+export function memoryIO(blueprint: Blueprint, records: { id: string; tableId: string; data: Record<string, unknown> }[], now: () => Date = () => new Date()) {
   const effects: { kind: string; key: string; detail: unknown }[] = [];
   const done = new Set<string>();
   let failNext = 0;
@@ -44,7 +45,14 @@ export function memoryIO(blueprint: Blueprint, records: { id: string; tableId: s
   };
   const io: AutomationIO = {
     blueprint: async () => blueprint,
-    getRecord: async (_b, t, id) => records.find((r) => r.tableId === t && r.id === id)?.data ?? null,
+    // Like production: with computed values (derived statuses, rollups).
+    getRecord: async (_b, t, id) => {
+      const r = records.find((x) => x.tableId === t && x.id === id);
+      if (!r) return null;
+      const rows = (table: string) => records.filter((x) => x.tableId === table).map((x) => ({ ...x, createdAt: "", updatedAt: "" }));
+      const [one] = await addComputed(blueprint, t, [{ ...r, createdAt: "", updatedAt: "" }], async (table) => rows(table), now());
+      return one.data;
+    },
     recordsWithDate: async (_b, t, f) => records.filter((r) => r.tableId === t && r.data[f] != null),
     createRecord: async (_b, t, values, key) => once(key, "create_record", { t, values }),
     updateRecord: async (_b, t, id, values, key) => {

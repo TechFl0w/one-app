@@ -1,6 +1,6 @@
-import type { Automation, Page, Table } from "@/schema/blueprint";
+import type { Automation, Field, Page, Table } from "@/schema/blueprint";
 import { choice, list, multi, type Question, type Template } from "./types";
-import { automation, block, COLORS, date, email, file, finish, link, longText, money, optId, page, phone, status, text } from "./kit";
+import { automation, block, COLORS, date, derived, email, file, finish, link, longText, money, optId, page, phone, status, text } from "./kit";
 
 const chairs: Question & { kind: "list" } = {
   id: "chairs",
@@ -41,6 +41,8 @@ export const chairRental: Template = {
   build(business, answers) {
     const want = new Set(multi(answers, extras));
     const weekly = choice(answers, period) === "weekly";
+    // The renter's (derived) status on their payments and documents, so reminders skip people who left.
+    const renterStatus: Field = { id: "fld_renter_status", label: "Renter status", type: "rollup", via: "fld_renter", field: "fld_status", agg: "latest" };
     const tables: Table[] = [
       { id: "tbl_chairs", label: "Chairs", primaryField: "fld_name", fields: [text("fld_name", "Chair", true), status("fld_status", "Status", [["Available", COLORS.GREEN], ["Rented", COLORS.BLUE], ["Out of use", COLORS.GREY]])] },
       {
@@ -52,9 +54,15 @@ export const chairRental: Template = {
           phone("fld_phone"),
           email("fld_email"),
           link("fld_chair", "Chair", "tbl_chairs"),
-          date("fld_start", "Started"),
+          date("fld_start", "Starts"),
+          date("fld_end", "Leaves on"),
           money("fld_rent", weekly ? "Weekly rent" : "Monthly rent"),
-          status("fld_status", "Status", [["Active", COLORS.GREEN], ["Notice given", COLORS.AMBER], ["Ended", COLORS.GREY]]),
+          // Follows the dates, never set by hand: it can't say "active" for someone who left.
+          derived(status("fld_status", "Status", [["Starting", COLORS.BLUE], ["Active", COLORS.GREEN], ["Notice given", COLORS.AMBER], ["Ended", COLORS.GREY]]), [
+            [[{ field: "fld_end", op: "lt", value: "@today" }], "Ended"],
+            [[{ field: "fld_start", op: "gt", value: "@today" }], "Starting"],
+            [[{ field: "fld_end", op: "not_empty" }], "Notice given"],
+          ], "Active"),
         ],
       },
       {
@@ -65,7 +73,12 @@ export const chairRental: Template = {
           link("fld_renter", "Renter", "tbl_renters", { required: true }),
           date("fld_due", "Due", true),
           money("fld_amount", "Amount"),
-          status("fld_status", "Status", [["Due", COLORS.AMBER], ["Paid", COLORS.GREEN], ["Late", COLORS.RED]]),
+          date("fld_paid_on", "Paid on"),
+          derived(status("fld_status", "Status", [["Due", COLORS.AMBER], ["Paid", COLORS.GREEN], ["Late", COLORS.RED]]), [
+            [[{ field: "fld_paid_on", op: "not_empty" }], "Paid"],
+            [[{ field: "fld_due", op: "lt", value: "@today" }], "Late"],
+          ], "Due"),
+          renterStatus,
         ],
       },
     ];
@@ -79,6 +92,7 @@ export const chairRental: Template = {
           status("fld_kind", "Type", [["Licence"], ["Insurance"], ["Agreement"]], "choice"),
           date("fld_expires", "Expires"),
           file("fld_file", "File"),
+          renterStatus,
         ],
       });
     }
@@ -131,7 +145,8 @@ export const chairRental: Template = {
           id: "aut_rent_reminder",
           label: "Rent reminder the day before",
           trigger: { type: "date_reached", table: "tbl_rent", field: "fld_due", offset: "-24h" },
-          conditions: [{ field: "fld_status", op: "neq", value: optId("Paid") }],
+          // Checked right before sending: unpaid, and the renter hasn't left.
+          conditions: [{ field: "fld_status", op: "neq", value: optId("Paid") }, { field: "fld_renter_status", op: "neq", value: optId("Ended") }],
           actions: [{ type: "send_message", channel: "auto", to: "fld_renter", template: "tpl_rent_due" }],
         }),
       );
@@ -142,6 +157,7 @@ export const chairRental: Template = {
           id: "aut_doc_expiry",
           label: "Document expires in 30 days",
           trigger: { type: "date_reached", table: "tbl_documents", field: "fld_expires", offset: "-30d" },
+          conditions: [{ field: "fld_renter_status", op: "neq", value: optId("Ended") }],
           actions: [{ type: "notify", to: "owner" }, { type: "send_message", channel: "auto", to: "fld_renter", template: "tpl_doc_expiry" }],
         }),
       );

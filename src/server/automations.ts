@@ -5,7 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { enqueueDueDates, enqueueForEvent, runDueJobs, type AutomationIO, type Job, type JobQueue } from "@/automations/runner";
 import type { RecordEvent } from "@/automations/engine";
 import { Blueprint } from "@/schema/blueprint";
-import { tableOrThrow, validateRecordInput } from "@/engine/records";
+import { RecordError, tableOrThrow, validateRecordInput } from "@/engine/records";
+import { getRecord } from "./records";
 import { getCurrentBlueprint } from "./blueprints";
 import { supabaseOwnerBackend } from "./ownerBackend";
 import { expireHolds, hasUpcomingBooking } from "@/booking/service";
@@ -71,8 +72,13 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
   return {
     blueprint,
     async getRecord(b, t, id) {
-      const row = must(await db.from("records").select("data").eq("business_id", b).eq("table_id", t).eq("id", id).maybeSingle(), "load record");
-      return (row?.data as Record<string, unknown>) ?? null;
+      // With computed values (derived statuses, rollups): automations decide on what's true now.
+      try {
+        return (await getRecord(db, b, t, id, await blueprint(b))).data;
+      } catch (e) {
+        if (e instanceof RecordError && e.code === "not_found") return null;
+        throw e;
+      }
     },
     async recordsWithDate(b, t, field) {
       const rows = must(await db.from("records").select("id, data").eq("business_id", b).eq("table_id", t).not(`data->>${field}`, "is", null).limit(5000), "load dates");
