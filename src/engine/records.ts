@@ -2,7 +2,7 @@ import { z } from "zod";
 import { WeeklyHours, isComputedField, type Blueprint, type DataSource, type Field, type Table } from "@/schema/blueprint";
 import { isDateToken, isoDate, startOfLocalDay, tokenRange, localToday } from "./dates";
 import { isBusinessFilePath } from "@/lib/files";
-import { FileValue, RecordInput, RecordQuery, type FilterOp, type RecordFilter } from "@/schema/records";
+import { FileList, FileValue, RecordInput, RecordQuery, type FilterOp, type RecordFilter } from "@/schema/records";
 
 /**
  * Pure rules for records: validate values against the blueprint, turn stored rows into views,
@@ -104,6 +104,11 @@ export function checkValue(field: Field, value: unknown): Check {
       return typeof value === "string" && uuid.safeParse(value).success ? ok(value) : bad("must be a record id");
     }
     case "file": {
+      if (field.multiple) {
+        // A gallery: a list of uploads (a single upload is accepted and wrapped).
+        const r = FileList.safeParse(Array.isArray(value) ? value : [value]);
+        return r.success ? ok(r.data) : bad("must be a list of uploaded files");
+      }
       const r = FileValue.safeParse(value);
       return r.success ? ok(r.data) : bad("must be an uploaded file");
     }
@@ -381,9 +386,13 @@ function buildFilters(table: Table, filters: RecordFilter[], ctx: Required<Query
 export function assertFilesInBusiness(table: Table, data: Record<string, unknown>, businessId: string): void {
   for (const f of table.fields) {
     if (f.type !== "file") continue;
-    const v = data[f.id] as { path?: unknown } | null | undefined;
-    if (v && (typeof v.path !== "string" || !isBusinessFilePath(businessId, v.path))) {
-      throw new RecordError("invalid", `${f.label}: upload the file in One App first`, [{ field: f.id, message: "must be a file uploaded to this business" }]);
+    const v = data[f.id];
+    const items = (Array.isArray(v) ? v : v ? [v] : []) as { path?: unknown; poster?: unknown }[];
+    for (const item of items) {
+      const paths = [item?.path, ...(item?.poster !== undefined ? [item.poster] : [])];
+      if (paths.some((p) => typeof p !== "string" || !isBusinessFilePath(businessId, p))) {
+        throw new RecordError("invalid", `${f.label}: upload the file in One App first`, [{ field: f.id, message: "must be a file uploaded to this business" }]);
+      }
     }
   }
 }

@@ -19,6 +19,15 @@ const technicians: Question & { kind: "list" } = {
   max: 20,
   default: ["Marco", "Jess"],
 };
+const bays: Question & { kind: "list" } = {
+  id: "bays",
+  kind: "list",
+  label: "Your bays (lifts)",
+  placeholder: "e.g. Bay 1",
+  hint: "Where cars are worked on — the Bays screen shows what's in each one.",
+  max: 20,
+  default: ["Bay 1", "Bay 2", "Bay 3", "Bay 4"],
+};
 const extras: Question & { kind: "multi" } = {
   id: "extras",
   kind: "multi",
@@ -43,16 +52,17 @@ const sample: Question & { kind: "choice" } = {
 };
 
 const PURPLE = "#6B46C1";
+// Each stage its own colour, so the board reads at a glance (cool → warm → green when done).
 const STAGES: [string, string][] = [
-  ["Booked", COLORS.BLUE],
-  ["Checked in", COLORS.BLUE],
-  ["Diagnosing", COLORS.AMBER],
+  ["Booked", "#2B6CB0"],
+  ["Checked in", "#3B7DC4"],
+  ["Diagnosing", "#B7791F"],
   ["Waiting approval", PURPLE],
-  ["Waiting for parts", PURPLE],
-  ["In progress", COLORS.AMBER],
-  ["Quality check", COLORS.AMBER],
-  ["Ready for pickup", COLORS.GREEN],
-  ["Collected", COLORS.GREY],
+  ["Waiting for parts", "#8B5CF6"],
+  ["In progress", "#C2410C"],
+  ["Quality check", "#0E7490"],
+  ["Ready for pickup", "#17694F"],
+  ["Collected", "#8A8273"],
 ];
 const S = (label: string) => optId(label);
 const OPEN_STAGE = { field: "fld_j_stage", op: "neq" as const, value: S("Collected") };
@@ -65,7 +75,7 @@ export const mechanic: Template = {
   label: "Repair cars",
   description: "Customers and their cars, jobs on a workshop board, quotes with approval, parts, payments.",
   businessType: "mechanic",
-  questions: [technicians, extras, sample],
+  questions: [technicians, bays, extras, sample],
   build(business, answers) {
     const want = new Set(multi(answers, extras));
     const parts = want.has("parts");
@@ -127,6 +137,19 @@ export const mechanic: Template = {
         ],
       },
       {
+        id: "tbl_bays",
+        label: "Bays",
+        primaryField: "fld_b_name",
+        fields: [
+          text("fld_b_name", "Bay", true),
+          // The car in the bay now: the latest open job assigned to it (checked in, not yet collected).
+          ...(["fld_j_title:fld_b_job:Job", "fld_j_vehicle:fld_b_car:Car", "fld_j_customer:fld_b_customer:Customer", "fld_j_tech:fld_b_tech:Technician", "fld_j_stage:fld_b_stage:Stage", "fld_j_timing:fld_b_timing:Timing"].map((spec) => {
+            const [field, id, label] = spec.split(":");
+            return rollup({ id, label, from: "tbl_jobs", via: "fld_j_bay", field, agg: "latest", sortBy: "fld_j_booked", where: [OPEN_STAGE, { field: "fld_j_stage", op: "neq", value: S("Booked") }] });
+          })),
+        ],
+      },
+      {
         id: "tbl_jobs",
         label: "Jobs",
         primaryField: "fld_j_title",
@@ -136,11 +159,12 @@ export const mechanic: Template = {
           link("fld_j_customer", "Customer", "tbl_customers", { required: true }),
           status("fld_j_stage", "Stage", STAGES),
           link("fld_j_tech", "Technician", "tbl_techs"),
+          link("fld_j_bay", "Bay", "tbl_bays"),
           longText("fld_j_concern", "Customer's concern"),
           datetime("fld_j_booked", "Drop-off"),
           date("fld_j_promised", "Promised by"),
           { ...num("fld_j_mileage", "Mileage in (km)"), min: 0 } as Field,
-          file("fld_j_photo", "Photo at check-in"),
+          { ...file("fld_j_photo", "Photos"), multiple: true } as Field,
           longText("fld_j_notes", "Workshop notes"),
           ...(payments ? [date("fld_j_invoiced", "Invoiced on")] : []),
           rollup({ id: "fld_j_total", label: "Approved total", from: "tbl_lines", via: "fld_l_job", field: "fld_l_total", agg: "sum", where: [{ field: "fld_l_approval", op: "eq", value: S("Approved") }], format: "money" }),
@@ -257,64 +281,89 @@ export const mechanic: Template = {
     const jobCols = (...ids: string[]) => ({ columns: ids });
     const pages: Page[] = [
       page("pg_today", "Today", "sun", 0, [
-        block("blk_t_shop", "number", [0, 0, 3, 1], { table: "tbl_jobs", agg: "count", filters: [OPEN_STAGE] }, { title: "Cars in the shop" }),
-        block("blk_t_approval", "number", [3, 0, 3, 1], { table: "tbl_jobs", agg: "count", filters: [{ field: "fld_j_stage", op: "eq", value: S("Waiting approval") }] }, { title: "Waiting for approval" }),
-        block("blk_t_ready", "number", [6, 0, 3, 1], { table: "tbl_jobs", agg: "count", filters: [{ field: "fld_j_stage", op: "eq", value: S("Ready for pickup") }] }, { title: "Ready for pickup" }),
-        block("blk_t_late", "number", [9, 0, 3, 1], { table: "tbl_jobs", agg: "count", filters: [{ field: "fld_j_timing", op: "eq", value: S("Late") }] }, { title: "Late" }),
-        block("blk_t_dropoffs", "list", [0, 1, 6, 3], { table: "tbl_jobs", filters: [{ field: "fld_j_booked", op: "eq", value: "@today" }], sort: [{ field: "fld_j_booked", dir: "asc" }] }, { title: "Drop-offs today", fields: ["fld_j_vehicle", "fld_j_customer", "fld_j_stage", "fld_j_booked"] }),
-        block("blk_t_late_list", "list", [6, 1, 6, 3], { table: "tbl_jobs", filters: [{ field: "fld_j_timing", op: "eq", value: S("Late") }], sort: [{ field: "fld_j_promised", dir: "asc" }] }, { title: "Late — let the customer know", fields: ["fld_j_customer", "fld_j_vehicle", "fld_j_stage", "fld_j_promised"] }),
-        block("blk_t_ready_list", "list", [0, 4, 6, 3], { table: "tbl_jobs", filters: [{ field: "fld_j_stage", op: "eq", value: S("Ready for pickup") }] }, { title: "Ready for pickup", fields: ["fld_j_customer", "fld_j_vehicle", ...(payments ? ["fld_j_balance", "fld_j_payment"] : [])] }),
+        block("blk_t_hello", "header", [0, 0, 12, 2], undefined, {
+          stats: [
+            { table: "tbl_jobs", filters: [OPEN_STAGE], label: "car in the shop|cars in the shop" },
+            { table: "tbl_jobs", filters: [{ field: "fld_j_booked", op: "eq", value: "@today" }], label: "drop-off today|drop-offs today" },
+            { table: "tbl_jobs", filters: [{ field: "fld_j_timing", op: "eq", value: S("Late") }], label: "late", tone: "red" },
+            ...(payments ? [{ table: "tbl_jobs", agg: "sum", field: "fld_j_balance", filters: [{ field: "fld_j_balance", op: "gt", value: 0 }], label: "to collect", tone: "amber" }] : []),
+          ],
+          add: ["tbl_jobs"],
+        }),
+        block("blk_t_shop", "number", [0, 2, 3, 2], { table: "tbl_jobs", agg: "count", filters: [OPEN_STAGE] }, { title: "In the shop", icon: "car", tone: "accent", sub: "Cars on the workshop board", page: "pg_workshop" }),
+        block("blk_t_approval", "number", [3, 2, 3, 2], { table: "tbl_jobs", agg: "count", filters: [{ field: "fld_j_stage", op: "eq", value: S("Waiting approval") }] }, { title: "Waiting approval", icon: "clock", tone: "purple", sub: "Quotes the customer hasn't answered", page: "pg_workshop" }),
+        block("blk_t_ready", "number", [6, 2, 3, 2], { table: "tbl_jobs", agg: "count", filters: [{ field: "fld_j_stage", op: "eq", value: S("Ready for pickup") }] }, { title: "Ready for pickup", icon: "check", tone: "accent", sub: "Waiting for their owner", page: "pg_workshop" }),
+        block("blk_t_late", "number", [9, 2, 3, 2], { table: "tbl_jobs", agg: "count", filters: [{ field: "fld_j_timing", op: "eq", value: S("Late") }] }, { title: "Late", icon: "alert", tone: "red", alert: true, sub: "Past the promised date", page: "pg_jobs" }),
+        block("blk_t_dropoffs", "list", [0, 4, 6, 4], { table: "tbl_jobs", filters: [{ field: "fld_j_booked", op: "eq", value: "@today" }], sort: [{ field: "fld_j_booked", dir: "asc" }] }, { title: "Drop-offs today", fields: ["fld_j_vehicle", "fld_j_customer", "fld_j_booked", "fld_j_stage"] }),
+        block("blk_t_late_list", "list", [6, 4, 6, 4], { table: "tbl_jobs", filters: [{ field: "fld_j_timing", op: "eq", value: S("Late") }], sort: [{ field: "fld_j_promised", dir: "asc" }] }, { title: "Late — let the customer know", tone: "red", fields: ["fld_j_vehicle", "fld_j_customer", "fld_j_stage", "fld_j_timing", "fld_j_tech"] }),
+        block("blk_t_ready_list", "list", [0, 8, 6, 3], { table: "tbl_jobs", filters: [{ field: "fld_j_stage", op: "eq", value: S("Ready for pickup") }] }, { title: "Ready for pickup", fields: ["fld_j_vehicle", "fld_j_customer", ...(payments ? ["fld_j_balance", "fld_j_payment"] : [])] }),
         ...(payments
-          ? [block("blk_t_owed", "list", [6, 4, 6, 3], { table: "tbl_jobs", filters: [{ field: "fld_j_balance", op: "gt", value: 0 }], sort: [{ field: "fld_j_balance", dir: "desc" }] }, { title: "Money owed", fields: ["fld_j_customer", "fld_j_balance", "fld_j_payment"] })]
+          ? [block("blk_t_owed", "list", [6, 8, 6, 3], { table: "tbl_jobs", filters: [{ field: "fld_j_balance", op: "gt", value: 0 }], sort: [{ field: "fld_j_balance", dir: "desc" }] }, { title: "Money owed", cover: false, fields: ["fld_j_customer", "fld_j_balance", "fld_j_payment"] })]
           : []),
-        ...(parts ? [block("blk_t_stock", "list", [0, 7, 12, 3], { table: "tbl_parts", filters: [{ field: "fld_p_level", op: "neq", value: S("OK") }] }, { title: "Parts to reorder", fields: ["fld_p_level", "fld_p_stock", "fld_p_reorder", "fld_p_supplier"] })] : []),
+        ...(parts ? [block("blk_t_stock", "list", [0, 11, 12, 3], { table: "tbl_parts", filters: [{ field: "fld_p_level", op: "neq", value: S("OK") }] }, { title: "Parts to reorder", tone: "amber", fields: ["fld_p_level", "fld_p_stock", "fld_p_reorder", "fld_p_supplier"] })] : []),
       ]),
       page("pg_workshop", "Workshop", "wrench", 1, [
-        block("blk_w_board", "board", [0, 0, 12, 7], { table: "tbl_jobs", groupBy: "fld_j_stage", filters: [OPEN_STAGE], sort: [{ field: "fld_j_promised", dir: "asc" }] }, { title: "Jobs by stage — drag a card to move it", fields: ["fld_j_vehicle", "fld_j_customer", "fld_j_tech", "fld_j_timing"] }),
+        block("blk_w_board", "board", [0, 0, 12, 7], { table: "tbl_jobs", groupBy: "fld_j_stage", filters: [OPEN_STAGE], sort: [{ field: "fld_j_promised", dir: "asc" }] }, { title: "Drag a card to another stage, or tap its next step", nextButton: true, fields: ["fld_j_vehicle", "fld_j_customer", "fld_j_tech", ...(payments ? ["fld_j_quote"] : []), "fld_j_timing"] }),
       ]),
-      page("pg_jobs", "Jobs", "clipboard", 2, [
+      page("pg_bays", "Bays", "tools", 2, [
+        block("blk_b_map", "gallery", [0, 0, 12, 5], { table: "tbl_bays", sort: [{ field: "fld_b_name", dir: "asc" }] }, { title: "What's in each bay — set a job's bay on its page", colorBy: "fld_b_stage", fields: ["fld_b_job", "fld_b_car", "fld_b_customer", "fld_b_tech"], cover: false }),
+        block("blk_b_waiting", "list", [0, 5, 6, 3], { table: "tbl_jobs", filters: [OPEN_STAGE, { field: "fld_j_bay", op: "empty" }], sort: [{ field: "fld_j_booked", dir: "asc" }] }, { title: "Waiting for a bay", fields: ["fld_j_vehicle", "fld_j_customer", "fld_j_stage", "fld_j_booked"] }),
+        block("blk_b_ready", "list", [6, 5, 6, 3], { table: "tbl_jobs", filters: [{ field: "fld_j_stage", op: "eq", value: S("Ready for pickup") }] }, { title: "Ready — free the bay when collected", tone: "accent", fields: ["fld_j_vehicle", "fld_j_customer", "fld_j_bay"] }),
+      ]),
+      page("pg_jobs", "Jobs", "clipboard", 3, [
         block("blk_j_table", "table", [0, 0, 12, 8], { table: "tbl_jobs", sort: [{ field: "fld_j_booked", dir: "desc" }] }, { title: "All jobs", ...jobCols("fld_j_title", "fld_j_vehicle", "fld_j_customer", "fld_j_stage", "fld_j_timing", "fld_j_promised", ...(payments ? ["fld_j_total", "fld_j_payment"] : ["fld_j_quote"])) }),
       ]),
-      page("pg_calendar", "Calendar", "calendar", 3, [
+      page("pg_calendar", "Calendar", "calendar", 4, [
         block("blk_cal", "calendar", [0, 0, 12, 8], { table: "tbl_jobs", field: "fld_j_booked", groupBy: "fld_j_tech" }, { title: "Drop-offs", view: "week" }),
       ]),
-      page("pg_customers", "Customers", "users", 4, [
+      page("pg_customers", "Customers", "users", 5, [
         block("blk_c_table", "table", [0, 0, 12, 8], { table: "tbl_customers", sort: [{ field: "fld_c_name", dir: "asc" }] }, { title: "Customers", columns: ["fld_c_name", "fld_c_phone", "fld_c_email", "fld_c_vehicles", "fld_c_open_jobs", ...(payments ? ["fld_c_owed"] : [])] }),
       ]),
-      page("pg_vehicles", "Vehicles", "car", 5, [
+      page("pg_vehicles", "Vehicles", "car", 6, [
         block("blk_v_table", "table", [0, 0, 12, 8], { table: "tbl_vehicles", sort: [{ field: "fld_v_plate", dir: "asc" }] }, { title: "Vehicles", columns: ["fld_v_plate", "fld_v_model", "fld_v_year", "fld_v_owner", "fld_v_service", "fld_v_next_service", "fld_v_last_visit"] }),
       ]),
       ...(parts
         ? [
-            page("pg_parts", "Parts", "box", 6, [
+            page("pg_parts", "Parts", "box", 7, [
               block("blk_p_table", "table", [0, 0, 12, 6], { table: "tbl_parts", sort: [{ field: "fld_p_name", dir: "asc" }] }, { title: "Parts in stock", columns: ["fld_p_name", "fld_p_number", "fld_p_supplier", "fld_p_stock", "fld_p_level", "fld_p_price"] }),
             ]),
-            page("pg_orders", "Part orders", "truck", 7, [
-              block("blk_o_board", "board", [0, 0, 12, 5], { table: "tbl_orders", groupBy: "fld_o_stage", sort: [{ field: "fld_o_expected", dir: "asc" }] }, { title: "Part orders — drag to Ordered / Received", fields: ["fld_o_qty", "fld_o_supplier", "fld_o_job", "fld_o_expected"] }),
+            page("pg_orders", "Part orders", "truck", 8, [
+              block("blk_o_board", "board", [0, 0, 12, 5], { table: "tbl_orders", groupBy: "fld_o_stage", sort: [{ field: "fld_o_expected", dir: "asc" }] }, { title: "Part orders — drag to Ordered / Received", nextButton: true, fields: ["fld_o_qty", "fld_o_supplier", "fld_o_job", "fld_o_expected"] }),
               block("blk_o_suppliers", "table", [0, 6, 12, 3], { table: "tbl_suppliers", sort: [{ field: "fld_s_name", dir: "asc" }] }, { title: "Suppliers" }),
             ]),
           ]
         : []),
       ...(payments
         ? [
-            page("pg_payments", "Payments", "payments", 8, [
+            page("pg_payments", "Payments", "payments", 9, [
               block("blk_pay_owed", "table", [0, 0, 12, 4], { table: "tbl_jobs", filters: [{ field: "fld_j_balance", op: "gt", value: 0 }], sort: [{ field: "fld_j_promised", dir: "asc" }] }, { title: "Jobs with money owed", columns: ["fld_j_title", "fld_j_customer", "fld_j_total", "fld_j_paid", "fld_j_balance", "fld_j_payment"] }),
               block("blk_pay_list", "table", [0, 4, 12, 5], { table: "tbl_payments", sort: [{ field: "fld_pay_on", dir: "desc" }] }, { title: "Payments received" }),
             ]),
           ]
         : []),
-      page("pg_team", "Team", "team", 9, [
+      page("pg_team", "Team", "team", 10, [
         block("blk_team", "table", [0, 0, 12, 5], { table: "tbl_techs", sort: [{ field: "fld_t_name", dir: "asc" }] }, { title: "Technicians" }),
       ]),
 
       // ---------- record pages ----------
       recordPage("pg_r_job", "Job", "tbl_jobs", [
-        block("blk_rj_details", "details", [0, 0, 5, 8], { table: "tbl_jobs" }),
-        block("blk_rj_lines", "table", [5, 0, 7, 5], { table: "tbl_lines", filters: [{ field: "fld_l_job", op: "eq", value: "@record" }], sort: [{ field: "_created_at", dir: "asc" }] }, { title: "Work & parts — open a line to approve or decline it", columns: ["fld_l_desc", "fld_l_approval", "fld_l_qty", "fld_l_price", "fld_l_total"] }),
+        block("blk_rj_hero", "details", [0, 0, 12, 3], { table: "tbl_jobs" }, { part: "hero" }),
+        block("blk_rj_lines", "table", [0, 3, 8, 4], { table: "tbl_lines", filters: [{ field: "fld_l_job", op: "eq", value: "@record" }], sort: [{ field: "_created_at", dir: "asc" }] }, {
+          title: "Work & parts",
+          columns: ["fld_l_desc", "fld_l_qty", "fld_l_price", "fld_l_total", "fld_l_approval"],
+          quickSet: { field: "fld_l_approval", buttons: [{ value: S("Approved"), label: "Approve" }, { value: S("Declined"), label: "Decline" }] },
+        }),
+        block("blk_rj_facts", "details", [8, 3, 4, 7], { table: "tbl_jobs" }, { part: "facts" }),
+        block("blk_rj_photos", "details", [0, 7, 8, 3], { table: "tbl_jobs" }, { part: "photos" }),
+        block("blk_rj_activity", "activity", [8, 10, 4, 3], { table: "tbl_jobs" }),
         ...(payments
-          ? [block("blk_rj_payments", "table", [5, 5, 7, 3], { table: "tbl_payments", filters: [{ field: "fld_pay_job", op: "eq", value: "@record" }], sort: [{ field: "fld_pay_on", dir: "desc" }] }, { title: "Payments", columns: ["fld_pay_title", "fld_pay_amount", "fld_pay_method", "fld_pay_on"] })]
+          ? [block("blk_rj_payments", "table", [0, 10, 8, 3], { table: "tbl_payments", filters: [{ field: "fld_pay_job", op: "eq", value: "@record" }], sort: [{ field: "fld_pay_on", dir: "desc" }] }, { title: "Payments", columns: ["fld_pay_title", "fld_pay_amount", "fld_pay_method", "fld_pay_on"] })]
           : []),
-        ...(parts ? [block("blk_rj_orders", "table", [0, 8, 12, 2], { table: "tbl_orders", filters: [{ field: "fld_o_job", op: "eq", value: "@record" }] }, { title: "Parts ordered for this job", columns: ["fld_o_part", "fld_o_qty", "fld_o_supplier", "fld_o_stage", "fld_o_expected"] })] : []),
+        ...(parts ? [block("blk_rj_orders", "table", [0, 13, 12, 2], { table: "tbl_orders", filters: [{ field: "fld_o_job", op: "eq", value: "@record" }] }, { title: "Parts ordered", columns: ["fld_o_part", "fld_o_qty", "fld_o_stage", "fld_o_expected"] })] : []),
+      ]),
+      recordPage("pg_r_bay", "Bay", "tbl_bays", [
+        block("blk_rb_details", "details", [0, 0, 5, 5], { table: "tbl_bays" }),
+        block("blk_rb_jobs", "table", [5, 0, 7, 5], { table: "tbl_jobs", filters: [{ field: "fld_j_bay", op: "eq", value: "@record" }], sort: [{ field: "fld_j_booked", dir: "desc" }] }, { title: "Jobs in this bay", columns: ["fld_j_title", "fld_j_vehicle", "fld_j_stage", "fld_j_booked"] }),
       ]),
       recordPage("pg_r_vehicle", "Vehicle", "tbl_vehicles", [
         block("blk_rv_details", "details", [0, 0, 5, 6], { table: "tbl_vehicles" }),
@@ -335,6 +384,16 @@ export const mechanic: Template = {
           ]
         : []),
     ];
+
+    // Live counts in the menu: cars on the board, late jobs, parts running low, jobs owing money.
+    const badges: Record<string, NonNullable<Page["badge"]>> = {
+      pg_workshop: { source: { table: "tbl_jobs", filters: [OPEN_STAGE] } },
+      pg_bays: { source: { table: "tbl_jobs", filters: [OPEN_STAGE, { field: "fld_j_stage", op: "neq", value: S("Booked") }, { field: "fld_j_bay", op: "not_empty" }] }, label: "in use", tone: "neutral" },
+      pg_jobs: { source: { table: "tbl_jobs", filters: [{ field: "fld_j_timing", op: "eq", value: S("Late") }] }, label: "late", tone: "red" },
+      ...(parts ? { pg_parts: { source: { table: "tbl_parts", filters: [{ field: "fld_p_level", op: "neq", value: S("OK") }] }, label: "low", tone: "amber" as const } } : {}),
+      ...(payments ? { pg_payments: { source: { table: "tbl_jobs", filters: [{ field: "fld_j_balance", op: "gt", value: 0 }] }, label: "owing", tone: "amber" as const } } : {}),
+    };
+    for (const p of pages) if (badges[p.id]) p.badge = badges[p.id];
 
     // ---------- automations (conditions are checked again right before sending) ----------
     const automations: Automation[] = [];
@@ -379,7 +438,10 @@ export const mechanic: Template = {
       );
 
     const seed: Seed[] = list(answers, technicians).map((name, i) => ({ table: "tbl_techs", ref: `tech${i}`, data: { fld_t_name: name, fld_t_active: true, fld_t_rate: 120 } }));
-    if (choice(answers, sample) === "yes") seed.push(...sampleData(isoDate(localToday(new Date(), business.timezone)), parts, payments, seed.length > 0));
+    const hasTech = seed.length > 0;
+    const bayNames = list(answers, bays);
+    seed.push(...bayNames.map((name, i) => ({ table: "tbl_bays", ref: `bay${i}`, data: { fld_b_name: name } })));
+    if (choice(answers, sample) === "yes") seed.push(...sampleData(isoDate(localToday(new Date(), business.timezone)), parts, payments, hasTech, bayNames.length));
 
     return {
       blueprint: finish({
@@ -401,7 +463,8 @@ function recordPage(id: string, label: string, table: string, blocks: Page["layo
 }
 
 /** Sample shop, dated around today so every status shows (late, due today, ready, paid, owing…). */
-function sampleData(today: string, parts: boolean, payments: boolean, hasTech: boolean): Seed[] {
+function sampleData(today: string, parts: boolean, payments: boolean, hasTech: boolean, bayCount = 0): Seed[] {
+  const bay = (i: number) => (i < bayCount ? { fld_j_bay: `@ref:bay${i}` } : {});
   // Dates around the business's own today (its timezone), so "late" and "due today" are right.
   const day = (n: number) => new Date(Date.parse(`${today}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
   const at = (n: number, h: number) => `${day(n)}T${String(h).padStart(2, "0")}:00:00.000Z`;
@@ -414,9 +477,9 @@ function sampleData(today: string, parts: boolean, payments: boolean, hasTech: b
     { table: "tbl_vehicles", ref: "corolla", data: { fld_v_plate: "BC 4KX 21", fld_v_model: "Toyota Corolla", fld_v_year: 2016, fld_v_owner: "@ref:sam", fld_v_mileage: 142300, fld_v_next_service: day(10) } },
     { table: "tbl_vehicles", ref: "civic", data: { fld_v_plate: "BC 9RT 07", fld_v_model: "Honda Civic", fld_v_year: 2019, fld_v_owner: "@ref:dana", fld_v_mileage: 61200, fld_v_next_service: day(-3) } },
     { table: "tbl_vehicles", ref: "f150", data: { fld_v_plate: "BC 2LM 88", fld_v_model: "Ford F-150", fld_v_year: 2021, fld_v_owner: "@ref:lee", fld_v_mileage: 38900, fld_v_next_service: day(120) } },
-    { table: "tbl_jobs", ref: "brakes", data: { fld_j_title: "Front brakes grinding", fld_j_vehicle: "@ref:corolla", fld_j_customer: "@ref:sam", fld_j_stage: S("In progress"), fld_j_booked: at(-2, 15), fld_j_promised: day(-1), fld_j_mileage: 142300, fld_j_concern: "Grinding noise when braking, worse in the morning.", ...tech } },
-    { table: "tbl_jobs", ref: "service", data: { fld_j_title: "60,000 km service", fld_j_vehicle: "@ref:civic", fld_j_customer: "@ref:dana", fld_j_stage: S("Waiting approval"), fld_j_booked: at(0, 16), fld_j_promised: day(0), fld_j_mileage: 61200, ...tech2 } },
-    { table: "tbl_jobs", ref: "aircon", data: { fld_j_title: "A/C not blowing cold", fld_j_vehicle: "@ref:f150", fld_j_customer: "@ref:lee", fld_j_stage: S("Ready for pickup"), fld_j_booked: at(-4, 16), fld_j_promised: day(-1), ...(payments ? { fld_j_invoiced: day(-1) } : {}), ...tech } },
+    { table: "tbl_jobs", ref: "brakes", data: { fld_j_title: "Front brakes grinding", fld_j_vehicle: "@ref:corolla", fld_j_customer: "@ref:sam", fld_j_stage: S("In progress"), fld_j_booked: at(-2, 15), fld_j_promised: day(-1), fld_j_mileage: 142300, fld_j_concern: "Grinding noise when braking, worse in the morning.", ...tech, ...bay(0) } },
+    { table: "tbl_jobs", ref: "service", data: { fld_j_title: "60,000 km service", fld_j_vehicle: "@ref:civic", fld_j_customer: "@ref:dana", fld_j_stage: S("Waiting approval"), fld_j_booked: at(0, 16), fld_j_promised: day(0), fld_j_mileage: 61200, ...tech2, ...bay(1) } },
+    { table: "tbl_jobs", ref: "aircon", data: { fld_j_title: "A/C not blowing cold", fld_j_vehicle: "@ref:f150", fld_j_customer: "@ref:lee", fld_j_stage: S("Ready for pickup"), fld_j_booked: at(-4, 16), fld_j_promised: day(-1), ...(payments ? { fld_j_invoiced: day(-1) } : {}), ...tech, ...bay(2) } },
     { table: "tbl_jobs", data: { fld_j_title: "Check engine light", fld_j_vehicle: "@ref:corolla", fld_j_customer: "@ref:sam", fld_j_stage: S("Booked"), fld_j_booked: at(1, 15), fld_j_promised: day(2) } },
     { table: "tbl_lines", data: { fld_l_desc: "Brake pads (front set)", fld_l_job: "@ref:brakes", fld_l_kind: S("Part"), fld_l_qty: 1, fld_l_price: 85, fld_l_approval: S("Approved"), ...(parts ? { fld_l_part: "@ref:pads" } : {}) } },
     { table: "tbl_lines", data: { fld_l_desc: "Rotors", fld_l_job: "@ref:brakes", fld_l_kind: S("Part"), fld_l_qty: 2, fld_l_price: 70, fld_l_approval: S("Approved") } },

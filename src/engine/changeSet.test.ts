@@ -226,6 +226,8 @@ describe("undo", () => {
     ["removePage", [{ op: "removePage", pageId: "pg_today" }]],
     ["setPageHidden", [{ op: "setPageHidden", pageId: "pg_today", hidden: true }]],
     ["setPageIcon", [{ op: "setPageIcon", pageId: "pg_today", icon: null }, { op: "setPageIcon", pageId: "pg_clients", icon: "star" }]],
+    ["setPageBadge", [{ op: "setPageBadge", pageId: "pg_today", badge: { source: { table: "tbl_clients" }, label: "new", tone: "blue" } }]],
+    ["setDocument", [{ op: "setDocument", document: { id: "doc_q", kind: "quote", label: "Quote", table: "tbl_team", customer: "fld_name", lines: { table: "tbl_clients", via: "fld_fav_tech", description: "fld_name", total: "fld_name" }, totals: { total: "fld_name" } } }]],
     ["reorderPages", [{ op: "reorderPages", pageIds: ["pg_clients", "pg_today"] }]],
     ["addBlock", [{ op: "addBlock", pageId: "pg_today", block, index: 1 }]],
     ["removeBlock", [{ op: "removeBlock", pageId: "pg_today", blockId: "blk_rev" }]],

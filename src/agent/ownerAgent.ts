@@ -71,7 +71,15 @@ export function buildGuide(opts: { renderCheck: boolean }): string {
   const renderCheck = opts.renderCheck ? CHAT_RENDER_CHECK : MCP_RENDER_CHECK;
   const step4 = opts.renderCheck ? CHAT_STEP4 : MCP_STEP4;
   return `Custom UI (write_component):
-- Standard blocks (table, board, calendar, list, number, form, notes) are quickest. When the owner wants something they can't do — collapsible or tabbed sections, a different look, combined views, a custom page or flow — write a component instead of saying no.
+- Standard blocks (header, number, list, gallery, board, table, calendar, form, notes) are quickest and look the part — use them generously:
+  - header (w 12, top of a dashboard): greeting, today's date, a live line options.stats [{ table, filters?, agg?, field?, label: "car in the shop|cars in the shop", tone? }] and New buttons options.add [table ids].
+  - number = a KPI tile: options { title, icon (car, clock, check, alert, money, calendar, users, box…), tone (accent | red | amber | blue | purple | neutral), sub (a short line under the number), alert: true (only stands out while not zero), page (page id it links to) }. Four in a row (w 3).
+  - list rows and board / gallery cards lead with the table's photo (first file field, or options.cover; cover: false to hide). list options.tone colours the rows (red for "late", amber for "to reorder"). Boards colour each column by its option colour; for a pipeline (stages in order) set options.nextButton: true so cards get a one-tap "→ next stage" button.
+  - Record pages: a "details" block with options.part "hero" (photo, title, badges, a stage stepper for the stage field), "facts" (the remaining values) and "photos" (photo/video fields, add straight in); an "activity" block (source: { table }) shows the record's timeline. A table of child records can carry one-tap buttons: options.quickSet { field, buttons: [{ value: option id, label: "Approve" }, …] }.
+  - gallery options.colorBy (a status, or a rollup of one) fills each card with that colour, empty ones show as "Free" — a map of bays, rooms or chairs.
+  - Quotes and invoices: set up with change_setup setDocument (docs/documents.md) on a table with a client link, lines table and totals; statuses derive from sent/accepted/declined dates and payments. Put a "document" block (source: { table }) on its record page: the owner sends it (email + link), the client accepts or pays online at the link, an accepted quote becomes an invoice in one tap.
+  - page.badge { source: { table, filters }, label?, tone? } puts a live count next to the page in the menu ("4", "1 late").
+- Pick option colours that read as a sequence for stages (blue → amber → purple → green when done), red/amber only for problems. When the owner wants something they can't do — collapsible or tabbed sections, a different look, combined views, a custom page or flow — write a component instead of saying no.
 - A component is one TSX module: \`export default function Name() { … }\`. Import only from "react" and "@one/kit" (API below). Style with Tailwind classes; theme colors: bg-ground, bg-card, text-ink, text-muted, border-line, bg-accent, text-accent, bg-accent-tint, shadow-soft, rounded-2xl. Use the kit's Card, Collapsible, Tabs, Select and DateTimeInput instead of building inputs; never use <select>, native date inputs or hand-made dropdowns/popovers.
 - Design quality matters as much as working code. Aim for a modern product look (think Linear, Stripe, Notion, Cal.com): clear typography hierarchy (one big title, small muted labels), generous whitespace, content aligned to a grid, subtle dividers instead of boxes inside boxes, at most one card level, one accent colour used sparingly, real empty states. Avoid a page that is just a stack of equal bordered boxes.
 - When the owner asks to change how a page looks or flows ("make it better", "all on one screen", "less boxy"), rebuild the page as ONE full-width component (replaceBlocks with all its blocks, w 12) rather than tweaking block positions.
@@ -97,7 +105,7 @@ App rules — every screen you build follows these unless the owner asks otherwi
 - When the setup lists screens that don't meet the app rules yet, fix them whenever you change that screen, and fix all of them when the owner asks to tidy up or bring the app up to standard.
 - Show hierarchy: a record always appears with its parent for context (rooms grouped under or labelled with their building, tenants with their room and building, jobs with room and building). Lists of child records group by parent or show the parent in a column; detail views show the path (Building › Room). When designing tables, link children to their parent (room → building) instead of copying names.
 - Compare choice values to option ids (opt_…), never to label text; labels can be renamed.
-- Files (photos, signed agreements, receipts, documents) live in file fields. Forms upload them by themselves: put the file field in openRecordForm's fields. Show them with FileImage: a thumbnail in lists and cards, large in a detail view, a grid (gallery) for a collection of photos; other files show as a chip that opens them. Never show a file's name where the owner expects the picture.
+- Apps are picture driven. Things people look at (cars, rooms, products, nails, haircuts, jobs before/after) get a photo field, and a gallery when there are several: a file field with multiple: true (addField { type: "file", multiple: true }) holds a list of photos and videos. Forms upload them by themselves (put the field in openRecordForm's fields); record pages let owners drop, paste or snap photos straight in. Show them with FileImage: a cover photo on cards and list rows, large in a detail view; Gallery for a gallery field; tap opens full screen (viewFiles), videos play. FileInput is the uploader for custom forms. Other files (agreements, receipts) show as a chip that opens them. Never show a file's name where the owner expects the picture.
 - Works on a phone: stack columns below md, tables become cards or scroll horizontally, tap targets at least 40px.
 
 Data that stays true (docs/data-rules.md — learned from real apps that sent rent reminders to people who had moved out). Design the data so it can't drift:
@@ -251,11 +259,14 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
   const page = input.pageId ? bp.pages.find((p) => p.id === input.pageId) : undefined;
   const userText = page ? `[The owner is looking at page "${page.label}" (${page.id}).]\n\n${input.message}` : input.message;
   const images = (input.images ?? []).slice(0, MAX_IMAGES);
+  const learned = backend.learnings ? await backend.learnings().catch(() => "") : "";
   const newContent: Anthropic.Beta.BetaContentBlockParam[] = [
     ...images.map((im) => ({ type: "image" as const, source: { type: "base64" as const, media_type: im.mediaType, data: im.data } })),
     { type: "text" as const, text: userText },
     // The setup lives in the conversation (not the system prompt), so the history stays cacheable.
     { type: "text" as const, text: setupNote(bp, now) },
+    // What owners of this kind of business went on to change (approved learnings), when there is any.
+    ...(learned ? [{ type: "text" as const, text: learned }] : []),
   ];
   // A turn that stopped right after tool results leaves a user message last; add to it (roles alternate).
   const last = input.history.at(-1);

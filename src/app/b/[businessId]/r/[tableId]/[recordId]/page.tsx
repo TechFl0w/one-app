@@ -3,7 +3,7 @@ import { getBusinessContext, getDevice } from "@/server/context";
 import { supabaseStore } from "@/server/store";
 import { RecordPageView } from "@/components/page/RecordPageView";
 import { submitRecordForm } from "../../../actions";
-import { sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "../../../sandbox-actions";
+import { sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "../../../sandbox-actions";
 
 /** A record's own page (docs: record pages). */
 export default async function RecordPage({ params }: PageProps<"/b/[businessId]/r/[tableId]/[recordId]">) {
@@ -29,6 +29,9 @@ export default async function RecordPage({ params }: PageProps<"/b/[businessId]/
             remove: sandboxRemove.bind(null, businessId),
             uploadTarget: sandboxUploadTarget.bind(null, businessId),
             fileUrl: sandboxFileUrl.bind(null, businessId),
+            sendDocument: sandboxSendDocument.bind(null, businessId),
+            documentLink: sandboxDocumentLink.bind(null, businessId),
+            invoiceFromQuote: sandboxInvoiceFromQuote.bind(null, businessId),
           },
         },
       }}

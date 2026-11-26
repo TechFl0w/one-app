@@ -20,8 +20,11 @@ const log = (...a) => console.log("•", ...a);
     await p.waitForURL(/\/demo\/p\/pg_today$/);
     await p.getByText("Demo: Northside Auto Repair").waitFor();
     // Cars in the shop, waiting for approval, ready for pickup, late.
-    await p.locator("p.text-3xl").first().waitFor();
-    assert.deepEqual(await p.locator("p.text-3xl").allTextContents(), ["4", "1", "1", "1"]);
+    await p.locator("p.text-4xl").first().waitFor();
+    assert.deepEqual(await p.locator("p.text-4xl").allTextContents(), ["4", "1", "1", "1"]);
+    // The greeting's live line and the menu's counts.
+    await p.getByText("$485 to collect").waitFor();
+    await p.locator("nav a", { hasText: "Jobs" }).getByText("1 late").waitFor();
     log("Today: 4 cars in the shop, 1 late");
 
     await p.goto(BASE + "/demo/p/pg_workshop");
@@ -37,7 +40,11 @@ const log = (...a) => console.log("•", ...a);
     await p.mouse.up();
     await p.waitForTimeout(150);
     assert.equal(await cols.nth(1).locator("article").count(), 1, "job moved to Checked in");
-    log("workshop board: a job drags from Booked to Checked in");
+    // Or one tap on its next step.
+    await cols.nth(1).getByRole("button", { name: "Move to Diagnosing", exact: true }).click();
+    await p.waitForTimeout(150);
+    assert.equal(await cols.nth(2).locator("article").count(), 1, "job moved on to Diagnosing");
+    log("workshop board: a job drags from Booked to Checked in, then taps on to Diagnosing");
 
     await p.goto(BASE + "/demo/p/pg_jobs");
     await p.locator("table tbody tr", { hasText: "Front brakes grinding" }).click();
@@ -45,7 +52,7 @@ const log = (...a) => console.log("•", ...a);
     await p.getByText("$305").first().waitFor(); // balance = approved lines 405 − paid 100
     await p.getByText("Part paid").first().waitFor();
     await p.getByText("Late", { exact: true }).first().waitFor();
-    await p.getByText("Labour: replace pads and rotors").waitFor();
+    await p.getByText("Labour: replace pads and rotors", { exact: true }).waitFor();
     await p.screenshot({ path: `${S}/mechanic-job.png`, fullPage: true });
     log("job page: lines, balance $305, part paid, late");
 
@@ -54,6 +61,15 @@ const log = (...a) => console.log("•", ...a);
     await p.getByText("Service history").waitFor();
     await p.getByText("Due soon").first().waitFor();
     log("vehicle page from the job: service history, service due soon");
+    // Stage stepper on the job's page, and one-tap approval on a quote line.
+    await p.goto(BASE + "/demo/p/pg_jobs");
+    await p.locator("table tbody tr", { hasText: "60,000 km service" }).click();
+    await p.getByRole("list", { name: "Stage" }).waitFor();
+    await p.getByRole("button", { name: "Approve" }).first().waitFor();
+    await p.locator("button.btn-primary", { hasText: "Waiting for parts" }).waitFor(); // the next stage
+    await p.goto(BASE + "/demo/p/pg_bays");
+    await p.getByText("Free", { exact: true }).waitFor();
+    log("job page: stepper, approve/decline lines; bays map shows the free bay");
 
     assert.deepEqual(errors, []);
     log("ok");

@@ -1,4 +1,5 @@
 import "server-only";
+import { assignNumber } from "@/engine/documents";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Blueprint } from "@/schema/blueprint";
 import { RecordId, type RecordQuery, type RecordRow } from "@/schema/records";
@@ -84,7 +85,12 @@ export async function createRecord(
 ): Promise<RecordRow> {
   const bp = await getCurrentBlueprint(supabase, businessId);
   const table = tableOrThrow(bp, tableId);
-  const data = validateRecordInput(table, input, "create");
+  // Quotes and invoices get the next number when they're created without one.
+  const data = await assignNumber(bp, tableId, validateRecordInput(table, input, "create"), async (docId) => {
+    const { data: n, error } = await supabase.rpc("next_document_number", { p_business_id: businessId, p_document_id: docId });
+    if (error) throw new Error(`Could not number the document: ${error.message}`);
+    return Number(n);
+  });
   assertFilesInBusiness(table, data, businessId);
   await assertLinksExist(supabase, businessId, linkedIds(table, data));
   const { data: row, error } = await supabase

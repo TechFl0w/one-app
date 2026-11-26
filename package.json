@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:db": "scripts/test-db.sh",
     "typecheck": "tsc --noEmit",
-    "e2e": "node e2e/demo-edit.cjs && node e2e/demo-chat.cjs && node e2e/demo-booking.cjs && node e2e/demo-sandbox.cjs && node e2e/demo-recreate.cjs && node e2e/demo-mechanic.cjs",
+    "e2e": "node e2e/demo-edit.cjs && node e2e/demo-chat.cjs && node e2e/demo-booking.cjs && node e2e/demo-sandbox.cjs && node e2e/demo-recreate.cjs && node e2e/demo-mechanic.cjs && node e2e/demo-contractor.cjs",
     "sandbox": "node scripts/build-sandbox.mjs",
     "prebuild": "node scripts/build-sandbox.mjs",
     "predev": "node scripts/build-sandbox.mjs"

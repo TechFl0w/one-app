@@ -1,15 +1,15 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, Pencil, Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { useEdit } from "@/components/edit/EditProvider";
 import { useSandbox } from "@/components/sandbox/SandboxProvider";
 import { RecordDialog, type RecordFormRequest } from "@/components/sandbox/RecordDialog";
 import { sandboxSchema } from "@/sandbox/schema";
 import { opensAsPage, recordPath } from "@/engine/recordPage";
-import { asFile, filesSupported, recordFileUrl } from "@/components/sandbox/files";
-import { isImageFile } from "@/lib/files";
+import { asFiles, filesSupported } from "@/components/sandbox/files";
+import { MediaGallery, MediaUploader } from "@/components/media/Media";
 
 /**
  * The record pop-up for standard blocks: click a row to edit or delete it, "Add" to create one.
@@ -71,9 +71,15 @@ export function RecordRowLink({ table, recordId, children }: { table: string; re
 }
 
 /** "Add" for a block's table (on a record page, prefilled with the link to that record). */
-export function AddRecordButton({ table, label, defaults }: { table: string; label: string; defaults?: Record<string, unknown> }) {
+export function AddRecordButton({ table, label, defaults, big }: { table: string; label: string; defaults?: Record<string, unknown>; big?: boolean }) {
   const open = useContext(Ctx);
   if (!open) return null;
+  if (big)
+    return (
+      <button type="button" className="btn-primary" onClick={() => open.form({ table })}>
+        <Plus className="h-4 w-4" /> New {label}
+      </button>
+    );
   return (
     <button type="button" className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-accent hover:bg-accent-tint" onClick={() => open.form({ table, ...(defaults && Object.keys(defaults).length ? { defaults } : {}) })} aria-label={`Add ${label}`}>
       <Plus className="h-3.5 w-3.5" /> Add
@@ -122,43 +128,48 @@ export function OpenRecord({
 }
 
 /** Edit (and delete) the record a record page is about. */
-export function EditRecordButton({ table, recordId }: { table: string; recordId: string }) {
+export function EditRecordButton({ table, recordId, label = "Edit" }: { table: string; recordId: string; label?: string }) {
   const open = useContext(Ctx);
   if (!open) return null;
   return (
     <button type="button" className="btn-ghost shrink-0 px-3 py-1.5 text-sm" onClick={() => open.form({ table, recordId })}>
-      <Pencil className="h-3.5 w-3.5" /> Edit
+      <Pencil className="h-3.5 w-3.5" /> {label}
     </button>
   );
 }
 
-/** A file field's value on a record page: the photo itself, or a chip that opens the file. */
-export function RecordFile({ file, label }: { file: unknown; label: string }) {
+/**
+ * A file field on a record page: its photos and videos, with adding right there — drop, paste or
+ * tap, no edit form. Each change saves straight away.
+ */
+export function RecordFile({ table, recordId, field, file, label, multiple }: { table: string; recordId: string; field: string; file: unknown; label: string; multiple?: boolean }) {
   const sandbox = useSandbox();
-  const f = asFile(file);
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    let live = true;
-    if (f && sandbox && filesSupported(sandbox.bridge)) recordFileUrl(sandbox.bridge, f.path).then((u) => live && setUrl(u), () => {});
-    return () => {
-      live = false;
-    };
-  }, [f?.path, sandbox]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!f) return null;
-  if (isImageFile(f))
+  const router = useRouter();
+  const [local, setLocal] = useState<{ from: unknown; value: unknown } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // What we just saved, until the page brings the record back with it.
+  const value = local && local.from === file ? local.value : file;
+  const setValue = (v: unknown) => setLocal({ from: file, value: v });
+  if (!sandbox) return null;
+  if (!filesSupported(sandbox.bridge))
     return (
-      <a href={url ?? undefined} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-line" title={label}>
-        {url ? (
-          // eslint-disable-next-line @next/next/no-img-element -- short-lived signed link
-          <img src={url} alt={label} className="h-40 w-56 object-cover" />
-        ) : (
-          <span className="block h-40 w-56 animate-pulse bg-ground" />
-        )}
-      </a>
+      <div className="min-w-0">
+        <p className="mb-1.5 text-xs text-muted">{label}</p>
+        {asFiles(value).length ? <MediaGallery value={value} bridge={sandbox.bridge} label={label} size={multiple ? "h-28 w-28" : "h-40 w-56"} /> : <p className="rounded-2xl border-2 border-dashed border-line px-4 py-5 text-center text-sm text-muted">Photos and videos go here — drop, paste or snap them (not in the demo).</p>}
+      </div>
     );
+  const save = async (v: unknown) => {
+    setValue(v);
+    setError(null);
+    const r = await sandbox.bridge.update(table, recordId, { [field]: v });
+    if (!r.ok) setError(r.error);
+    else router.refresh();
+  };
   return (
-    <a href={url ?? undefined} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-sm hover:bg-ground">
-      <Paperclip className="h-4 w-4 text-muted" /> <span className="max-w-48 truncate">{f.name}</span>
-    </a>
+    <div className="min-w-0">
+      <p className="mb-1.5 text-xs text-muted">{label}</p>
+      <MediaUploader bridge={sandbox.bridge} table={table} field={field} value={value} multiple={multiple} onChange={(v) => void save(v)} />
+      {error && <p className="mt-1 text-sm text-red-700">{error}</p>}
+    </div>
   );
 }

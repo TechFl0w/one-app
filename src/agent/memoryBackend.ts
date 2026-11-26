@@ -1,3 +1,4 @@
+import { assignNumber } from "@/engine/documents";
 import type { Blueprint } from "@/schema/blueprint";
 import type { RecordRow } from "@/schema/records";
 import { applyChangeSet } from "@/engine/changeSet";
@@ -34,7 +35,12 @@ export function memoryBackend(initial: { blueprint: Blueprint; records: RecordRo
       }, async (table) => state.records.filter((r) => r.tableId === table).map(view)),
     getRecord: async (t, id) => (await computed(state.blueprint, t, [view(find(t, id))]))[0],
     createRecord: async (t, input) => {
-      const data = validateRecordInput(tableOrThrow(state.blueprint, t), input, "create");
+      // Documents are numbered after the highest number so far (in memory there is no sequence).
+      const data = await assignNumber(state.blueprint, t, validateRecordInput(tableOrThrow(state.blueprint, t), input, "create"), async (docId) => {
+        const def = state.blueprint.documents?.find((d) => d.id === docId);
+        const nums = state.records.filter((r) => r.tableId === def?.table).map((r) => Number(String(r.data[def?.number ?? ""] ?? "").replace(/\D/g, "")) || 0);
+        return Math.max(0, ...nums) + 1;
+      });
       checkLinks(t, data);
       const now = new Date().toISOString();
       const row: RecordRow = { id: newId(), tableId: t, data: Object.fromEntries(Object.entries(data).filter(([, v]) => v !== null)), createdAt: now, updatedAt: now };

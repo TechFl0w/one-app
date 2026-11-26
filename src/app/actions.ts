@@ -6,6 +6,7 @@ import { createBusiness } from "@/server/blueprints";
 import { createRecord } from "@/server/records";
 import { templateById, type Answers } from "@/templates";
 import { resolveSeed } from "@/templates/types";
+import { withLearnings } from "@/server/control";
 
 /** Onboarding "Build it": builds the template on the server from the answers, then seeds it. */
 export async function buildBusiness(input: { templateId: string; name: string; timezone: string; answers: Answers }): Promise<{ error?: string }> {
@@ -23,7 +24,10 @@ export async function buildBusiness(input: { templateId: string; name: string; t
   const supabase = await createClient();
   let id: string;
   try {
-    const { blueprint, seed } = template.build({ name, timezone }, input.answers ?? {});
+    const built = template.build({ name, timezone }, input.answers ?? {});
+    // Starts with what owners of this kind of business were found to add (control center approvals).
+    const blueprint = await withLearnings(built.blueprint);
+    const { seed } = built;
     id = await createBusiness(supabase, { name, blueprint });
     // Seeds may link to earlier seeds ("@ref:<name>"): a sample car belongs to a sample customer.
     const ids = new Map<string, string>();

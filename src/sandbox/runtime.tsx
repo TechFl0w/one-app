@@ -509,7 +509,7 @@ function FieldInput({ field: f, value, onChange, table }: { field: SandboxSchema
     case "link":
       return f.to ? <LinkOptions to={f.to} render={(opts) => <Select label={label} value={str} onChange={onChange} options={opts} />} /> : null;
     case "file":
-      return <FileInput label={label} table={table} field={f.id} value={value} onChange={onChange} accept={/photo|picture|image|logo|cover/i.test(f.label) ? "image/*" : undefined} />;
+      return <FileInput label={label} table={table} field={f.id} value={value} onChange={onChange} multiple={f.multiple} accept={f.multiple || /photo|picture|image|logo|cover|video|before|after/i.test(f.label) ? "image/*,video/*" : "*/*"} />;
     case "email":
       return <Input label={label} type="email" value={str} onChange={onChange} />;
     case "phone":
@@ -527,18 +527,24 @@ function toLocalInput(iso: string) {
 
 // ---------- kit: files ----------
 
-type FileValue = { path: string; name: string; size?: number; mime?: string };
-const asFileValue = (v: unknown): FileValue | null =>
-  v && typeof v === "object" && typeof (v as FileValue).path === "string" && typeof (v as FileValue).name === "string" ? (v as FileValue) : null;
+type FileValue = { path: string; name: string; size?: number; mime?: string; poster?: string; width?: number; height?: number };
+const asFileValue = (v: unknown): FileValue | null => {
+  const x = Array.isArray(v) ? v[0] : v;
+  return x && typeof x === "object" && typeof (x as FileValue).path === "string" && typeof (x as FileValue).name === "string" ? (x as FileValue) : null;
+};
+/** A file field's value as a list: galleries hold several, single fields one or none. */
+const asFileList = (v: unknown): FileValue[] => (Array.isArray(v) ? v : v ? [v] : []).map(asFileValue).filter((f): f is FileValue => !!f);
 const isImage = (f: FileValue) => !!f.mime?.startsWith("image/") || /\.(png|jpe?g|gif|webp|avif|heic)$/i.test(f.name);
+const isVideo = (f: FileValue) => !!f.mime?.startsWith("video/") || /\.(mp4|mov|m4v|webm)$/i.test(f.name);
 
 const Glyph = ({ d, className }: { d: string; className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden className={className}><path d={d} /></svg>
 );
 const IMAGE_D = "M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01";
 const FILE_D = "M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6";
+const PLUS_D = "M12 5v14M5 12h14";
 
-/** Uploads a file the owner picked into a file field's storage; save the result in that field. */
+/** Uploads a file the owner picked into a file field's storage (photos are shrunk, videos get a still); save the result in that field. */
 async function uploadFile(table: string, field: string, file: File): Promise<FileValue> {
   return call<FileValue>("files.upload", table, field, file, file.name);
 }
@@ -554,79 +560,156 @@ function fileUrlOf(path: string) {
   }
   return p;
 }
-function useFileUrl(value: unknown): string | null {
-  const f = asFileValue(value);
-  const [url, setUrl] = useState<string | null>(null);
+function usePathUrl(path: string | undefined): string | null {
+  const [state, setState] = useState<{ path: string; url: string } | null>(null);
   useEffect(() => {
     let live = true;
-    setUrl(null);
-    if (f) fileUrlOf(f.path).then((u) => live && setUrl(u), () => {});
+    if (path) fileUrlOf(path).then((url) => live && setState({ path, url }), () => {});
     return () => {
       live = false;
     };
-  }, [f?.path]); // eslint-disable-line react-hooks/exhaustive-deps
-  return url;
+  }, [path]);
+  return state && state.path === path ? state.url : null;
+}
+/** A viewable URL for a file field's value; for a video, its still frame. */
+function useFileUrl(value: unknown): string | null {
+  const f = asFileValue(value);
+  return usePathUrl(f ? (isVideo(f) ? f.poster : f.path) : undefined);
 }
 /** Opens a file (a lease, a receipt) in a new tab, from One App. */
 function openFile(value: unknown) {
   const f = asFileValue(value);
   if (f) void call("files.open", f.path);
 }
+/** Shows photos and videos full screen (swipe through; videos play). */
+function viewFiles(value: unknown, index = 0) {
+  const list = asFileList(value);
+  if (list.length) void call("files.view", list, index);
+}
 
-/** Shows a file field: the photo itself, or a file chip that opens it. Empty: a soft placeholder. */
-function FileImage({ file, alt = "", className, fit = "cover" }: { file: unknown; alt?: string; className?: string; fit?: "cover" | "contain" }) {
+/**
+ * Shows a file field: the photo itself, a video's still with a play button, or a chip for other
+ * files. Tapping opens it full screen. A gallery value shows its first item. Empty: a soft placeholder.
+ */
+function FileImage({ file, alt = "", className, fit = "cover", onClick }: { file: unknown; alt?: string; className?: string; fit?: "cover" | "contain"; onClick?: () => void }) {
   const f = asFileValue(file);
-  const url = useFileUrl(f && isImage(f) ? f : null);
-  if (!f) return <div className={cx("flex items-center justify-center bg-ground text-muted", className ?? "h-24 w-24 rounded-xl")}><Glyph d={IMAGE_D} className="h-6 w-6" /></div>;
-  if (!isImage(f))
+  const url = useFileUrl(f && (isImage(f) || isVideo(f)) ? f : null);
+  const box = className ?? "h-24 w-24 rounded-xl";
+  if (!f) return <div className={cx("flex items-center justify-center bg-ground text-muted", box)}><Glyph d={IMAGE_D} className="h-6 w-6" /></div>;
+  if (!isImage(f) && !isVideo(f))
     return (
       <button type="button" onClick={() => openFile(f)} className={cx("inline-flex max-w-full items-center gap-2 rounded-full border border-line px-3 py-1.5 text-sm hover:bg-ground", className)}>
         <Glyph d={FILE_D} className="h-4 w-4 shrink-0 text-muted" />
         <span className="truncate">{f.name}</span>
       </button>
     );
-  return url ? (
-    // eslint-disable-next-line @next/next/no-img-element -- runs in the sandbox frame, not Next
-    <img src={url} alt={alt} className={cx(fit === "cover" ? "object-cover" : "object-contain", className ?? "h-24 w-24 rounded-xl")} />
-  ) : (
-    <div className={cx("animate-pulse bg-ground", className ?? "h-24 w-24 rounded-xl")} />
+  return (
+    <button type="button" onClick={(e) => { e.stopPropagation(); if (onClick) onClick(); else viewFiles(file); }} className={cx("relative block overflow-hidden bg-ground", box)} aria-label={`Open ${alt || f.name}`}>
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- runs in the sandbox frame, not Next
+        <img src={url} alt={alt} className={cx("h-full w-full", fit === "cover" ? "object-cover" : "object-contain")} />
+      ) : (
+        <span className={cx("block h-full w-full", isVideo(f) && !f.poster ? "bg-ink/80" : "animate-pulse bg-ground")} />
+      )}
+      {isVideo(f) && (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-ink/70 text-white shadow-lg">
+            <svg viewBox="0 0 24 24" className="ml-0.5 h-5 w-5" fill="currentColor" aria-hidden><path d="M8 5v14l11-7z" /></svg>
+          </span>
+        </span>
+      )}
+    </button>
   );
 }
 
-/** Pick-and-upload control for a file field (used by RecordForm; use it in custom forms too). */
-function FileInput({ table, field, value, onChange, label, accept, className }: { table: string; field: string; value: unknown; onChange: (v: FileValue | null) => void; label?: React.ReactNode; accept?: string; className?: string }) {
-  const f = asFileValue(value);
-  const [busy, setBusy] = useState(false);
+/** A grid of photos and videos (a gallery field, or several files); tap one to view them all full screen. */
+function Gallery({ files, className, itemClassName = "aspect-square w-full rounded-xl", empty }: { files: unknown; className?: string; itemClassName?: string; empty?: React.ReactNode }) {
+  const list = asFileList(files);
+  if (!list.length) return <>{empty ?? null}</>;
+  return (
+    <div className={cx("grid grid-cols-3 gap-2 sm:grid-cols-4", className)}>
+      {list.map((f, i) => (
+        <FileImage key={f.path} file={f} className={itemClassName} onClick={() => viewFiles(list, i)} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The upload control for a file field: tap (a phone offers the camera), drop or paste files.
+ * `multiple` for gallery fields — onChange then gets the whole list. Uploads start right away.
+ */
+function FileInput({ table, field, value, onChange, label, accept = "image/*,video/*", multiple, className }: { table: string; field: string; value: unknown; onChange: (v: FileValue | FileValue[] | null) => void; label?: React.ReactNode; accept?: string; multiple?: boolean; className?: string }) {
+  const files = asFileList(value);
+  const [busy, setBusy] = useState(0);
+  const [over, setOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const pick = async (file: File) => {
-    setBusy(true);
+  const latestRef = useRef(files);
+  useEffect(() => {
+    latestRef.current = files;
+  });
+  const add = async (picked: File[]) => {
+    const list = multiple ? picked : picked.slice(0, 1);
+    if (!list.length) return;
     setError(null);
-    try {
-      onChange(await uploadFile(table, field, file));
-    } catch (e) {
-      setError(e instanceof Error ? e.message.replace(/^[a-z_]+: /, "") : "Upload failed");
-    } finally {
-      setBusy(false);
+    setBusy((b) => b + list.length);
+    for (const file of list) {
+      try {
+        const up = await uploadFile(table, field, file);
+        latestRef.current = multiple ? [...latestRef.current, up] : [up];
+        onChange(multiple ? latestRef.current : up);
+      } catch (e) {
+        setError(`${file.name}: ${e instanceof Error ? e.message.replace(/^[a-z_]+: /, "") : "Upload failed"}`);
+      } finally {
+        setBusy((b) => b - 1);
+      }
     }
   };
+  const remove = (path: string) => {
+    latestRef.current = files.filter((f) => f.path !== path);
+    onChange(multiple ? latestRef.current : null);
+  };
+  const media = /image|video/.test(accept);
   return (
     <Labelled label={label} className={className} popover>
-      <input ref={input} type="file" className="hidden" accept={accept} onChange={(e) => { const x = e.target.files?.[0]; if (x) void pick(x); e.target.value = ""; }} />
-      {f || busy ? (
-        <div className="flex items-center gap-3 rounded-xl border border-line p-2">
-          {f && isImage(f) ? <FileImage file={f} className="h-14 w-14 rounded-lg" /> : <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-ground"><Glyph d={FILE_D} className="h-5 w-5 text-muted" /></span>}
-          <span className="min-w-0 flex-1 truncate text-sm">{busy ? "Uploading…" : f?.name}</span>
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => input.current?.click()}>Replace</Button>
-          {f && !busy && <button type="button" className="px-2 text-sm text-muted hover:text-ink" onClick={() => onChange(null)}>Remove</button>}
-        </div>
-      ) : (
-        <button type="button" onClick={() => input.current?.click()} className="flex w-full flex-col items-center gap-1 rounded-xl border border-dashed border-line px-4 py-6 text-sm text-muted hover:border-accent hover:text-accent">
-          <span className="font-medium text-ink">{accept?.startsWith("image") ? "Choose a photo" : "Choose a file"}</span>
-          <span className="text-xs">Up to 20 MB</span>
-        </button>
-      )}
-      {error && <p className="mt-1 text-sm text-red-700">{error}</p>}
+      <div
+        className={cx("rounded-2xl", over && "bg-accent-tint ring-2 ring-accent")}
+        onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setOver(true); } }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => { e.preventDefault(); setOver(false); void add([...e.dataTransfer.files]); }}
+        onPaste={(e) => { const p = [...e.clipboardData.files]; if (p.length) { e.preventDefault(); void add(p); } }}
+      >
+        <input ref={input} type="file" className="hidden" accept={accept} multiple={multiple} onChange={(e) => { void add([...(e.target.files ?? [])]); e.target.value = ""; }} />
+        {!files.length && !busy ? (
+          <button type="button" onClick={() => input.current?.click()} className="flex w-full flex-col items-center gap-1.5 rounded-2xl border-2 border-dashed border-line px-4 py-6 text-sm text-muted hover:border-accent hover:text-accent">
+            <Glyph d={IMAGE_D} className="h-6 w-6" />
+            <span className="font-semibold text-ink">{media ? (multiple ? "Add photos or videos" : "Add a photo") : "Add a file"}</span>
+            <span className="text-xs">Drop here, paste, or tap{media ? " — on a phone you can take one" : ""}</span>
+          </button>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {files.map((f, i) => (
+              <div key={f.path} className="relative">
+                <FileImage file={f} className="h-20 w-20 rounded-xl" onClick={() => viewFiles(files, i)} />
+                <button type="button" onClick={() => remove(f.path)} className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-ink text-xs text-white shadow" aria-label={`Remove ${f.name}`}>✕</button>
+              </div>
+            ))}
+            {Array.from({ length: busy }, (_, i) => (
+              <div key={`up${i}`} className="flex h-20 w-20 items-center justify-center rounded-xl border border-line bg-ground" aria-label="Uploading"><Spinner /></div>
+            ))}
+            {(multiple || !files.length) && !(!multiple && busy) && (
+              <button type="button" onClick={() => input.current?.click()} className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-line text-xs text-muted hover:border-accent hover:text-accent">
+                <Glyph d={PLUS_D} className="h-5 w-5" /> Add
+              </button>
+            )}
+            {!multiple && files.length > 0 && !busy && (
+              <button type="button" onClick={() => input.current?.click()} className="self-end text-sm font-medium text-accent hover:underline">Replace</button>
+            )}
+          </div>
+        )}
+        {error && <p className="mt-1 text-sm text-red-700">{error}</p>}
+      </div>
     </Labelled>
   );
 }
@@ -728,8 +811,8 @@ function Board({ table, field, records: rows, renderCard, columns, onCardClick, 
 
 const kit = {
   useRecords, useRecord, useSchema, useProps, records, recordLabel, optionLabel, navigate, openRecord, openRecordForm, toast, plural, formatMoney, formatDate,
-  uploadFile, useFileUrl, openFile,
-  Card, Button, Badge, Collapsible, Tabs, Input, Textarea, Select, DateTimeInput, RecordForm, Spinner, Empty, Icon, FileImage, FileInput, Board,
+  uploadFile, useFileUrl, openFile, viewFiles,
+  Card, Button, Badge, Collapsible, Tabs, Input, Textarea, Select, DateTimeInput, RecordForm, Spinner, Empty, Icon, FileImage, FileInput, Gallery, Board,
 };
 
 // ---------- boot ----------

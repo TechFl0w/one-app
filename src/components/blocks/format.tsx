@@ -1,6 +1,7 @@
 import type { Field } from "@/schema/blueprint";
 import type { LinkLabels } from "@/engine/blockData";
 import { Check } from "lucide-react";
+import { FileCell } from "@/components/media/Media";
 
 export interface FormatCtx {
   timezone: string;
@@ -67,8 +68,10 @@ export function valueText(field: Field, value: unknown, labels: LinkLabels, ctx:
       if (fmt === "percent") return new Intl.NumberFormat(ctx.locale ?? DEFAULT_LOCALE, { style: "percent", maximumFractionDigits: 1 }).format(value / 100);
       return new Intl.NumberFormat(ctx.locale ?? DEFAULT_LOCALE, { maximumFractionDigits: 2 }).format(value);
     }
-    case "file":
+    case "file": {
+      if (Array.isArray(value)) return value.length === 1 ? "1 file" : `${value.length} files`;
       return typeof value === "object" && value && "name" in value ? String((value as { name: unknown }).name) : "File";
+    }
     default:
       return String(value);
   }
@@ -110,6 +113,8 @@ export function FieldValue({ field, value, labels, ctx }: { field: Field; value:
       return <a className="hover:underline" href={`mailto:${value}`}>{String(value)}</a>;
     case "phone":
       return <a className="whitespace-nowrap hover:underline" href={`tel:${String(value).replace(/[^+\d]/g, "")}`}>{String(value)}</a>;
+    case "file":
+      return <FileCell value={value} />;
     case "money":
     case "number":
       return <span className="tabular-nums">{valueText(field, value, labels, ctx)}</span>;

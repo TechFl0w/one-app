@@ -4,7 +4,7 @@ import type { BridgeResult } from "./result";
 
 export interface SandboxSchema {
   business: { name: string; timezone: string; currency: string };
-  tables: { id: string; label: string; primaryField?: string; openIn?: "page" | "modal"; fields: { id: string; label: string; type: string; required?: boolean; computed?: boolean; options?: { id: string; label: string; color?: string }[]; to?: string }[] }[];
+  tables: { id: string; label: string; primaryField?: string; openIn?: "page" | "modal"; fields: { id: string; label: string; type: string; required?: boolean; computed?: boolean; multiple?: boolean; options?: { id: string; label: string; color?: string }[]; to?: string }[] }[];
 }
 
 export interface SandboxRecord {
@@ -21,7 +21,7 @@ export type HostToFrame =
   /** Asks the frame for a picture of what it shows (the assistant's self-check). */
   | { type: "capture"; id: number };
 
-export type CallMethod = "records.list" | "records.get" | "records.create" | "records.update" | "records.remove" | "navigate" | "toast" | "form.open" | "files.upload" | "files.read" | "files.open" | "record.open";
+export type CallMethod = "records.list" | "records.get" | "records.create" | "records.update" | "records.remove" | "navigate" | "toast" | "form.open" | "files.upload" | "files.read" | "files.open" | "files.view" | "record.open";
 
 /** What a file field holds (schema/records FileValue). */
 export interface SandboxFile {
@@ -29,6 +29,10 @@ export interface SandboxFile {
   name: string;
   size?: number;
   mime?: string;
+  /** Videos: the still frame shown before playing. */
+  poster?: string;
+  width?: number;
+  height?: number;
 }
 
 export type FrameToHost =
@@ -48,10 +52,14 @@ export interface SandboxBridge {
   /** Only called after the owner confirmed in One App's own dialog. */
   remove(table: string, id: string): Promise<BridgeResult<void>>;
   /** File fields. Missing where files can't be stored (the demo). */
-  uploadTarget?(table: string, field: string, name: string, size: number): Promise<BridgeResult<{ path: string; token: string }>>;
+  uploadTarget?(table: string, field: string, name: string, size: number, mime?: string): Promise<BridgeResult<{ path: string; url: string }>>;
   fileUrl?(path: string): Promise<BridgeResult<string>>;
   /** A screen's compiled code and styles, for screens the page didn't render (Edit mode drafts). */
   loadComponent?(componentId: string): Promise<BridgeResult<{ compiled: string; css?: string }>>;
+  /** Quotes and invoices (One App's own document block, not frames). Missing in the demo. */
+  sendDocument?(table: string, id: string): Promise<BridgeResult<{ link: string; emailed: boolean; reason?: string }>>;
+  documentLink?(table: string, id: string): Promise<BridgeResult<string>>;
+  invoiceFromQuote?(table: string, id: string): Promise<BridgeResult<{ table: string; id: string }>>;
 }
 
 /** Stands in for a screen's compiled code in the browser's copy of the setup; the real code is

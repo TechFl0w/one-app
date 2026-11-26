@@ -44,6 +44,7 @@ export function restorePageOps(current: Blueprint, old: Blueprint, pageId: strin
   }
   if (now.label !== was.label) ops.push({ op: "rename", target: { kind: "page", pageId }, label: was.label });
   if ((now.icon ?? null) !== (was.icon ?? null)) ops.push({ op: "setPageIcon", pageId, icon: was.icon ?? null });
+  if (JSON.stringify(now.badge ?? null) !== JSON.stringify(was.badge ?? null)) ops.push({ op: "setPageBadge", pageId, badge: was.badge ?? null });
   if (now.hidden !== was.hidden) ops.push({ op: "setPageHidden", pageId, hidden: was.hidden });
 
   // Default layout: drop blocks that weren't there, put back the rest exactly.

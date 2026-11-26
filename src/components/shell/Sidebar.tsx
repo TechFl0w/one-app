@@ -9,16 +9,35 @@ import { menuOrder, movePageOp } from "@/engine/editing";
 import { useEdit } from "@/components/edit/EditProvider";
 import { AddPageDialog } from "@/components/edit/AddDialogs";
 import { PageIcon } from "./Icon";
+import type { MenuCount } from "@/engine/menuCounts";
+import { TONE, toneOf } from "@/components/blocks/tone";
 
 export interface SidebarProps {
   basePath: string;
   businesses?: { id: string; name: string }[];
   footer?: React.ReactNode;
+  counts?: Record<string, MenuCount>;
+}
+
+/** "4", "1 late": filled in the page's tone (accent by default). */
+function CountPill({ count, active }: { count?: MenuCount; active: boolean }) {
+  if (!count) return null;
+  const t = TONE[toneOf(count.tone, "neutral")];
+  const filled = !count.tone || count.tone === "accent";
+  return (
+    <span
+      className="ml-auto shrink-0 rounded-full px-2 py-px text-xs font-bold tabular-nums"
+      style={filled ? { background: "var(--accent)", color: "#fff" } : active ? { background: "var(--card)", color: t.color } : { background: t.tint, color: t.color }}
+    >
+      {count.value}
+      {count.label ? ` ${count.label}` : ""}
+    </span>
+  );
 }
 
 /** White sidebar with the business's pages; collapses into a drawer on phones. In Edit mode
  * every page (hidden ones too) can be renamed, reordered, hidden and added. */
-export function Sidebar({ basePath, businesses = [], footer }: SidebarProps) {
+export function Sidebar({ basePath, businesses = [], footer, counts = {} }: SidebarProps) {
   const { blueprint, editing, push } = useEdit();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -111,6 +130,7 @@ export function Sidebar({ basePath, businesses = [], footer }: SidebarProps) {
             >
               <PageIcon name={p.icon} className="h-[18px] w-[18px] shrink-0" />
               <span className="truncate">{p.label}</span>
+              <CountPill count={counts[p.id]} active={active} />
             </Link>
           );
         })}

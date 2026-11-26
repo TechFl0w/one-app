@@ -58,3 +58,10 @@ h1, h2, h3 {
 @utility label {
   @apply mb-1.5 block text-sm font-medium text-ink;
 }
+
+/* Printing a quote or invoice: just the paper. */
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff !important; }
+  .doc-paper { box-shadow: none !important; border: 0 !important; padding: 0 !important; }
+}

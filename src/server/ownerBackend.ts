@@ -1,4 +1,5 @@
 import "server-only";
+import { approvedLearnings } from "./control";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { OwnerBackend } from "@/agent/types";
 import { ChangeSetError, previewChangeSet } from "@/engine/changeSet";
@@ -26,6 +27,7 @@ export function supabaseOwnerBackend(supabase: SupabaseClient, businessId: strin
   const manager = () => (opts.verifiedManager ? Promise.resolve() : requireManager(supabase, businessId));
   return {
     blueprint: () => getCurrentBlueprint(supabase, businessId),
+    learnings: async () => (await approvedLearnings((await getCurrentBlueprint(supabase, businessId)).business.type)).advice,
     query: (q) => listRecords(supabase, businessId, q),
     getRecord: (t, id) => getRecord(supabase, businessId, t, id),
     createRecord: (t, input) => createRecord(supabase, businessId, t, input),
