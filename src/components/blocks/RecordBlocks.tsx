@@ -4,6 +4,7 @@ import { groupField, recordLabel, type Group, type LinkLabels } from "@/engine/b
 import { FieldValue, formatMoney, valueText, type FormatCtx } from "./format";
 import { EditRecordButton, OpenRecord, RecordFile, RecordRowLink } from "./RecordOpener";
 import { recordPath } from "@/engine/recordPage";
+import { DragBoard } from "./DragBoard";
 
 type RecordsProps = {
   block: Block;
@@ -108,39 +109,30 @@ export function BoardBlock({ block, table, records, labels, ctx, groups = [] }: 
     byGroup.set(key, [...(byGroup.get(key) ?? []), r]);
   }
   const columns: Group[] = [...groups, ...(byGroup.has(null) ? [{ id: null, label: `No ${gf.label.toLowerCase()}` }] : [])];
-
-  return (
-    <div className="flex h-full gap-3 overflow-x-auto px-5 pb-5">
-      {columns.map((g) => {
-        const items = byGroup.get(g.id) ?? [];
-        return (
-          <div key={g.id ?? "_none"} className="flex w-64 shrink-0 flex-col rounded-2xl bg-ground p-2">
-            <div className="flex items-center gap-2 px-2 py-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ background: g.color ?? "var(--muted)" }} />
-              <span className="truncate text-sm font-semibold">{g.label}</span>
-              <span className="ml-auto text-xs text-muted">{items.length}</span>
-            </div>
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-0.5">
-              {items.map((r) => (
-                <OpenRecord as="article" key={r.id} table={table.id} recordId={r.id} className="rounded-xl border border-line bg-card p-3 shadow-soft hover:border-accent/40">
-                  <p className="truncate text-sm font-semibold">{recordLabel(table, r, labels)}</p>
-                  <div className="mt-1.5 space-y-1 text-xs text-muted">
-                    {details.map((f) =>
-                      r.data[f.id] == null ? null : (
-                        <div key={f.id} className="truncate">
-                          <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
-                        </div>
-                      ),
-                    )}
-                  </div>
-                </OpenRecord>
-              ))}
-            </div>
+  const cards = records.map((r) => {
+    const v = r.data[gf.id];
+    return {
+      id: r.id,
+      group: typeof v === "string" && groups.some((g) => g.id === v) ? v : null,
+      node: (
+        <OpenRecord as="article" table={table.id} recordId={r.id} className="rounded-xl border border-line bg-card p-3 shadow-soft hover:border-accent/40">
+          <p className="truncate text-sm font-semibold">{recordLabel(table, r, labels)}</p>
+          <div className="mt-1.5 space-y-1 text-xs text-muted">
+            {details.map((f) =>
+              r.data[f.id] == null ? null : (
+                <div key={f.id} className="truncate">
+                  <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />
+                </div>
+              ),
+            )}
           </div>
-        );
-      })}
-    </div>
-  );
+        </OpenRecord>
+      ),
+    };
+  });
+  // Drag cards between columns to change their stage; a column field that follows rules can't be set by hand.
+  const locked = "derive" in gf && gf.derive ? `${gf.label} follows the dates, so cards move by themselves.` : undefined;
+  return <DragBoard table={table.id} field={gf.id} columns={columns} cards={cards} locked={locked} />;
 }
 
 export function NumberBlock({

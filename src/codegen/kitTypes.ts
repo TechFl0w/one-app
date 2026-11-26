@@ -114,6 +114,8 @@ declare module "@one/kit" {
   export function FileImage(props: { file: unknown; alt?: string; className?: string; fit?: "cover" | "contain" }): JSX.Element;
   /** Pick-and-upload control for a file field, for custom forms. accept="image/*" for photos. */
   export function FileInput(props: { table: string; field: string; value: unknown; onChange: (v: FileValue | null) => void; label?: ReactNode; accept?: string; className?: string }): JSX.Element;
+  /** THE kanban: cards can always be dragged between columns (saves "field"); columns default to the field's options; a click opens the record's page. Never build a board by hand. */
+  export function Board(props: { table: string; field: string; records: RecordRow[]; renderCard: (record: RecordRow) => ReactNode; columns?: { id: string; label: string; color?: string }[]; onCardClick?: (record: RecordRow) => void; className?: string }): JSX.Element;
   export function Spinner(props: { className?: string }): JSX.Element;
   export function Empty(props: { children?: ReactNode; className?: string }): JSX.Element;
   export function Icon(props: { name: string; className?: string }): JSX.Element;

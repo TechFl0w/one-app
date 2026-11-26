@@ -15,6 +15,24 @@ const log = (...a) => console.log("•", ...a);
   const errors = [];
   p.on("pageerror", (e) => errors.push(e.message));
   await p.goto(BASE + "/demo/p/pg_bookings");
+  // Board cards can be dragged to another column (the demo doesn't save, so check right after the drop).
+  {
+    const cols = p.locator("[data-board-column]");
+    await cols.first().locator("article").first().waitFor();
+    const before = await cols.nth(2).locator("article").count();
+    const cb = await cols.first().locator("article").first().boundingBox();
+    const tb = await cols.nth(2).boundingBox();
+    await p.mouse.move(cb.x + 20, cb.y + 15);
+    await p.mouse.down();
+    await p.mouse.move(cb.x + 60, cb.y + 40, { steps: 4 });
+    await p.mouse.move(tb.x + tb.width / 2, tb.y + 80, { steps: 10 });
+    await p.mouse.up();
+    await p.waitForTimeout(150);
+    assert.equal(await cols.nth(2).locator("article").count(), before + 1, "card moved to the other column");
+    assert.equal(p.url(), BASE + "/demo/p/pg_bookings", "a drag doesn't open the card");
+    log("board cards drag between columns");
+    await p.reload();
+  }
   // Board cards open their record's page too (not only table rows).
   await p.locator("article[role=button]").first().click();
   await p.waitForURL(/\/demo\/r\/tbl_bookings\//);
