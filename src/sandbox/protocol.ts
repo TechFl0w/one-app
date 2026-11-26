@@ -21,7 +21,15 @@ export type HostToFrame =
   /** Asks the frame for a picture of what it shows (the assistant's self-check). */
   | { type: "capture"; id: number };
 
-export type CallMethod = "records.list" | "records.get" | "records.create" | "records.update" | "records.remove" | "navigate" | "toast" | "form.open";
+export type CallMethod = "records.list" | "records.get" | "records.create" | "records.update" | "records.remove" | "navigate" | "toast" | "form.open" | "files.upload" | "files.read" | "files.open";
+
+/** What a file field holds (schema/records FileValue). */
+export interface SandboxFile {
+  path: string;
+  name: string;
+  size?: number;
+  mime?: string;
+}
 
 export type FrameToHost =
   | { type: "ready" }
@@ -39,4 +47,7 @@ export interface SandboxBridge {
   update(table: string, id: string, data: Record<string, unknown>, confirmed?: boolean): Promise<BridgeResult<SandboxRecord>>;
   /** Only called after the owner confirmed in One App's own dialog. */
   remove(table: string, id: string): Promise<BridgeResult<void>>;
+  /** File fields. Missing where files can't be stored (the demo). */
+  uploadTarget?(table: string, field: string, name: string, size: number): Promise<BridgeResult<{ path: string; token: string }>>;
+  fileUrl?(path: string): Promise<BridgeResult<string>>;
 }

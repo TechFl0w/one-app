@@ -5,6 +5,8 @@ import { createRecord, deleteRecord, getRecord, listRecords, updateRecord } from
 import { RecordQuery } from "@/schema/records";
 import type { SandboxRecord } from "@/sandbox/protocol";
 import { bridged } from "@/sandbox/result";
+import { getCurrentBlueprint } from "@/server/blueprints";
+import { FILES_BUCKET, MAX_FILE_BYTES, filePathFor, isBusinessFilePath } from "@/lib/files";
 
 /**
  * Data access for generated components (via the frame host). Runs as the signed-in user, so RLS
@@ -39,5 +41,33 @@ export async function sandboxUpdate(businessId: string, table: string, id: strin
 export async function sandboxRemove(businessId: string, table: string, id: string) {
   return bridged(async () => {
     await deleteRecord(await createClient(), businessId, table, id, { confirmed: true });
+  });
+}
+
+/**
+ * Where the browser may upload one file for a file field: a one-time signed upload URL in this
+ * business's folder. Storage policies check membership again when the upload happens.
+ */
+export async function sandboxUploadTarget(businessId: string, table: string, field: string, name: string, size: number) {
+  return bridged(async () => {
+    const supabase = await createClient();
+    const bp = await getCurrentBlueprint(supabase, businessId);
+    const f = bp.tables.find((t) => t.id === table)?.fields.find((x) => x.id === field);
+    if (!f || f.type !== "file") throw Object.assign(new Error("That isn’t a file field"), { code: "invalid" });
+    if (!(size > 0) || size > MAX_FILE_BYTES) throw Object.assign(new Error("Files can be up to 20 MB"), { code: "too_large" });
+    const path = filePathFor(businessId, table, String(name ?? ""));
+    const { data, error } = await supabase.storage.from(FILES_BUCKET).createSignedUploadUrl(path);
+    if (error || !data) throw new Error(`Couldn’t start the upload: ${error?.message ?? "no URL"}`);
+    return { path, token: data.token };
+  });
+}
+
+/** A short-lived link to view or download a file of this business. */
+export async function sandboxFileUrl(businessId: string, path: string) {
+  return bridged(async () => {
+    if (typeof path !== "string" || !isBusinessFilePath(businessId, path)) throw Object.assign(new Error("Unknown file"), { code: "not_found" });
+    const { data, error } = await (await createClient()).storage.from(FILES_BUCKET).createSignedUrl(path, 3600);
+    if (error || !data) throw Object.assign(new Error("Couldn’t open the file"), { code: "not_found" });
+    return data.signedUrl;
   });
 }

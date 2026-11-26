@@ -7,6 +7,7 @@ import {
   linkedIds,
   projectData,
   RecordError,
+  assertFilesInBusiness,
   tableOrThrow,
   validateRecordInput,
 } from "@/engine/records";
@@ -85,6 +86,7 @@ export async function createRecord(
   const bp = await getCurrentBlueprint(supabase, businessId);
   const table = tableOrThrow(bp, tableId);
   const data = validateRecordInput(table, input, "create");
+  assertFilesInBusiness(table, data, businessId);
   await assertLinksExist(supabase, businessId, linkedIds(table, data));
   const { data: row, error } = await supabase
     .from("records")
@@ -111,6 +113,7 @@ export async function updateRecord(
   if (recordUpdateIsRisky(table, patch) && !opts.confirmed) {
     throw new RecordError("needs_confirmation", "Changing a price or amount needs confirmation");
   }
+  assertFilesInBusiness(table, patch, businessId);
   await assertLinksExist(supabase, businessId, linkedIds(table, patch));
   const set = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== null));
   const unset = Object.keys(patch).filter((k) => patch[k] === null);

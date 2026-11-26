@@ -33,5 +33,40 @@ export function checkStandards(source: string, bp: Blueprint, opts: { inlineForm
       }
     }
   }
+  // Every add form can actually be completed: required fields are in the form or prefilled.
+  for (const m of source.matchAll(/openRecordForm\(\s*\{/g)) {
+    const call = formCall(source, m.index! + m[0].length - 1);
+    const tid = /\btable:\s*["'](tbl_[a-z0-9_]+)["']/.exec(call)?.[1];
+    const fieldList = /\bfields:\s*\[([^\]]*)\]/.exec(call)?.[1];
+    if (!tid || fieldList === undefined || /\brecordId\b/.test(call)) continue;
+    const t = bp.tables.find((x) => x.id === tid);
+    const defaults = /\bdefaults:\s*\{([\s\S]*)\}/.exec(call)?.[1] ?? "";
+    for (const f of t?.fields ?? []) {
+      if (!f.required || fieldList.includes(f.id) || defaults.includes(f.id)) continue;
+      errors.push(`The add form for ${t!.label} leaves out ${f.label} (${f.id}), which is required, so the owner can never save it. Add it to fields (or prefill it in defaults).`);
+    }
+  }
+
+  // Files the owner adds are shown: a photo field on a listed table appears on the screen.
+  for (const tid of listed) {
+    const t = bp.tables.find((x) => x.id === tid);
+    for (const f of t?.fields ?? []) {
+      if (f.type === "file" && !source.includes(f.id))
+        warnings.push(`${t!.label} have ${f.label} (${f.id}) but this screen never shows it: show it with FileImage (thumbnails in lists and cards, bigger in details; other files open on click).`);
+    }
+  }
+  if (/<input[^>]*type=["']file["']/.test(source) && !/uploadFile\(/.test(source))
+    errors.push("A file input on its own uploads nothing: use FileInput (or uploadFile) so the file is stored, or let openRecordForm handle it.");
+
   return { errors: [...new Set(errors)], warnings: [...new Set(warnings)].slice(0, 5) };
+}
+
+/** The text of one openRecordForm({ … }) argument, from its opening brace to the matching close. */
+function formCall(source: string, open: number): string {
+  let depth = 0;
+  for (let i = open; i < source.length && i < open + 4000; i++) {
+    if (source[i] === "{") depth++;
+    else if (source[i] === "}" && --depth === 0) return source.slice(open, i + 1);
+  }
+  return source.slice(open, open + 4000);
 }

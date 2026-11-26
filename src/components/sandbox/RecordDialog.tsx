@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dialog } from "@/components/edit/Dialog";
 import { Select } from "@/components/ui/Select";
 import { DatePicker } from "@/components/ui/DatePicker";
-import type { SandboxBridge, SandboxRecord, SandboxSchema } from "@/sandbox/protocol";
+import type { SandboxBridge, SandboxFile, SandboxRecord, SandboxSchema } from "@/sandbox/protocol";
 import { unwrap } from "@/sandbox/result";
+import { isImageFile } from "@/lib/files";
+import { asFile, filesSupported, recordFileUrl, uploadRecordFile } from "./files";
 
 type Table = SandboxSchema["tables"][number];
 type Field = Table["fields"][number];
@@ -20,7 +22,7 @@ export interface RecordFormRequest {
   defaults?: Record<string, unknown>;
 }
 
-const SKIP = new Set(["rollup", "formula", "file", "hours"]);
+const SKIP = new Set(["rollup", "formula", "hours"]);
 const pad = (n: number) => String(n).padStart(2, "0");
 function toLocal(iso: string) {
   const d = new Date(iso);
@@ -111,6 +113,7 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
       let v: unknown;
       if (f.type === "checkbox") v = form.has(f.id);
       else if (!s) v = null;
+      else if (f.type === "file") v = JSON.parse(s);
       else if (f.type === "number" || f.type === "money") v = Number(s);
       else if (f.type === "datetime") v = new Date(s).toISOString();
       else v = s;
@@ -148,7 +151,7 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
                 {f.label}
                 {f.required && <span className="text-accent"> *</span>}
               </label>
-              <FieldInput field={f} value={values[f.id]} options={f.type === "link" ? (links[f.to ?? ""] ?? []) : (f.options ?? []).map((o) => ({ value: o.id, label: o.label }))} />
+              <FieldInput field={f} value={values[f.id]} table={t.id} bridge={bridge} options={f.type === "link" ? (links[f.to ?? ""] ?? []) : (f.options ?? []).map((o) => ({ value: o.id, label: o.label }))} />
             </>
           )}
         </div>
@@ -179,7 +182,7 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
   );
 }
 
-function FieldInput({ field: f, value, options }: { field: Field; value: unknown; options: { value: string; label: string }[] }) {
+function FieldInput({ field: f, value, options, table, bridge }: { field: Field; value: unknown; options: { value: string; label: string }[]; table: string; bridge: SandboxBridge }) {
   const id = `rf-${f.id}`;
   const str = value == null ? "" : String(value);
   const common = { id, name: f.id, required: f.required, className: "input", defaultValue: str };
@@ -194,6 +197,8 @@ function FieldInput({ field: f, value, options }: { field: Field; value: unknown
       return <DatePicker id={id} name={f.id} required={f.required} defaultValue={str.slice(0, 10)} />;
     case "datetime":
       return <DatePicker id={id} name={f.id} required={f.required} withTime defaultValue={str ? toLocal(str) : ""} />;
+    case "file":
+      return <FileField id={id} name={f.id} required={f.required} initial={asFile(value)} table={table} field={f.id} label={f.label} bridge={bridge} />;
     case "email":
       return <input {...common} type="email" autoComplete="off" />;
     case "phone":
@@ -219,5 +224,62 @@ function Choice({ id, name, required, initial, options }: { id: string; name: st
       placeholder={required ? "Choose…" : "—"}
       options={[...(!required && value ? [{ value: "", label: "—" }] : []), ...options]}
     />
+  );
+}
+
+/** Pick a file (or photo), upload it right away, keep the stored file's details for the save. */
+function FileField({ id, name, required, initial, table, field, label, bridge }: { id: string; name: string; required?: boolean; initial: SandboxFile | null; table: string; field: string; label: string; bridge: SandboxBridge }) {
+  const [file, setFile] = useState(initial);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const image = /photo|picture|image|logo|cover|receipt/i.test(label);
+  useEffect(() => {
+    let live = true;
+    if (file && isImageFile(file) && filesSupported(bridge)) recordFileUrl(bridge, file.path).then((u) => live && setPreview(u), () => {});
+    return () => {
+      live = false;
+    };
+  }, [file, bridge]);
+  const pick = async (picked: File) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setPreview(isImageFile({ mime: picked.type, name: picked.name }) ? URL.createObjectURL(picked) : null);
+      setFile(await uploadRecordFile(bridge, table, field, picked, picked.name));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed");
+      setPreview(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!filesSupported(bridge)) return <p className="text-sm text-muted">Files can’t be added in the demo.</p>;
+  return (
+    <div className="relative">
+      <input type="hidden" name={name} value={file ? JSON.stringify(file) : ""} />
+      {required && !file && <input tabIndex={-1} aria-hidden className="pointer-events-none absolute inset-0 opacity-0" required value="" onChange={() => {}} onFocus={() => input.current?.focus()} />}
+      <input ref={input} id={id} type="file" className="sr-only" accept={image ? "image/*" : undefined} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); e.target.value = ""; }} />
+      {file || busy ? (
+        <div className="flex items-center gap-3 rounded-xl border border-line p-2">
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element -- short-lived signed link or local preview
+            <img src={preview} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" />
+          ) : (
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-ground text-xs text-muted">File</span>
+          )}
+          <span className="min-w-0 flex-1 truncate text-sm">{busy ? "Uploading…" : file?.name}</span>
+          <button type="button" className="btn-ghost px-3 py-1 text-sm" disabled={busy} onClick={() => input.current?.click()}>Replace</button>
+          {!required && file && !busy && <button type="button" className="px-2 text-sm text-muted hover:text-ink" onClick={() => { setFile(null); setPreview(null); }}>Remove</button>}
+        </div>
+      ) : (
+        <button type="button" className="flex w-full flex-col items-center gap-1 rounded-xl border border-dashed border-line px-4 py-6 text-sm text-muted hover:border-accent hover:text-accent" onClick={() => input.current?.click()}>
+          <span className="font-medium text-ink">{image ? "Choose a photo" : "Choose a file"}</span>
+          <span className="text-xs">Up to 20 MB</span>
+        </button>
+      )}
+      {error && <p className="mt-1 text-sm text-red-700">{error}</p>}
+    </div>
   );
 }

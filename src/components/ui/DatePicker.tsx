@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CalendarDays, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { Select, timeOptions } from "./Select";
 
@@ -22,11 +23,32 @@ export function DatePicker({ name, id, withTime = false, required, defaultValue 
     return { y: d.getFullYear(), m: d.getMonth() };
   });
   const root = useRef<HTMLDivElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; host: Element } | null>(null);
   useEffect(() => {
     if (!open) return;
-    const close = (e: MouseEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
+    const close = (e: MouseEvent) => !root.current?.contains(e.target as Node) && !pop.current?.contains(e.target as Node) && setOpen(false);
+    // The calendar floats above the page so modals and cards can't clip it (same as Select).
+    const place = () => {
+      const r = button.current?.getBoundingClientRect();
+      if (!r) return;
+      const below = window.innerHeight - r.bottom;
+      const up = below < 380 && r.top > below;
+      const left = Math.max(8, Math.min(r.left, window.innerWidth - 296));
+      // Inside a modal <dialog> (browser top layer) the calendar must live in the dialog to show above it.
+      const host = button.current?.closest("dialog") ?? document.body;
+      setPos({ left, host, ...(up ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }) });
+    };
+    place();
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
   }, [open]);
 
   const set = (d: string, t = time) => setValue(withTime ? `${d}T${t}` : d);
@@ -44,6 +66,7 @@ export function DatePicker({ name, id, withTime = false, required, defaultValue 
       {required && !date && <input tabIndex={-1} aria-hidden className="pointer-events-none absolute opacity-0" required value="" onChange={() => {}} />}
       <div className="relative flex-1">
         <button
+          ref={button}
           id={id}
           type="button"
           aria-haspopup="dialog"
@@ -55,8 +78,8 @@ export function DatePicker({ name, id, withTime = false, required, defaultValue 
           <span className={date ? "" : "text-muted"}>{shown || "Pick a date"}</span>
           <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
         </button>
-        {open && (
-          <div role="dialog" aria-label="Choose a date" className="absolute left-0 top-full z-50 mt-1.5 w-72 rounded-2xl border border-line bg-card p-3 shadow-lg">
+        {open && pos && createPortal(
+          <div ref={pop} role="dialog" aria-label="Choose a date" style={{ position: "fixed", left: pos.left, top: pos.top, bottom: pos.bottom }} className="z-[100] w-72 rounded-2xl border border-line bg-card p-3 shadow-lg">
             <div className="mb-2 flex items-center">
               <button type="button" className="rounded-full p-1.5 hover:bg-ground" onClick={() => move(-1)} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></button>
               <span className="flex-1 text-center text-sm font-semibold">{month}</span>
@@ -90,7 +113,8 @@ export function DatePicker({ name, id, withTime = false, required, defaultValue 
               <button type="button" className="rounded-full px-3 py-1 text-accent hover:bg-ground" onClick={() => { set(todayIso); setView({ y: today.getFullYear(), m: today.getMonth() }); setOpen(false); }}>Today</button>
               {date && !required && <button type="button" className="rounded-full px-3 py-1 text-muted hover:bg-ground" onClick={() => { setValue(""); setOpen(false); }}>Clear</button>}
             </div>
-          </div>
+          </div>,
+          pos.host,
         )}
       </div>
       {withTime && (

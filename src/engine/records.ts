@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { WeeklyHours, type Blueprint, type DataSource, type Field, type Table } from "@/schema/blueprint";
 import { isDateToken, isoDate, startOfLocalDay, tokenRange, localToday } from "./dates";
+import { isBusinessFilePath } from "@/lib/files";
 import { FileValue, RecordInput, RecordQuery, type FilterOp, type RecordFilter } from "@/schema/records";
 
 /**
@@ -363,4 +364,15 @@ function buildFilters(table: Table, filters: RecordFilter[], ctx: Required<Query
 
   if (errors.length) throw new RecordError("invalid", errors.map((e) => e.message).join("; "), errors);
   return p_filters;
+}
+
+/** A file field may only point at a file in this business's own storage folder (see lib/files). */
+export function assertFilesInBusiness(table: Table, data: Record<string, unknown>, businessId: string): void {
+  for (const f of table.fields) {
+    if (f.type !== "file") continue;
+    const v = data[f.id] as { path?: unknown } | null | undefined;
+    if (v && (typeof v.path !== "string" || !isBusinessFilePath(businessId, v.path))) {
+      throw new RecordError("invalid", `${f.label}: upload the file in One App first`, [{ field: f.id, message: "must be a file uploaded to this business" }]);
+    }
+  }
 }

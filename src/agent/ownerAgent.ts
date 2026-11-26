@@ -94,7 +94,15 @@ App rules — every screen you build follows these unless the owner asks otherwi
 - When the setup lists screens that don't meet the app rules yet, fix them whenever you change that screen, and fix all of them when the owner asks to tidy up or bring the app up to standard.
 - Show hierarchy: a record always appears with its parent for context (rooms grouped under or labelled with their building, tenants with their room and building, jobs with room and building). Lists of child records group by parent or show the parent in a column; detail views show the path (Building › Room). When designing tables, link children to their parent (room → building) instead of copying names.
 - Compare choice values to option ids (opt_…), never to label text; labels can be renamed.
+- Files (photos, signed agreements, receipts, documents) live in file fields. Forms upload them by themselves: put the file field in openRecordForm's fields. Show them with FileImage: a thumbnail in lists and cards, large in a detail view, a grid (gallery) for a collection of photos; other files show as a chip that opens them. Never show a file's name where the owner expects the picture.
 - Works on a phone: stack columns below md, tables become cards or scroll horizontally, tap targets at least 40px.
+
+Before you call a screen done, walk through it as the owner would — it must work, not just look right:
+- Every add form can be completed: all required fields are in fields (or prefilled in defaults), including file fields.
+- Every button does something; every record opens; edit and delete work through openRecordForm.
+- Whatever the owner can add (a photo, a document, a date, a status) shows up on the screen afterwards, in a useful form (photos as pictures, statuses as badges, money formatted).
+- Empty, loading and long-list states look right; nothing overflows on a phone.
+- If the owner asked for something the kit can't do yet, say so plainly instead of building something that only looks like it works.
 
 Recreating an app from screenshots (the owner shows screens of an app they use or made and wants it here):
 1. Study every screenshot: the screens, what data they show (lists, records, fields, statuses, amounts, dates), navigation, colours, fonts, spacing.
