@@ -3,6 +3,7 @@ import type { RecordRow } from "@/schema/records";
 import { calendarField, groupField, recordLabel, type Group, type LinkLabels } from "@/engine/blockData";
 import { addDays, localToday, startOfWeek, zonedParts, isoDate } from "@/engine/dates";
 import { formatDateTime, type FormatCtx } from "./format";
+import { OpenRecord } from "./RecordOpener";
 
 const HOUR_PX = 56;
 
@@ -99,15 +100,17 @@ export function CalendarBlock({
                 <div className="absolute inset-x-0 z-[5] border-t-2 border-accent/70" style={{ top: nowTop }} aria-hidden />
               )}
               {c.items.map(({ r, top, height: h, time }) => (
-                <div
+                <OpenRecord
                   key={r.id}
-                  className="absolute inset-x-1 overflow-hidden rounded-lg border-l-[3px] border-accent bg-accent-tint px-2 py-1 text-xs"
+                  table={table.id}
+                  recordId={r.id}
+                  className="absolute inset-x-1 overflow-hidden rounded-lg border-l-[3px] border-accent bg-accent-tint px-2 py-1 text-xs hover:brightness-95"
                   style={{ top, height: h }}
                   title={`${time} · ${recordLabel(table, r, labels)}`}
                 >
                   <p className="truncate font-semibold text-accent">{recordLabel(table, r, labels)}</p>
                   <p className="truncate text-muted">{time}</p>
-                </div>
+                </OpenRecord>
               ))}
             </div>
           </div>

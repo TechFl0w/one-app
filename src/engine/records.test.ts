@@ -171,3 +171,30 @@ describe("buildRecordQuery", () => {
     expect(() => buildRecordQuery(bp, { table: "tbl_bookings", limit: 10_000 })).toThrow(RecordError);
   });
 });
+
+describe("amount and number checks on the server", () => {
+  const t = (fields: Table["fields"]) => ({ id: "tbl_x", label: "X", fields }) as Table;
+  const money = t([{ id: "fld_amt", label: "Amount", type: "money" }]);
+  const refund = t([{ id: "fld_amt", label: "Refund", type: "money", allowNegative: true }]);
+  const nights = t([{ id: "fld_n", label: "Nights", type: "number", min: 1, max: 30 }]);
+  const fails = (tbl: Table, data: Record<string, unknown>) => {
+    try {
+      validateRecordInput(tbl, data, "create");
+      return null;
+    } catch (e) {
+      return (e as Error).message;
+    }
+  };
+
+  it("refuses negative amounts unless the field allows them", () => {
+    expect(fails(money, { fld_amt: -50 })).toMatch(/Amount can't be negative/);
+    expect(fails(refund, { fld_amt: -50 })).toBeNull();
+    expect(fails(money, { fld_amt: 50 })).toBeNull();
+  });
+  it("refuses absurd amounts and numbers outside their range", () => {
+    expect(fails(money, { fld_amt: 900_000_000 })).toMatch(/too large/);
+    expect(fails(nights, { fld_n: 0 })).toMatch(/at least 1/);
+    expect(fails(nights, { fld_n: 31 })).toMatch(/at most 30/);
+    expect(fails(nights, { fld_n: 3 })).toBeNull();
+  });
+});

@@ -2,7 +2,7 @@ import type { Block, Field, Table } from "@/schema/blueprint";
 import type { RecordRow } from "@/schema/records";
 import { groupField, recordLabel, type Group, type LinkLabels } from "@/engine/blockData";
 import { FieldValue, formatMoney, valueText, type FormatCtx } from "./format";
-import { RecordRowLink } from "./RecordOpener";
+import { OpenRecord, RecordRowLink } from "./RecordOpener";
 
 type RecordsProps = {
   block: Block;
@@ -78,7 +78,7 @@ export function ListBlock({ table, records, total, labels, ctx }: RecordsProps) 
     <div className="h-full overflow-auto">
       <ul className="divide-y divide-line/60">
         {records.map((r) => (
-          <li key={r.id} className="px-5 py-3">
+          <OpenRecord as="li" key={r.id} table={table.id} recordId={r.id} className="px-5 py-3 hover:bg-ground/60">
             <p className="truncate text-sm font-semibold">{recordLabel(table, r, labels)}</p>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
               {details.map((f) =>
@@ -89,7 +89,7 @@ export function ListBlock({ table, records, total, labels, ctx }: RecordsProps) 
                 ),
               )}
             </div>
-          </li>
+          </OpenRecord>
         ))}
       </ul>
       <More shown={records.length} total={total} />
@@ -121,7 +121,7 @@ export function BoardBlock({ block, table, records, labels, ctx, groups = [] }: 
             </div>
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-0.5">
               {items.map((r) => (
-                <article key={r.id} className="rounded-xl border border-line bg-card p-3 shadow-soft">
+                <OpenRecord as="article" key={r.id} table={table.id} recordId={r.id} className="rounded-xl border border-line bg-card p-3 shadow-soft hover:border-accent/40">
                   <p className="truncate text-sm font-semibold">{recordLabel(table, r, labels)}</p>
                   <div className="mt-1.5 space-y-1 text-xs text-muted">
                     {details.map((f) =>
@@ -132,7 +132,7 @@ export function BoardBlock({ block, table, records, labels, ctx, groups = [] }: 
                       ),
                     )}
                   </div>
-                </article>
+                </OpenRecord>
               ))}
             </div>
           </div>

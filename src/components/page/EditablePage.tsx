@@ -2,6 +2,8 @@
 
 import { isFullPageComponent, sandboxSchema } from "@/sandbox/schema";
 import { SandboxFrame } from "@/components/sandbox/SandboxFrame";
+import { OnDemandFrame } from "@/components/sandbox/OnDemandFrame";
+import { CODE_ON_DEMAND } from "@/sandbox/protocol";
 import { useSandbox } from "@/components/sandbox/SandboxProvider";
 import { useRef, useState } from "react";
 import Link from "next/link";
@@ -47,7 +49,14 @@ export function EditablePage({
     const c = b.type === "custom" ? blueprint.components?.find((x) => x.id === b.options?.component) : undefined;
     if (!c || !sandbox) return null;
     const props = b.options?.props && typeof b.options.props === "object" ? (b.options.props as Record<string, unknown>) : {};
-    const frame = <SandboxFrame title={c.label} componentId={c.id} theme={blueprint.theme} compiled={c.compiled} css={c.css} props={props} schema={sandboxSchema(blueprint)} bridge={sandbox.bridge} basePath={sandbox.basePath} autoHeight />;
+    const frame =
+      c.compiled === CODE_ON_DEMAND ? (
+        <OnDemandFrame key={c.id} componentId={c.id} load={sandbox.bridge.loadComponent}>
+          {(code) => <SandboxFrame title={c.label} componentId={c.id} theme={blueprint.theme} compiled={code.compiled} css={code.css} props={props} schema={sandboxSchema(blueprint)} bridge={sandbox.bridge} basePath={sandbox.basePath} autoHeight />}
+        </OnDemandFrame>
+      ) : (
+        <SandboxFrame title={c.label} componentId={c.id} theme={blueprint.theme} compiled={c.compiled} css={c.css} props={props} schema={sandboxSchema(blueprint)} bridge={sandbox.bridge} basePath={sandbox.basePath} autoHeight />
+      );
     return fullPage ? frame : <div className="h-full overflow-hidden rounded-card">{frame}</div>;
   };
   const gridRef = useRef<HTMLDivElement>(null);
