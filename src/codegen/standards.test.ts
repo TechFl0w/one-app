@@ -46,4 +46,12 @@ describe("app rules checked in code", () => {
     expect(checkStandards('<input type="file" />', withPhotos).errors[0]).toMatch(/uploads nothing/);
     expect(checkStandards('<img src={r.data.fld_ph_file.path} />', withPhotos).errors[0]).toMatch(/FileImage/);
   });
+
+  it("only asks about tables a screen lists, not ones it loads to look things up", () => {
+    const lookup = 'const photos = useRecords({ table: "tbl_photos" }); const p = photos.records.find((r) => r.id === id);';
+    expect(checkStandards(lookup, withPhotos).warnings).toEqual([]);
+    const listedViaConst = 'const T = "tbl_photos"; const photos = useRecords({ table: T }); photos.records.map((r) => r.data.fld_ph_title)';
+    expect(checkStandards(listedViaConst, withPhotos).warnings.join("\n")).toMatch(/never shows it/);
+    expect(checkStandards('const { records } = useRecords({ table: "tbl_photos" }); records.length', withPhotos).warnings.join("\n")).toMatch(/never shows it/);
+  });
 });

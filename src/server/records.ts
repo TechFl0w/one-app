@@ -93,7 +93,9 @@ export async function createRecord(
     .select("id, data, created_at, updated_at")
     .single();
   if (error) throw new Error(`Could not save record: ${error.message}`);
-  return toView(bp, tableId, row as Row);
+  // With computed values, so callers (screens, the assistant) see the status the record now has.
+  const [view] = await addComputed(bp, tableId, [toView(bp, tableId, row as Row)], loadAllVia(supabaseStore(supabase, businessId), bp));
+  return view;
 }
 
 /** Merges the given fields into the record; `null` clears a field. */
@@ -126,7 +128,9 @@ export async function updateRecord(
   const row = (rows as Row[] | null)?.[0];
   if (error) throw new Error(`Could not save record: ${error.message}`);
   if (!row) throw new RecordError("not_found", "Record not found");
-  return toView(bp, tableId, row as Row);
+  // With computed values, so callers (screens, the assistant) see the status the record now has.
+  const [view] = await addComputed(bp, tableId, [toView(bp, tableId, row as Row)], loadAllVia(supabaseStore(supabase, businessId), bp));
+  return view;
 }
 
 /** Deleting data is risky (CLAUDE.md rule 5): requires `confirmed`. Owners/admins only (RLS). */
