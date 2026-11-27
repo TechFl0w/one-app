@@ -7,6 +7,7 @@ import { HeroPhoto, StageStepper } from "./RecordHero";
 import { QuickSet } from "./QuickSet";
 import { singular } from "@/lib/words";
 import { recordPath } from "@/engine/recordPage";
+import { isoDate, localToday } from "@/engine/dates";
 import { DragBoard } from "./DragBoard";
 import { NextStepButton } from "./NextStep";
 import { COLUMN_COLORS, TONE, toneOf } from "./tone";
@@ -41,21 +42,40 @@ function More({ shown, total }: { shown: number; total: number }) {
   return <p className="px-5 py-2 text-xs text-muted">Showing {shown} of {total}</p>;
 }
 
-/** options.quickSet = { field, buttons: [{ value: option id, label }] }: one-tap buttons in that field's column. */
-function quickSetOf(block: Block, table: Table) {
+/**
+ * options.quickSet = { field, buttons: [{ value, label, also? }] }: one-tap buttons in that
+ * field's column. On a choice: value is an option id ("Approve"). On a date: value "@today"
+ * ("Paid today"), shown while the date is empty; `also` sets more fields at the same time
+ * (e.g. the payment method).
+ */
+function quickSetOf(block: Block, table: Table, ctx: FormatCtx) {
   const q = block.options?.quickSet as { field?: unknown; buttons?: unknown } | undefined;
   const field = table.fields.find((f) => f.id === q?.field);
-  if (!field || (field.type !== "status" && field.type !== "choice") || ("derive" in field && field.derive) || !Array.isArray(q?.buttons)) return undefined;
-  const buttons = (q.buttons as { value?: unknown; label?: unknown }[])
-    .map((b) => field.options.find((o) => o.id === b.value) && { value: String(b.value), label: typeof b.label === "string" ? b.label : field.options.find((o) => o.id === b.value)!.label, color: field.options.find((o) => o.id === b.value)!.color })
-    .filter((b): b is { value: string; label: string; color: string | undefined } => !!b)
+  if (!field || ("derive" in field && field.derive) || !Array.isArray(q?.buttons)) return undefined;
+  const raw = q.buttons as { value?: unknown; label?: unknown; also?: unknown }[];
+  const also = (b: { also?: unknown }) => (b.also && typeof b.also === "object" ? Object.fromEntries(Object.entries(b.also as object).filter(([k]) => table.fields.some((f) => f.id === k))) : undefined);
+  if (field.type === "date" || field.type === "datetime") {
+    const today = isoDate(localToday(new Date(), ctx.timezone));
+    const buttons = raw
+      .filter((b) => b.value === "@today" || b.value === "@now")
+      .map((b) => ({ value: field.type === "date" ? today : new Date().toISOString(), label: typeof b.label === "string" ? b.label : "Today", also: also(b) }))
+      .slice(0, 3);
+    return buttons.length ? { field, buttons, whenEmpty: true } : undefined;
+  }
+  if (field.type !== "status" && field.type !== "choice") return undefined;
+  const buttons = raw
+    .map((b) => {
+      const o = field.options.find((x) => x.id === b.value);
+      return o && { value: o.id, label: typeof b.label === "string" ? b.label : o.label, color: o.color, also: also(b) };
+    })
+    .filter((b): b is { value: string; label: string; color: string | undefined; also: Record<string, unknown> | undefined } => !!b)
     .slice(0, 3);
-  return buttons.length ? { field, buttons } : undefined;
+  return buttons.length ? { field, buttons, whenEmpty: false } : undefined;
 }
 
 export function TableBlock({ block, table, records, total, labels, ctx }: RecordsProps) {
   const cols = columnsFor(block, table);
-  const quick = quickSetOf(block, table);
+  const quick = quickSetOf(block, table, ctx);
   if (!records.length) return <Empty>No {table.label.toLowerCase()} yet.</Empty>;
   return (
     <div className="h-full overflow-auto">
@@ -74,7 +94,7 @@ export function TableBlock({ block, table, records, total, labels, ctx }: Record
             <RecordRowLink key={r.id} table={table.id} recordId={r.id}>
               {cols.map((f, i) => (
                 <td key={f.id} className={`border-b border-line/60 px-5 py-2.5 ${i === 0 ? "font-medium" : ""}`}>
-                  {quick && quick.field.id === f.id && !quick.buttons.some((b) => b.value === r.data[f.id]) ? (
+                  {quick && quick.field.id === f.id && (quick.whenEmpty ? r.data[f.id] == null || r.data[f.id] === "" : !quick.buttons.some((b) => b.value === r.data[f.id])) ? (
                     <QuickSet table={table.id} recordId={r.id} field={f.id} buttons={quick.buttons} current={<FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />} />
                   ) : (
                     <FieldValue field={f} value={r.data[f.id]} labels={labels} ctx={ctx} />

@@ -104,8 +104,8 @@ export async function sandboxDocumentLink(businessId: string, table: string, id:
     return documentUrl(await ensureDocumentLink(createAdminClient(), businessId, def.id, id));
   });
 }
-export async function sandboxInvoiceFromQuote(businessId: string, table: string, id: string) {
-  return bridged(async () => createInvoiceFromQuote(await createClient(), businessId, table, id));
+export async function sandboxInvoiceFromQuote(businessId: string, table: string, id: string, depositPercent?: number) {
+  return bridged(async () => createInvoiceFromQuote(await createClient(), businessId, table, id, { depositPercent: typeof depositPercent === "number" ? depositPercent : undefined }));
 }
 
 /** Free times and booking for screens (useFreeTimes / bookTime in the kit). */

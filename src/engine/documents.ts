@@ -170,7 +170,14 @@ export function paymentRecord(def: DocumentDef, invoiceId: string, amount: numbe
  * An invoice from an accepted quote: its customer, title and scope, and a copy of every line
  * (the invoice can then be edited freely; the quote stays as accepted).
  */
-export function invoiceFromQuote(bp: Blueprint, invoice: DocumentDef, quote: DocumentDef, q: RecordRow, quoteLines: RecordRow[]): { invoice: Record<string, unknown>; lines: Record<string, unknown>[] } {
+export function invoiceFromQuote(
+  bp: Blueprint,
+  invoice: DocumentDef,
+  quote: DocumentDef,
+  q: RecordRow,
+  quoteLines: RecordRow[],
+  opts: { depositPercent?: number; earlier?: { number?: string; subtotal: number }[] } = {},
+): { invoice: Record<string, unknown>; lines: Record<string, unknown>[] } {
   const qTable = bp.tables.find((t) => t.id === quote.table)!;
   const iTable = bp.tables.find((t) => t.id === invoice.table)!;
   const copy = (from: string | undefined, to: string | undefined, out: Record<string, unknown>) => {
@@ -189,7 +196,16 @@ export function invoiceFromQuote(bp: Blueprint, invoice: DocumentDef, quote: Doc
   }
   const ql = quote.lines;
   const il = invoice.lines;
-  const lines = quoteLines.map((l) => {
+  const subtotal = (quote.totals.subtotal ? Number(q.data[quote.totals.subtotal]) : NaN) || quoteLines.reduce((a, l) => a + (Number(l.data[ql.total]) || 0), 0);
+  const qNumber = quote.number && typeof q.data[quote.number] === "string" ? ` ${q.data[quote.number]}` : "";
+  const oneLine = (description: string, price: number) => ({ [il.description]: description, ...(il.qty ? { [il.qty]: 1 } : {}), ...(il.price ? { [il.price]: Math.round(price * 100) / 100 } : {}) });
+  // A deposit invoice: one line, a share of the quote.
+  if (opts.depositPercent) {
+    const pct = Math.min(Math.max(opts.depositPercent, 1), 100);
+    if (invoice.title && data[invoice.title]) data[invoice.title] = `${data[invoice.title]} — deposit`;
+    return { invoice: data, lines: [oneLine(`Deposit (${pct}%) for quote${qNumber}`, (subtotal * pct) / 100)] };
+  }
+  const lines: Record<string, unknown>[] = quoteLines.map((l) => {
     const out: Record<string, unknown> = {};
     const c = (from: string | undefined, to: string | undefined) => from && to && l.data[from] != null && (out[to] = l.data[from]);
     c(ql.description, il.description);
@@ -199,5 +215,39 @@ export function invoiceFromQuote(bp: Blueprint, invoice: DocumentDef, quote: Doc
     c(ql.group, il.group);
     return out;
   });
+  // The final invoice takes off what was invoiced before (the deposit).
+  for (const e of opts.earlier ?? []) if (e.subtotal > 0) lines.push(oneLine(`Less already invoiced${e.number ? ` (${e.number})` : ""}`, -e.subtotal));
   return { invoice: data, lines };
+}
+
+type InvoiceBackend = { query(q: RecordQueryInput): Promise<{ records: RecordRow[]; total: number }>; getRecord(t: string, id: string): Promise<RecordRow>; createRecord(t: string, v: Record<string, unknown>): Promise<RecordRow> };
+type RecordQueryInput = { table: string; filters?: { field: string; op: "eq"; value: string }[]; sort?: { field: string; dir: "asc" | "desc" }[]; limit?: number };
+
+/**
+ * An invoice for an accepted quote, through any backend (the app's button, the assistant, the
+ * MCP tool): the full amount (minus earlier invoices for it, e.g. the deposit), or a deposit.
+ */
+export async function makeInvoiceFromQuote(bp: Blueprint, b: InvoiceBackend, quoteTable: string, quoteId: string, opts: { depositPercent?: number } = {}): Promise<{ table: string; id: string; number?: string; total?: number }> {
+  const quote = documentFor(bp, quoteTable);
+  const invoice = bp.documents?.find((d) => d.kind === "invoice" && d.from?.document === quote?.id);
+  if (!quote || quote.kind !== "quote" || !invoice) throw new Error("There’s no invoice set up for this quote.");
+  const q = await b.getRecord(quoteTable, quoteId);
+  if (quote.accept && !q.data[quote.accept.acceptedOn]) throw new Error("The quote hasn’t been accepted yet.");
+  const subtotalOf = (r: RecordRow) => Number(invoice.totals.subtotal ? r.data[invoice.totals.subtotal] : r.data[invoice.totals.total]) || 0;
+  const earlier = (await b.query({ table: invoice.table, filters: [{ field: invoice.from!.link, op: "eq", value: quoteId }], sort: [{ field: "_created_at", dir: "asc" }], limit: 50 })).records;
+  const quoteSubtotal = Number(quote.totals.subtotal ? q.data[quote.totals.subtotal] : q.data[quote.totals.total]) || 0;
+  const invoiced = earlier.reduce((a, r) => a + subtotalOf(r), 0);
+  if (earlier.length && invoiced >= quoteSubtotal - 0.005) {
+    const last = earlier[earlier.length - 1];
+    return { table: invoice.table, id: last.id, number: invoice.number ? String(last.data[invoice.number] ?? "") : undefined };
+  }
+  const lines = (await b.query({ table: quote.lines.table, filters: [{ field: quote.lines.via, op: "eq", value: quoteId }], sort: [{ field: "_created_at", dir: "asc" }], limit: 500 })).records;
+  const made = invoiceFromQuote(bp, invoice, quote, q, lines, {
+    depositPercent: opts.depositPercent,
+    earlier: opts.depositPercent ? [] : earlier.map((r) => ({ number: invoice.number ? String(r.data[invoice.number] ?? "") : undefined, subtotal: subtotalOf(r) })),
+  });
+  const inv = await b.createRecord(invoice.table, made.invoice);
+  for (const l of made.lines) await b.createRecord(invoice.lines.table, { ...l, [invoice.lines.via]: inv.id });
+  const fresh = await b.getRecord(invoice.table, inv.id);
+  return { table: invoice.table, id: inv.id, number: invoice.number ? String(fresh.data[invoice.number] ?? "") : undefined, total: Number(fresh.data[invoice.totals.total]) || undefined };
 }

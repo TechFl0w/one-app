@@ -38,7 +38,8 @@ function lineTable(id: string, label: string, parent: string, p: string, parentL
       status(`fld_${p}_kind`, "Kind", LINE_KINDS, "choice"),
       { ...num(`fld_${p}_qty`, "Qty"), required: true, min: 0 } as Field,
       status(`fld_${p}_unit`, "Unit", UNITS, "choice"),
-      { ...money(`fld_${p}_price`, "Unit price"), required: true } as Field,
+      // Negative for credits ("Less deposit already invoiced").
+      { ...money(`fld_${p}_price`, "Unit price"), required: true, allowNegative: true } as Field,
       formula(`fld_${p}_total`, "Amount", `round(fld_${p}_qty * fld_${p}_price, 2)`),
     ],
   };

@@ -126,7 +126,7 @@ export const chairRental: Template = {
         block("blk_renters", "table", [0, 0, 8, 6], { table: "tbl_renters", sort: [{ field: "fld_name", dir: "asc" }] }, { title: "Renters" }),
         block("blk_new_renter", "form", [8, 0, 4, 7], { table: "tbl_renters" }, { title: "Add a renter" }),
       ]),
-      page("pg_rent", "Rent", "payments", 3, [block("blk_rent", "table", [0, 0, 12, 7], { table: "tbl_rent", sort: [{ field: "fld_due", dir: "desc" }] }, { title: "Rent payments" })]),
+      page("pg_rent", "Rent", "payments", 3, [block("blk_rent", "table", [0, 0, 12, 7], { table: "tbl_rent", sort: [{ field: "fld_due", dir: "desc" }] }, { title: "Rent payments", quickSet: { field: "fld_paid_on", buttons: [{ value: "@today", label: "Paid today" }] } })]),
     ];
     let order = 4;
     if (want.has("documents")) pages.push(page("pg_documents", "Documents", "documents", order++, [block("blk_documents", "table", [0, 0, 12, 7], { table: "tbl_documents", sort: [{ field: "fld_expires", dir: "asc" }] }, { title: "Documents" })]));

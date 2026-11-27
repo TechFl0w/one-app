@@ -62,7 +62,7 @@ export interface SandboxBridge {
   /** Quotes and invoices (One App's own document block, not frames). Missing in the demo. */
   sendDocument?(table: string, id: string): Promise<BridgeResult<{ link: string; emailed: boolean; reason?: string }>>;
   documentLink?(table: string, id: string): Promise<BridgeResult<string>>;
-  invoiceFromQuote?(table: string, id: string): Promise<BridgeResult<{ table: string; id: string }>>;
+  invoiceFromQuote?(table: string, id: string, depositPercent?: number): Promise<BridgeResult<{ table: string; id: string }>>;
 }
 
 /** Stands in for a screen's compiled code in the browser's copy of the setup; the real code is

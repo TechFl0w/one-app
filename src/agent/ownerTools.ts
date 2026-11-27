@@ -1,3 +1,5 @@
+import { readable } from "@/automations/check";
+import { singular } from "@/lib/words";
 import { localLabel } from "@/engine/dates";
 import { z } from "zod";
 import type Anthropic from "@anthropic-ai/sdk";
@@ -6,6 +8,7 @@ import { OP_RISK, Operation } from "@/schema/changeSet";
 import { RecordFilter, RecordId } from "@/schema/records";
 import { previewChangeSet, type OpPreview } from "@/engine/changeSet";
 import { recordLabel } from "@/engine/blockData";
+import { makeInvoiceFromQuote } from "@/engine/documents";
 import type { UndoToken } from "@/engine/commit";
 import type { BuildPlan, OwnerBackend, PendingAction } from "./types";
 import { recordUpdateIsRisky } from "@/engine/risk";
@@ -46,6 +49,8 @@ export interface OwnerTool<I = unknown> {
   risk: Risk | ((input: I, bp: Blueprint) => Risk);
   /** Plain-language lines for a confirmation, for risky calls. */
   describe?: (input: I, bp: Blueprint) => string[];
+  /** Like describe, but may read records (to name the record instead of showing its id). */
+  describeWith?: (input: I, bp: Blueprint, backend: OwnerBackend) => Promise<string[]>;
   run: (backend: OwnerBackend, input: I, effects: ToolEffects, opts: { confirmed: boolean }) => Promise<unknown>;
   /** For risky calls that mix safe and risky parts: run `now` right away, confirm only `later`. Null when it can't be split. */
   split?: (input: I, bp: Blueprint) => { now: I; later: I } | null;
@@ -123,6 +128,16 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const fields = Object.keys(i.values).map((k) => table?.fields.find((f) => f.id === k)?.label ?? k);
       return [`Change ${fields.join(", ")} on a ${tableLabel(bp, i.table).toLowerCase()} record to ${JSON.stringify(i.values)}`];
     },
+    describeWith: async (i, bp, b) => {
+      const table = bp.tables.find((t) => t.id === i.table)!;
+      const r = await b.getRecord(i.table, i.id);
+      const name = recordLabel(table, r);
+      const changes = Object.entries(i.values).map(([k, v]) => {
+        const f = table.fields.find((x) => x.id === k);
+        return `${f?.label ?? k}: ${readable(f, r.data[k], bp) || "—"} → ${readable(f, v, bp) || "—"}`;
+      });
+      return [`Change ${singular(table.label).toLowerCase()} “${name}”: ${changes.join("; ")}`];
+    },
     run: async (b, i, fx, { confirmed }) => {
       const r = await b.updateRecord(i.table, i.id, i.values, { confirmed });
       fx.changed = true;
@@ -136,6 +151,18 @@ export const OWNER_TOOLS: OwnerTool[] = [
     input: z.strictObject({ table: TableId, id: RecordId }),
     risk: "risky",
     describe: (i, bp) => [`Delete a record from ${tableLabel(bp, i.table)} (${i.id.slice(0, 8)})`],
+    describeWith: async (i, bp, b) => {
+      const table = bp.tables.find((t) => t.id === i.table)!;
+      const r = await b.getRecord(i.table, i.id);
+      // What points at it (a client's bookings) stays, but loses this link.
+      const linked: string[] = [];
+      for (const t of bp.tables) for (const f of t.fields) {
+        if (f.type !== "link" || f.to !== i.table) continue;
+        const { total } = await b.query({ table: t.id, filters: [{ field: f.id, op: f.multiple ? "contains" : "eq", value: i.id }], limit: 1 }).catch(() => ({ total: 0 }));
+        if (total) linked.push(`${total} ${total === 1 ? singular(t.label).toLowerCase() : t.label.toLowerCase()}`);
+      }
+      return [`Delete ${singular(table.label).toLowerCase()} “${recordLabel(table, r)}”${linked.length ? ` (linked to ${linked.join(", ")}, which stay)` : ""}`];
+    },
     run: async (b, i, fx) => {
       await b.deleteRecord(i.table, i.id);
       fx.changed = true;
@@ -352,6 +379,22 @@ export const OWNER_TOOLS: OwnerTool[] = [
   }),
 
   tool({
+    name: "create_invoice_from_quote",
+    description:
+      "Make an invoice for an accepted quote, copying its client, title and every line — for the full amount (earlier invoices for the quote, like a deposit, are taken off) or a deposit (deposit_percent, e.g. 50). Returns the invoice's id and number. Use this instead of typing lines again.",
+    input: z.strictObject({ quote: RecordId, deposit_percent: z.number().min(1).max(100).optional() }),
+    risk: "safe",
+    run: async (b, i, fx) => {
+      const bp = await b.blueprint();
+      const quote = bp.documents?.find((d) => d.kind === "quote");
+      if (!quote) throw new Error("This business has no quotes set up.");
+      const r = await makeInvoiceFromQuote(bp, b, quote.table, i.quote, { depositPercent: i.deposit_percent });
+      fx.changed = true;
+      return { invoice: r };
+    },
+  }),
+
+  tool({
     name: "find_free_times",
     description: "Free appointment times for a service (optionally with one practitioner), from a date (YYYY-MM-DD, business timezone) for up to 7 days. Needs online booking set up.",
     input: z.strictObject({
@@ -513,7 +556,8 @@ export async function executeOwnerTool(name: string, rawInput: unknown, backend:
         const after = await backend.blueprint();
         return { kind: "pending", applied, action: { id: newId(), tool: t.name, input: parts.later, items: t.describe?.(parts.later, after) ?? [name] } };
       }
-      return { kind: "pending", action: { id: newId(), tool: t.name, input: parsed.data, items: t.describe?.(parsed.data, bp) ?? [name] } };
+      const items = t.describeWith ? await t.describeWith(parsed.data, bp, backend).catch(() => t.describe?.(parsed.data, bp) ?? [name]) : (t.describe?.(parsed.data, bp) ?? [name]);
+      return { kind: "pending", action: { id: newId(), tool: t.name, input: parsed.data, items } };
     }
     return { kind: "result", value: await t.run(backend, parsed.data, effects, { confirmed: false }) };
   } catch (e) {

@@ -47,7 +47,7 @@ describe("owner agent", () => {
     expect(req.cache_control).toEqual({ type: "ephemeral" });
     expect(JSON.stringify(req.messages[0].content)).toContain('blk_cal calendar \\"Today’s calendar\\" from tbl_bookings');
     expect(req.tools!.map((t) => (t as Anthropic.Beta.BetaTool).name)).toEqual([
-      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "write_component", "plan_build", "read_component", "write_function", "read_function", "list_api_keys", "test_function", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
+      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "write_component", "plan_build", "read_component", "write_function", "read_function", "list_api_keys", "test_function", "create_invoice_from_quote", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
     ]);
     expect(JSON.stringify(req.messages[0].content)).toContain('looking at page \\"Today\\" (pg_today)');
     expect(r.usage).toMatchObject({ model: "claude-opus-5-5" });
@@ -122,8 +122,8 @@ describe("owner agent", () => {
     const r = await runOwnerTurn({ backend, history: [], message: "delete ava", model, newId: () => "act_1" });
     expect(JSON.parse(lastToolResult(requests[1]).content).status).toBe("waiting_for_owner_confirmation");
     expect(state.records.some((x) => x.id === ids.ava)).toBe(true); // not deleted yet
-    expect(r.pending).toEqual([{ id: "act_1", tool: "delete_record", input: { table: "tbl_clients", id: ids.ava }, items: ["Delete a record from Clients (00000000)"] }]);
-    expect(r.response.confirm).toEqual({ items: ["Delete a record from Clients (00000000)"], actionIds: ["act_1"] });
+    expect(r.pending).toEqual([{ id: "act_1", tool: "delete_record", input: { table: "tbl_clients", id: ids.ava }, items: ["Delete client “Ava Thompson” (linked to 2 bookings, which stay)"] }]);
+    expect(r.response.confirm).toEqual({ items: ["Delete client “Ava Thompson” (linked to 2 bookings, which stay)"], actionIds: ["act_1"] });
     expect(r.response.buttons?.map((b) => b.action)).toEqual(["confirm", "cancel"]);
 
     const done = await runConfirmedAction(backend, r.pending[0]);

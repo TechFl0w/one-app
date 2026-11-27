@@ -165,7 +165,7 @@ const fillValues = (values: unknown, recordId: string, data: Record<string, unkn
 /** One planned step: what an action will do, already resolved against the record. */
 export type Step =
   | { kind: "create_record"; table: string; values: Record<string, unknown> }
-  | { kind: "update_record"; table: string; recordId: string; values: Record<string, unknown> }
+  | { kind: "update_record"; table: string; recordId: string; values: Record<string, unknown>; via?: string }
   | { kind: "notify"; message: string }
   | { kind: "send_message"; channel: string; toField?: string; template?: string; message?: string }
   | { kind: "wait"; ms: number }
@@ -180,7 +180,14 @@ export function planStep(action: Automation["actions"][number], ctx: { tableId: 
       return { kind: "create_record", table: typeof action.table === "string" ? action.table : tableId, values: fillValues(action.values, recordId, data) };
     case "update_record":
     case "assign":
-      return { kind: "update_record", table: tableId, recordId, values: fillValues(action.values ?? (action.field ? { [String(action.field)]: action.value } : {}), recordId, data) };
+      // With "via" (a link field), the linked record changes instead: a quote's job, a booking's client.
+      return {
+        kind: "update_record",
+        table: tableId,
+        recordId,
+        values: fillValues(action.values ?? (action.field ? { [String(action.field)]: action.value } : {}), recordId, data),
+        ...(typeof action.via === "string" ? { via: action.via } : {}),
+      };
     case "notify":
       return { kind: "notify", message: fillTemplate(typeof action.message === "string" ? action.message : ctx.automation.label, recordId, data, vars) };
     case "send_message":
@@ -217,8 +224,14 @@ export function describeStep(bp: Blueprint, step: Step): string {
   switch (step.kind) {
     case "create_record":
       return `Add a ${table(step.table)?.label.replace(/s$/, "").toLowerCase() ?? "record"} (${fields(step.table, step.values)})`;
-    case "update_record":
+    case "update_record": {
+      if (step.via) {
+        const link = table(step.table)?.fields.find((f) => f.id === step.via);
+        const target = link?.type === "link" ? link.to : step.table;
+        return `Set ${fields(target, step.values)} on the linked ${link?.label.toLowerCase() ?? "record"}`;
+      }
       return `Set ${fields(step.table, step.values)}`;
+    }
     case "notify":
       return `Notify you: “${step.message}”`;
     case "send_message": {

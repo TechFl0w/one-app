@@ -15,7 +15,7 @@ const STEP_KEYS: Record<string, string[]> = {
   notify: ["type", "message", "to"],
   wait: ["type", "duration"],
   create_record: ["type", "table", "values"],
-  update_record: ["type", "values", "field", "value"],
+  update_record: ["type", "values", "field", "value", "via"],
   assign: ["type", "values", "field", "value"],
   run_function: ["type", "function"],
 };
@@ -85,8 +85,14 @@ export function automationIssues(bp: Blueprint, a: Automation): string[] {
     if ((step.type === "send_message" || step.type === "notify") && text("message") && table) for (const p of placeholderIssues(bp, table, text("message")!)) issues.push(`${at}: ${p}`);
     if (step.type === "wait" && !/^\d+\s*(m|min|h|d|w)$/.test(String(s.duration ?? ""))) issues.push(`${at}: duration must look like 30m, 2h, 1d or 1w`);
     if (step.type === "create_record" && typeof s.table === "string" && !bp.tables.some((t) => t.id === s.table)) issues.push(`${at}: table ${s.table} doesn't exist`);
+    let viaTable: Table | undefined;
+    if (step.type === "update_record" && s.via !== undefined && table) {
+      const link = table.fields.find((f) => f.id === s.via);
+      if (!link || link.type !== "link") issues.push(`${at}: “via” must be a link field on ${table.label} (the record to change)`);
+      else viaTable = bp.tables.find((t) => t.id === link.to);
+    }
     if ((step.type === "update_record" || step.type === "create_record") && s.values && typeof s.values === "object") {
-      const target = step.type === "create_record" ? bp.tables.find((t) => t.id === s.table) : table;
+      const target = step.type === "create_record" ? bp.tables.find((t) => t.id === s.table) : viaTable ?? table;
       for (const k of Object.keys(s.values as object)) if (target && !target.fields.some((f) => f.id === k)) issues.push(`${at}: ${k} isn't a field on ${target.label}`);
     }
     if (step.type === "run_function" && !(bp.functions ?? []).some((f) => f.id === s.function)) issues.push(`${at}: server code ${String(s.function)} doesn't exist`);

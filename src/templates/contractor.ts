@@ -242,6 +242,16 @@ export const contractor: Template = {
           actions: [{ type: "send_message", channel: "auto", to: "fld_i_client", message: "A friendly reminder: invoice {{fld_i_number}} ({{fld_i_title}}) was due yesterday. Thank you!" }],
         }),
       );
+    // An accepted quote wins the job: the board moves by itself (only from the stages before Won).
+    automations.push(
+      automation({
+        id: "aut_quote_won",
+        label: "Move the job to Won when its quote is accepted",
+        trigger: { type: "record_updated", table: "tbl_quotes", field: "fld_q_accepted" },
+        conditions: [{ field: "fld_q_accepted", op: "not_empty" }, { field: "fld_q_job", op: "not_empty" }],
+        actions: [{ type: "update_record", via: "fld_q_job", values: { fld_j_stage: S("Won") } }],
+      }),
+    );
     automations.push(
       automation({
         id: "aut_quote_accepted",

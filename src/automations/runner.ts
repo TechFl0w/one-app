@@ -179,11 +179,23 @@ export async function runJob(job: Job, io: AutomationIO, queue: JobQueue, now: D
           await io.createRecord(job.businessId, step.table, step.values, key);
           steps.push({ description, outcome: "done" });
           break;
-        case "update_record":
+        case "update_record": {
+          if (step.via) {
+            const link = bp.tables.find((t) => t.id === step.table)?.fields.find((f) => f.id === step.via);
+            const target = typeof data[step.via] === "string" ? (data[step.via] as string) : Array.isArray(data[step.via]) ? (data[step.via] as string[])[0] : undefined;
+            if (!link || link.type !== "link" || !target) {
+              steps.push({ description, outcome: "skipped", note: "Nothing linked to change" });
+              break;
+            }
+            await io.updateRecord(job.businessId, link.to, target, step.values, key);
+            steps.push({ description, outcome: "done" });
+            break;
+          }
           await io.updateRecord(job.businessId, step.table, step.recordId, step.values, key);
           data = { ...data, ...step.values };
           steps.push({ description, outcome: "done" });
           break;
+        }
         case "notify":
           await io.notify(job.businessId, step.message, key, { tableId: job.tableId, recordId: job.recordId });
           steps.push({ description, outcome: "done" });
