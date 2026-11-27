@@ -208,7 +208,7 @@ describe("undo", () => {
     enabled: true,
     trigger: { type: "status_changed", table: "tbl_bookings", field: "fld_status" },
     conditions: [{ field: "fld_status", op: "eq", value: "opt_done" }],
-    actions: [{ type: "send_message", channel: "whatsapp" }],
+    actions: [{ type: "notify", message: "Booking done" }],
   };
 
   it.each<[string, Operation[]]>([
@@ -217,6 +217,7 @@ describe("undo", () => {
     ["addTable", [{ op: "addTable", table: { id: "tbl_x", label: "X", fields: [] }, index: 0 }]],
     ["removeTable", [
       { op: "removeBlock", pageId: "pg_clients", blockId: "blk_clients" },
+      { op: "removeField", tableId: "tbl_bookings", fieldId: "fld_client" },
       { op: "removeTable", tableId: "tbl_clients" },
     ]],
     ["addField", [{ op: "addField", tableId: "tbl_clients", field, index: 1 }]],

@@ -1,3 +1,4 @@
+import { automationIssues } from "@/automations/check";
 import { brokenByChange, describeId } from "@/codegen/references";
 import type { z } from "zod";
 import { Blueprint, type Block, type LayoutKey, type Page } from "@/schema/blueprint";
@@ -122,6 +123,13 @@ function run(blueprint: Blueprint, input: unknown, opts: ApplyOptions): ChangeSe
   const checked = Blueprint.safeParse(draft);
   if (!checked.success) {
     throw new ChangeSetError("invalid", explainIssue(draft, checked.error.issues[0]), undefined, checked.error.issues);
+  }
+  // An automation is checked when it's added or changed, so it can't silently do nothing later.
+  for (const op of cs.source === "undo" ? [] : cs.ops) {
+    if (op.op !== "addAutomation" && op.op !== "updateAutomation") continue;
+    const a = checked.data.automations.find((x) => x.id === op.automation.id);
+    const issues = a ? automationIssues(checked.data, a) : [];
+    if (issues.length) throw new ChangeSetError("invalid", `The automation “${a!.label}” won't work: ${issues.join("; ")}.`);
   }
   // Never break a live screen: removing something a screen's code uses is refused (rename is fine).
   const broken = brokenByChange(blueprint, checked.data);

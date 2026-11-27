@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addComputed, queryWithComputed, resolveDateToken } from "./computed";
+import { addComputed, queryWithComputed, resolveDateToken, valueMatches } from "./computed";
 import { Blueprint } from "@/schema/blueprint";
 import { demoBlueprint } from "@/demo/salon";
 import { memoryBackend } from "@/agent/memoryBackend";
@@ -83,5 +83,28 @@ describe("statuses that follow dates", () => {
     expect(resolveDateToken("@today+30d", "2026-11-25", now)).toBe("2026-12-25");
     expect(resolveDateToken("@today-7d", "2026-11-25", now)).toBe("2026-11-18");
     expect(resolveDateToken("opt_x", "2026-11-25", now)).toBe("opt_x");
+  });
+});
+
+describe("day tokens on date-times (rollups, statuses, automations)", () => {
+  // 27 Nov in Vancouver; 3 pm there is 22:00 UTC, 11:30 pm is the next day in UTC.
+  const now = new Date("2026-11-27T20:00:00Z");
+  const today = "2026-11-27";
+  const tz = "America/Vancouver";
+  it("eq @today matches any time on the local day", () => {
+    expect(valueMatches("2026-11-27T22:00:00.000Z", { field: "f", op: "eq", value: "@today" }, today, now, tz)).toBe(true);
+    expect(valueMatches("2026-11-28T06:30:00.000Z", { field: "f", op: "eq", value: "@today" }, today, now, tz)).toBe(true); // 11:30 pm local
+    expect(valueMatches("2026-11-28T08:00:00.000Z", { field: "f", op: "eq", value: "@today" }, today, now, tz)).toBe(false);
+    expect(valueMatches("2026-11-28T18:00:00.000Z", { field: "f", op: "eq", value: "@tomorrow" }, today, now, tz)).toBe(true);
+    expect(valueMatches("2026-11-27", { field: "f", op: "eq", value: "@today" }, today, now, tz)).toBe(true);
+  });
+  it("ranges and before/after work by local day", () => {
+    expect(valueMatches("2026-11-23T17:00:00.000Z", { field: "f", op: "eq", value: "@this_week" }, today, now, tz)).toBe(true); // Monday
+    expect(valueMatches("2026-11-22T17:00:00.000Z", { field: "f", op: "eq", value: "@this_week" }, today, now, tz)).toBe(false);
+    expect(valueMatches("2026-11-26", { field: "f", op: "lt", value: "@today" }, today, now, tz)).toBe(true);
+    expect(valueMatches("2026-11-27T22:00:00.000Z", { field: "f", op: "lt", value: "@today" }, today, now, tz)).toBe(false);
+    expect(valueMatches("2026-12-01", { field: "f", op: "gt", value: "@this_month" }, today, now, tz)).toBe(true);
+    expect(valueMatches("2026-12-27", { field: "f", op: "lte", value: "@today+30d" }, today, now, tz)).toBe(true);
+    expect(valueMatches("2026-12-28", { field: "f", op: "lte", value: "@today+30d" }, today, now, tz)).toBe(false);
   });
 });

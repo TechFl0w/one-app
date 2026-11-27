@@ -83,7 +83,7 @@ describe("runner", () => {
     expect(await enqueueForEvent(e, io, queue)).toBe(0); // idempotent
 
     await runDueJobs(io, queue, new Date("2026-11-24T10:00:00Z"));
-    expect(effects.map((x) => [x.kind, x.detail])).toEqual([["notify", `Booking ${BOOKING} done (48)`]]);
+    expect(effects.map((x) => [x.kind, x.detail])).toEqual([["notify", `Booking ${BOOKING} done ($48)`]]);
     expect(runs[0]).toMatchObject({ status: "waiting", steps: [{ outcome: "done" }, { outcome: "waiting" }] });
     expect(jobs[0]).toMatchObject({ status: "queued", step: 2, runAt: "2026-11-24T12:00:00.000Z" });
 

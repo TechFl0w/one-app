@@ -48,7 +48,8 @@ export function defaultRecordBlocks(bp: Blueprint, tableId: string): Block[] {
       y,
       w: 7,
       h: 4,
-      source: { table: t.id, filters: [{ field: field.id, op: "eq", value: RECORD_TOKEN }], sort: [{ field: date?.id ?? "_created_at", dir: "desc" }] },
+      // A link that holds several records (a service's stylists) contains this one.
+      source: { table: t.id, filters: [{ field: field.id, op: "multiple" in field && field.multiple ? "contains" : "eq", value: RECORD_TOKEN }], sort: [{ field: date?.id ?? "_created_at", dir: "desc" }] },
       options: { title: sameTable(t) ? `${t.label} (${field.label})` : t.label, columns },
     };
     y += 4;
@@ -58,7 +59,9 @@ export function defaultRecordBlocks(bp: Blueprint, tableId: string): Block[] {
 }
 
 /** Values a new record gets when added from a list scoped to a record (its link back to it). */
-export function recordDefaults(filters: { field: string; op: string; value?: unknown }[] | undefined, recordId: string | undefined): Record<string, string> {
+export function recordDefaults(filters: { field: string; op: string; value?: unknown }[] | undefined, recordId: string | undefined): Record<string, string | string[]> {
   if (!recordId) return {};
-  return Object.fromEntries((filters ?? []).filter((f) => f.op === "eq" && f.value === RECORD_TOKEN).map((f) => [f.field, recordId]));
+  return Object.fromEntries(
+    (filters ?? []).filter((f) => (f.op === "eq" || f.op === "contains") && f.value === RECORD_TOKEN).map((f) => [f.field, f.op === "contains" ? [recordId] : recordId]),
+  );
 }

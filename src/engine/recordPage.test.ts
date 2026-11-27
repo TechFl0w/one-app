@@ -3,6 +3,7 @@ import { Blueprint } from "@/schema/blueprint";
 import { demoBlueprint, demoRecords } from "@/demo/salon";
 import { memoryStore } from "./store";
 import { loadBlockData } from "./blockData";
+import { buildRecordQuery } from "./records";
 import { defaultRecordBlocks, recordDefaults, recordPageFor, RECORD_TOKEN } from "./recordPage";
 
 const client = "00000000-0000-4000-8000-000000000010";
@@ -36,5 +37,26 @@ describe("record pages", () => {
     const page = (id: string, recordOf: string) => ({ id, label: "X", menuOrder: 9, hidden: true, recordOf, layout: { columns: 12, blocks: [] } });
     expect(Blueprint.safeParse({ ...demoBlueprint, pages: [...demoBlueprint.pages, page("pg_a", "tbl_clients"), page("pg_b", "tbl_clients")] }).error?.issues[0].message).toMatch(/already has a record page/);
     expect(Blueprint.safeParse({ ...demoBlueprint, pages: [...demoBlueprint.pages, page("pg_a", "tbl_nope")] }).success).toBe(false);
+  });
+});
+
+describe("multi-links on record pages", () => {
+  it("a stylist's page lists services whose 'Who does it' includes them", () => {
+    const bp = {
+      ...demoBlueprint,
+      tables: [
+        { id: "tbl_staff", label: "Stylists", primaryField: "fld_s_name", fields: [{ id: "fld_s_name", label: "Name", type: "text" }] },
+        { id: "tbl_services", label: "Services", primaryField: "fld_v_name", fields: [{ id: "fld_v_name", label: "Service", type: "text" }, { id: "fld_v_who", label: "Who does it", type: "link", to: "tbl_staff", multiple: true }] },
+      ],
+      pages: [],
+      automations: [],
+      scheduling: undefined,
+    } as unknown as Parameters<typeof defaultRecordBlocks>[0];
+    const blocks = defaultRecordBlocks(bp, "tbl_staff");
+    const services = blocks.find((b) => b.source?.table === "tbl_services")!;
+    expect(services.source!.filters).toEqual([{ field: "fld_v_who", op: "contains", value: RECORD_TOKEN }]);
+    expect(recordDefaults(services.source!.filters, "r1")).toEqual({ fld_v_who: ["r1"] });
+    // and "eq" written by hand on a multi-link is read as "includes"
+    expect(() => buildRecordQuery(bp, { table: "tbl_services", filters: [{ field: "fld_v_who", op: "eq", value: "00000000-0000-4000-8000-000000000001" }] })).not.toThrow();
   });
 });

@@ -1,3 +1,4 @@
+import { localLabel } from "@/engine/dates";
 import { z } from "zod";
 import type Anthropic from "@anthropic-ai/sdk";
 import { FieldId, TableId, type Blueprint } from "@/schema/blueprint";
@@ -364,7 +365,9 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const bp = await b.blueprint();
       const [y, m, d] = i.date.split("-").map(Number);
       const slots = await availableSlots(bp, b, { serviceId: i.service, practitionerId: i.practitioner, from: { year: y, month: m, day: d }, days: i.days ?? 1 });
-      return { timezone: bp.business.timezone, count: slots.length, slots: slots.slice(0, 40) };
+      // Each slot also in the business's own clock, so nobody converts with a guessed offset.
+      const tz = bp.business.timezone;
+      return { timezone: tz, count: slots.length, slots: slots.slice(0, 40).map((s) => ({ ...s, local: localLabel(s.start, tz) })) };
     },
   }),
 

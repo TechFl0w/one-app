@@ -1,4 +1,5 @@
 import type { Automation, Blueprint } from "@/schema/blueprint";
+import { messageVars } from "./check";
 import {
   conditionsHold,
   dateJobKey,
@@ -155,7 +156,13 @@ export async function runJob(job: Job, io: AutomationIO, queue: JobQueue, now: D
 
   const steps: StepLog[] = [];
   for (let i = job.step; i < automation.actions.length; i++) {
-    const step = planStep(automation.actions[i], { tableId: job.tableId, recordId: job.recordId, data, automation });
+    // Messages read like a person wrote them: dates in the business's time, names of linked records.
+    const action = automation.actions[i] as { type: string; message?: unknown };
+    const vars =
+      (action.type === "send_message" || action.type === "notify") && typeof action.message === "string"
+        ? await messageVars(bp, job.tableId, data, [action.message], (t, id) => io.getRecord(job.businessId, t, id)).catch(() => ({}))
+        : {};
+    const step = planStep(automation.actions[i], { tableId: job.tableId, recordId: job.recordId, data, automation, vars });
     const description = describeStep(bp, step);
     const key = `${job.id}:${i}`;
     try {

@@ -37,7 +37,12 @@ class CheckFailed extends Error {}
 
 const obj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
 const stamp = () => new Date().toISOString().slice(11, 19).replace(/:/g, "");
-const isoDay = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+/** The business's today (from get_setup: "today is 2026-11-27"), so dates match its time zone. */
+let businessToday: string | undefined;
+const isoDay = (offset: number) => {
+  const base = businessToday ? Date.parse(`${businessToday}T12:00:00Z`) : Date.now();
+  return new Date(base + offset * 86_400_000).toISOString().slice(0, 10);
+};
 /** Option id of a status option by label, read from get_setup ("opt_late=\"Late\""). */
 const opt = (setup: string, label: string) => new RegExp(`(opt_[a-z0-9_]+)="${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`).exec(setup)?.[1];
 
@@ -196,6 +201,7 @@ export const SCENARIOS: Scenario[] = [
 export async function runScenarios(call: Call, opts: { only?: string[]; log?: (line: string) => void } = {}): Promise<ScenarioResult[]> {
   const log = opts.log ?? (() => {});
   const setup = (await call("get_setup")).text;
+  businessToday = /today is (\d{4}-\d{2}-\d{2})/.exec(setup)?.[1];
   const results: ScenarioResult[] = [];
   for (const s of SCENARIOS) {
     if (opts.only?.length && !opts.only.includes(s.id)) continue;

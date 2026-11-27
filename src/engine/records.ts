@@ -343,8 +343,10 @@ function buildFilters(table: Table, filters: RecordFilter[], ctx: Required<Query
   const fields = new Map(table.fields.map((f) => [f.id, f]));
   const errors: { field: string; message: string }[] = [];
 
-  const p_filters = filters.flatMap((flt): Filter[] => {
-    const field = fields.get(flt.field);
+  const p_filters = filters.flatMap((raw): Filter[] => {
+    const field = fields.get(raw.field);
+    // "Is this record" on a field that holds several (a service's stylists) means "includes it".
+    const flt = raw.op === "eq" && field && "multiple" in field && field.multiple ? { ...raw, op: "contains" as const } : raw;
     const kind = field && fieldKind(field);
     if (!field || !kind) {
       errors.push({ field: flt.field, message: field ? `${field.label} cannot be filtered` : "Unknown field" });
