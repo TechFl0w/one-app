@@ -20,7 +20,7 @@ export default async function ApprovalsPage({ params }: PageProps<"/b/[businessI
         <ShieldCheck className="h-6 w-6 text-accent" />
         <h1 className="text-2xl font-bold tracking-tight">Approvals</h1>
       </div>
-      <p className="mb-6 text-sm text-muted">Risky changes asked for by connected AI apps wait here until you approve them.</p>
+      <p className="mb-6 text-sm text-muted">Changes that delete things, move money, message people or change automatic steps wait here until you say yes.</p>
       <Approvals rows={(data ?? []) as ApprovalRow[]} resolve={resolveApproval.bind(null, businessId)} />
     </div>
   );

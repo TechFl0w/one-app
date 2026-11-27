@@ -396,6 +396,11 @@ export const BusinessInfo = z.strictObject({
   reviewUrl: z.url({ protocol: /^https$/ }).max(500).optional(),
   /** ISO 4217 code used for prices without their own currency (e.g. CAD, USD, EUR). */
   currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  /**
+   * While the business is being set up (ISO time; set when it's created), setup changes apply
+   * without asking — only deleting tables or fields still waits for the owner.
+   */
+  setupUntil: z.iso.datetime().optional(),
 });
 
 // ---------- scheduling (bookings) ----------

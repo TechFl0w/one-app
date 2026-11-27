@@ -273,3 +273,30 @@ describe("undo", () => {
     expectError(() => undoChangeSet(added.blueprint, added.inverse), "needs_confirmation");
   });
 });
+
+describe("fewer, plainer approvals", () => {
+  const bp = salonBlueprint();
+  const cs = (ops: Operation[]) => previewChangeSet(bp, { baseVersion: bp.version, source: "ai", ops });
+  const status = bp.tables.find((t) => t.id === "tbl_bookings")!.fields.find((f) => f.id === "fld_status")!;
+  it("adding a choice or renaming a field doesn't need approval; removing a choice does", () => {
+    if (status.type !== "status") throw new Error("fixture");
+    const added = cs([{ op: "updateField", tableId: "tbl_bookings", field: { ...status, options: [...status.options, { id: "opt_kids", label: "Kids" }] } }]);
+    expect(added.ok && added.requiresConfirmation).toBe(false);
+    expect(added.ok && added.ops[0].description).toBe("Add “Kids” as choices for “Status” on “Bookings”");
+    const removed = cs([{ op: "updateField", tableId: "tbl_bookings", field: { ...status, options: status.options.slice(1) } }]);
+    expect(removed.ok && removed.requiresConfirmation).toBe(true);
+    const renamed = cs([{ op: "updateField", tableId: "tbl_bookings", field: { ...status, label: "Stage" } }]);
+    expect(renamed.ok && renamed.requiresConfirmation).toBe(false);
+  });
+  it("while setting up, setup changes apply; deleting tables or fields still asks", () => {
+    const fresh = { ...bp, business: { ...bp.business, setupUntil: new Date(Date.now() + 3_600_000).toISOString() } };
+    const auto: Operation = { op: "addAutomation", automation: { id: "aut_x", label: "Thanks", enabled: true, trigger: { type: "record_created", table: "tbl_bookings" }, conditions: [], actions: [{ type: "notify", message: "New booking" }] } };
+    const p1 = previewChangeSet(fresh, { baseVersion: fresh.version, source: "ai", ops: [auto] });
+    expect(p1.ok && p1.requiresConfirmation).toBe(false);
+    expect(p1.ok && p1.ops[0].description).toMatch(/when a booking is added, notify you/i);
+    const p2 = previewChangeSet(fresh, { baseVersion: fresh.version, source: "ai", ops: [{ op: "removeField", tableId: "tbl_clients", fieldId: "fld_whatsapp" }] });
+    expect(p2.ok && p2.requiresConfirmation).toBe(true);
+    const later = previewChangeSet(bp, { baseVersion: bp.version, source: "ai", ops: [auto] });
+    expect(later.ok && later.requiresConfirmation).toBe(true);
+  });
+});

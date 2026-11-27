@@ -26,7 +26,10 @@ export async function buildBusiness(input: { templateId: string; name: string; t
   try {
     const built = template.build({ name, timezone }, input.answers ?? {});
     // Starts with what owners of this kind of business were found to add (control center approvals).
-    const blueprint = await withLearnings(built.blueprint);
+    const learned = await withLearnings(built.blueprint);
+    // The first two days are "setting up": the owner (and their assistant) can reshape the app
+    // without approving each change; deleting tables or fields still asks.
+    const blueprint = { ...learned, business: { ...learned.business, setupUntil: new Date(Date.now() + 48 * 3_600_000).toISOString() } };
     const { seed } = built;
     id = await createBusiness(supabase, { name, blueprint });
     // Seeds may link to earlier seeds ("@ref:<name>"): a sample car belongs to a sample customer.
