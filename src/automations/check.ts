@@ -9,7 +9,7 @@ import { EMAIL_TEMPLATES } from "@/email/compose";
 
 const KNOWN_TEMPLATES = Object.keys(EMAIL_TEMPLATES);
 /** Words the email itself fills in: the person's first name, the business, the appointment time… */
-const MESSAGE_WORDS = ["name", "business", "when", "tracking", "review_link"];
+const MESSAGE_WORDS = ["name", "business", "business_name", "when", "tracking", "review_link", "booking_link", "document_link"];
 const STEP_KEYS: Record<string, string[]> = {
   send_message: ["type", "channel", "to", "message", "template"],
   notify: ["type", "message", "to"],

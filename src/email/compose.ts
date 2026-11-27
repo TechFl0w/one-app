@@ -99,7 +99,7 @@ export function slugFromRecipients(recipients: string[], d: EmailDomains): strin
 /** Built-in message templates referenced by automations (owner-editable templates come later). */
 export const EMAIL_TEMPLATES: Record<string, { subject: string; text: string }> = {
   tpl_reminder: { subject: "See you tomorrow at {{business}}", text: "Hi {{name}},\n\nJust a reminder of your appointment on {{when}}.\n\nReply to this email if you need to change it.\n\n{{business}}" },
-  tpl_rebook: { subject: "Time for your next visit?", text: "Hi {{name}},\n\nIt’s been a few weeks — would you like to book your next appointment?\n\nJust reply to this email.\n\n{{business}}" },
+  tpl_rebook: { subject: "Time for your next visit?", text: "Hi {{name}},\n\nIt’s been a few weeks — would you like to book your next appointment?\n\nBook online: {{booking_link}}\n\nOr just reply to this email.\n\n{{business}}" },
   tpl_review: { subject: "How was your visit to {{business}}?", text: "Hi {{name}},\n\nThank you for coming in! If you have a minute, a short review helps us a lot:\n{{review_link}}\n\n{{business}}" },
   tpl_thanks: { subject: "Thank you from {{business}}", text: "Hi {{name}},\n\nThank you for coming in. We hope to see you again soon!\n\n{{business}}" },
   tpl_shipped: { subject: "Your order is on its way", text: "Hi {{name}},\n\nGood news: your order has shipped.{{tracking}}\n\nThank you for your order!\n\n{{business}}" },
@@ -114,19 +114,23 @@ export const EMAIL_TEMPLATES: Record<string, { subject: string; text: string }> 
 export function renderTemplate(
   templateId: string | undefined,
   message: string | undefined,
-  vars: { business: string; name?: string; when?: string; tracking?: string; reviewLink?: string; data: Record<string, unknown> },
+  vars: { business: string; name?: string; when?: string; tracking?: string; reviewLink?: string; bookingLink?: string; documentLink?: string; data: Record<string, unknown> },
 ): { subject: string; text: string } {
   const known = templateId ? EMAIL_TEMPLATES[templateId] : undefined;
   const t = known ?? { subject: "A message from {{business}}", text: message ?? "Hi {{name}},\n\n{{business}}" };
   const fill = (s: string) =>
     s
-      .replace(/\{\{\s*business\s*\}\}/g, vars.business)
+      .replace(/\{\{\s*(business|business_name)\s*\}\}/g, vars.business)
+      // A line with a link the business doesn't have (no booking page yet) is left out whole.
+      .replace(/^(.*)\{\{\s*booking_link\s*\}\}(.*)$/gm, (_, a: string, b: string) => (vars.bookingLink ? `${a}${vars.bookingLink}${b}` : "\u0000"))
+      .replace(/^(.*)\{\{\s*document_link\s*\}\}(.*)$/gm, (_, a: string, b: string) => (vars.documentLink ? `${a}${vars.documentLink}${b}` : "\u0000"))
       .replace(/\{\{\s*name\s*\}\}/g, vars.name || "there")
       .replace(/\{\{\s*when\s*\}\}/g, vars.when ?? "")
       .replace(/\{\{\s*tracking\s*\}\}/g, vars.tracking ? ` Tracking: ${vars.tracking}` : "")
       .replace(/\{\{\s*review_link\s*\}\}/g, vars.reviewLink ?? "")
       .replace(/\{\{\s*(fld_[a-z0-9_]+)\s*\}\}/g, (_, k: string) => (vars.data[k] == null ? "" : String(vars.data[k])));
-  return { subject: safeSubject(fill(t.subject)), text: fill(t.text) };
+  const clean = (x: string) => x.replace(/\n?\u0000\n?/g, "\n").replace(/\n{3,}/g, "\n\n");
+  return { subject: safeSubject(clean(fill(t.subject)).trim()), text: clean(fill(t.text)) };
 }
 
 // ---------- recipients ----------

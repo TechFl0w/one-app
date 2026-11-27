@@ -17,6 +17,21 @@ import { approvedTemplate, getLine, sendWhatsApp, whatsappConfigured } from "./w
 import { resolvePhone } from "@/whatsapp/recipient";
 import { templateVariables } from "@/whatsapp/core";
 import { formatDateTime } from "@/components/blocks/format";
+import { bookingPageUrl } from "./bookingPage";
+import { documentUrl, ensureDocumentLink } from "./documents";
+import { documentFor } from "@/engine/documents";
+
+/** {{booking_link}} and {{document_link}}: only looked up when the message uses them. */
+async function links(bp: Blueprint, businessId: string, record: { tableId: string; recordId: string }, text: string, db: SupabaseClient) {
+  const out: { bookingLink?: string; documentLink?: string } = {};
+  if (/booking_link|tpl_rebook/.test(text)) {
+    const { data } = await db.from("booking_pages").select("slug, enabled").eq("business_id", businessId).maybeSingle();
+    if (data?.enabled) out.bookingLink = bookingPageUrl(data.slug as string);
+  }
+  const def = /document_link/.test(text) ? documentFor(bp, record.tableId) : undefined;
+  if (def) out.documentLink = documentUrl(await ensureDocumentLink(db, businessId, def.id, record.recordId));
+  return out;
+}
 
 /** Supabase implementations of the automation queue and side effects (service role). */
 
@@ -148,6 +163,7 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
         when: typeof whenValue === "string" ? formatDateTime(whenValue.length === 10 ? `${whenValue}T12:00:00Z` : whenValue, { timezone: bp.business.timezone }) : undefined,
         tracking: tracking ? String(record.data[tracking.id]) : undefined,
         reviewLink: bp.business.reviewUrl,
+        ...(await links(bp, b, record, `${step.template ?? ""} ${step.message ?? ""}`, db)),
         data: record.data,
       });
       if (step.template === "tpl_review" && !bp.business.reviewUrl) return { sent: false, reason: "Add your review link in Online booking settings" };
