@@ -371,7 +371,7 @@ export function DetailsBlock({ table, record, labels, ctx, basePath, options = {
   const links = table.fields.filter((f) => f.type === "link" && f.id !== title?.id && record.data[f.id]).slice(0, 3);
   // Next to a hero, facts skip what the hero already shows and what's still empty.
   const facts = table.fields.filter(
-    (f) => f.id !== title?.id && !files.includes(f) && f.type !== "hours" && !isChip(f) && f.id !== pipeline?.id && (part !== "facts" || (!links.includes(f) && record.data[f.id] != null && record.data[f.id] !== "")),
+    (f) => f.id !== title?.id && !files.includes(f) && !isChip(f) && f.id !== pipeline?.id && (part !== "facts" || (!links.includes(f) && record.data[f.id] != null && record.data[f.id] !== "")),
   );
   const value = (f: Field) => {
     const v = record.data[f.id];

@@ -27,7 +27,13 @@ export function Select({
   ariaLabel,
   searchable,
   size = "md",
+  onAdd,
+  addLabel = "option",
 }: {
+  /** Shows "+ Add …" at the bottom: makes a new choice and returns its value (null if it failed). */
+  onAdd?: (label: string) => Promise<string | null>;
+  /** What one choice is called ("category"). */
+  addLabel?: string;
   value: string | string[];
   onChange: (v: string | string[]) => void;
   options: SelectOption[];
@@ -44,6 +50,8 @@ export function Select({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [addBusy, setAddBusy] = useState(false);
   const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; host: Element } | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const pop = useRef<HTMLDivElement>(null);
@@ -80,7 +88,19 @@ export function Select({
     };
   }, [open]);
 
+  const add = async (label: string) => {
+    const l = label.trim();
+    if (!l || !onAdd) return;
+    setAddBusy(true);
+    const v = await onAdd(l);
+    setAddBusy(false);
+    if (!v) return;
+    setAdding(null);
+    setQuery("");
+    pick(v);
+  };
   const show = () => {
+    setAdding(null);
     setQuery("");
     setActive(Math.max(0, options.findIndex((o) => selected.includes(o.value))));
     setOpen(true);
@@ -94,6 +114,7 @@ export function Select({
     }
   };
   const onKey = (e: React.KeyboardEvent) => {
+    if (adding !== null) return; // typing a new choice
     if (!open) {
       if (["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) {
         e.preventDefault();
@@ -161,7 +182,7 @@ export function Select({
             </div>
           )}
           <ul id={listId} role="listbox" aria-multiselectable={multiple} className="max-h-64 overflow-y-auto p-1.5">
-            {shown.length === 0 && <li className="px-3 py-2 text-sm text-muted">No matches</li>}
+            {shown.length === 0 && !(onAdd && query.trim()) && <li className="px-3 py-2 text-sm text-muted">No matches</li>}
             {shown.map((o, i) => {
               const on = selected.includes(o.value);
               return (
@@ -186,6 +207,49 @@ export function Select({
               );
             })}
           </ul>
+          {onAdd && (
+            <div className="border-t border-line p-1.5">
+              {adding === null ? (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => (query.trim() && !shown.length ? void add(query) : setAdding(query.trim()))}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-accent hover:bg-accent-tint"
+                >
+                  + {query.trim() && !shown.length ? `Add “${query.trim()}”` : `Add ${addLabel}`}
+                </button>
+              ) : (
+                <form
+                  className="flex gap-1.5 p-1"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void add(adding);
+                  }}
+                >
+                  <input
+                    autoFocus
+                    className="input min-w-0 flex-1 py-1.5 text-sm"
+                    placeholder={`New ${addLabel}`}
+                    value={adding}
+                    onChange={(e) => setAdding(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setAdding(null);
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void add(adding);
+                      }
+                    }}
+                    aria-label={`New ${addLabel}`}
+                  />
+                  <button type="button" disabled={addBusy || !adding.trim()} onClick={() => void add(adding)} className="btn-primary px-3 py-1.5 text-sm">
+                    {addBusy ? "…" : "Add"}
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
         </div>,
         pos.host,
       )}

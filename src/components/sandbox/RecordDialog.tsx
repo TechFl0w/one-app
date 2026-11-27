@@ -7,6 +7,7 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import type { SandboxBridge, SandboxRecord, SandboxSchema } from "@/sandbox/protocol";
 import { unwrap } from "@/sandbox/result";
 import { MediaUploader } from "@/components/media/Media";
+import { AddField, ChoiceInput, HoursInput } from "./FormParts";
 import { singular } from "@/lib/words";
 export { singular };
 
@@ -23,7 +24,7 @@ export interface RecordFormRequest {
   defaults?: Record<string, unknown>;
 }
 
-const SKIP = new Set(["rollup", "formula", "hours"]);
+const SKIP = new Set(["rollup", "formula"]);
 const pad = (n: number) => String(n).padStart(2, "0");
 function toLocal(iso: string) {
   const d = new Date(iso);
@@ -82,8 +83,13 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
     setError(r.error);
     setDeleting("no");
   };
+  // Fields the owner added from this form ("+ Add field") show up right away.
+  const [added, setAdded] = useState<Field[]>([]);
   const all = t.fields.filter((f) => !SKIP.has(f.type) && !f.computed);
-  const shown = request.fields ? request.fields.map((id) => all.find((f) => f.id === id)).filter((f): f is Field => !!f) : all;
+  const shown = [
+    ...(request.fields ? request.fields.map((id) => all.find((f) => f.id === id)).filter((f): f is Field => !!f) : all),
+    ...added.filter((a) => !t.fields.some((f) => f.id === a.id) || request.fields),
+  ].filter((f, i, list) => list.findIndex((x) => x.id === f.id) === i);
 
   useEffect(() => {
     let live = true;
@@ -124,8 +130,13 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
       const raw = form.get(f.id);
       const s = typeof raw === "string" ? raw.trim() : "";
       let v: unknown;
+      const several = f.multiple && (f.type === "choice" || f.type === "link");
       if (f.type === "checkbox") v = form.has(f.id);
-      else if (!s) v = null;
+      else if (several) {
+        const list = form.getAll(f.id).map(String).filter(Boolean);
+        v = list.length ? list : null;
+      } else if (!s) v = null;
+      else if (f.type === "hours") v = JSON.parse(s);
       else if (f.type === "file") v = JSON.parse(s);
       else if (f.type === "number" || f.type === "money") v = Number(s);
       else if (f.type === "datetime") v = new Date(s).toISOString();
@@ -169,6 +180,7 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
           )}
         </div>
       ))}
+      <AddField table={t.id} onAdded={(f) => setAdded((x) => [...x, f])} />
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {confirmAmount === "asking" && (
         <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -219,25 +231,12 @@ function FieldInput({ field: f, value, options, table, bridge }: { field: Field;
     case "status":
     case "choice":
     case "link":
-      return <Choice id={id} name={f.id} required={f.required} initial={str} options={options} />;
+      return <ChoiceInput id={id} name={f.id} required={f.required} initial={value} options={options} table={table} field={f} multiple={f.multiple} />;
+    case "hours":
+      return <HoursInput name={f.id} initial={value} />;
     default:
       return <input {...common} type="text" />;
   }
-}
-
-function Choice({ id, name, required, initial, options }: { id: string; name: string; required?: boolean; initial: string; options: { value: string; label: string }[] }) {
-  const [value, setValue] = useState(initial);
-  return (
-    <Select
-      id={id}
-      name={name}
-      required={required}
-      value={value}
-      onChange={(v) => setValue(String(v))}
-      placeholder={required ? "Choose…" : "—"}
-      options={[...(!required && value ? [{ value: "", label: "—" }] : []), ...options]}
-    />
-  );
 }
 
 /** Photos, videos or files for a file field: uploaded as they're picked, saved with the form. */
