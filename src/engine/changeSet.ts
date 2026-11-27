@@ -501,6 +501,12 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
       if (!bp.components!.length) delete bp.components;
       return [{ op: "putComponent", component }];
     }
+    case "setSite": {
+      const old = bp.site ?? null;
+      if (op.site) bp.site = structuredClone(op.site);
+      else delete bp.site;
+      return [{ op: "setSite", site: old }];
+    }
     case "setTheme": {
       const old = bp.theme ?? null;
       if (op.theme) bp.theme = structuredClone(op.theme);
@@ -646,6 +652,8 @@ function describe(bp: Blueprint, op: Operation): string {
       return (bp.components ?? []).some((c) => c.id === op.component.id) ? `Update screen ${q(op.component.label)}` : `Add screen ${q(op.component.label)}`;
     case "removeComponent":
       return `Remove screen ${labelOrId(bp.components ?? [], op.componentId)}`;
+    case "setSite":
+      return op.site ? (op.site.enabled ? "Update the website" : "Update the website (not published)") : "Remove the website";
     case "setTheme":
       return op.theme ? "Change the look (colours, fonts, shape)" : "Go back to the standard look";
     case "putFunction": {

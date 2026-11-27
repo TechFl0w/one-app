@@ -729,6 +729,41 @@ export const RecurringCharge = z.strictObject({
 });
 export type RecurringCharge = z.infer<typeof RecurringCharge>;
 
+// ---------- public website ----------
+
+const SiteImage = z.strictObject({ path: z.string().min(1).max(500), name: z.string().max(255) });
+const sectionBase = { id: z.string().regex(/^sec_[a-z0-9_]{1,40}$/), title: z.string().max(120).optional() };
+/**
+ * One part of the business's public website, top to bottom. Live sections (services, team,
+ * hours, booking) read the business's own data, so a price changed in the app is changed on the
+ * site; the rest is the owner's words and photos.
+ */
+export const SiteSection = z.discriminatedUnion("type", [
+  z.strictObject({ ...sectionBase, type: z.literal("hero"), subtitle: z.string().max(300).optional(), image: SiteImage.optional(), cta: z.enum(["book", "contact", "call"]).optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("services"), intro: z.string().max(500).optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("team"), intro: z.string().max(500).optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("about"), text: z.string().max(3000), image: SiteImage.optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("gallery"), images: z.array(SiteImage).max(24) }),
+  z.strictObject({ ...sectionBase, type: z.literal("reviews"), quotes: z.array(z.strictObject({ text: z.string().max(600), name: z.string().max(80) })).max(12), link: z.boolean().optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("banner"), text: z.string().max(300), tone: z.enum(["accent", "amber", "neutral"]).optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("hours") }),
+  z.strictObject({ ...sectionBase, type: z.literal("contact"), intro: z.string().max(500).optional() }),
+]);
+export type SiteSection = z.infer<typeof SiteSection>;
+
+export const Site = z.strictObject({
+  enabled: z.boolean(),
+  /** For search engines and link previews. */
+  title: z.string().max(80).optional(),
+  description: z.string().max(200).optional(),
+  sections: z.array(SiteSection).max(24),
+  /** Where the contact form's messages go: a record in this table (a lead or client). */
+  contact: z
+    .strictObject({ table: TableId, name: FieldId, email: FieldId.optional(), phone: FieldId.optional(), message: FieldId.optional() })
+    .optional(),
+});
+export type Site = z.infer<typeof Site>;
+
 const BlueprintShape = z.strictObject({
   version: z.int().min(1),
   business: BusinessInfo,
@@ -743,6 +778,7 @@ const BlueprintShape = z.strictObject({
   theme: Theme.optional(),
   documents: z.array(DocumentDef).max(20).optional(),
   recurring: z.array(RecurringCharge).max(20).optional(),
+  site: Site.optional(),
 });
 
 /** Full blueprint with referential-integrity checks. */
@@ -881,6 +917,19 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
     }
     if ((bp.documents ?? []).filter((x) => x.table === d.table).length > 1) issue([...at, "table"], `${d.table} already has a document`);
   });
+
+  if (bp.site?.contact) {
+    const c = bp.site.contact;
+    if (!tables.has(c.table)) issue(["site", "contact", "table"], `unknown table ${c.table}`);
+    else for (const k of ["name", "email", "phone", "message"] as const) if (c[k] && !fieldsOf(c.table).has(c[k]!)) issue(["site", "contact", k], `unknown field ${c[k]} on ${c.table}`);
+  }
+  if (bp.site) {
+    const ids = new Set<string>();
+    bp.site.sections.forEach((sec, i) => {
+      if (ids.has(sec.id)) issue(["site", "sections", i, "id"], `duplicate section id ${sec.id}`);
+      ids.add(sec.id);
+    });
+  }
 
   (bp.recurring ?? []).forEach((r, ri) => {
     claim(r.id, ["recurring", ri, "id"]);

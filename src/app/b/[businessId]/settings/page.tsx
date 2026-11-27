@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck, ChevronRight, Code2, CreditCard, FileSpreadsheet, LogOut, Mail, MessageCircle, Plug, Settings } from "lucide-react";
+import { Globe, CalendarCheck, ChevronRight, Code2, CreditCard, FileSpreadsheet, LogOut, Mail, MessageCircle, Plug, Settings } from "lucide-react";
 import { getBusinessContext } from "@/server/context";
 import { usageThisMonth } from "@/server/ownerChat";
 import { AI_MODELS, aiModelInfo, resolveAiModel } from "@/agent/models";
@@ -21,6 +21,7 @@ export default async function SettingsPage({ params }: PageProps<"/b/[businessId
   const base = `/b/${businessId}`;
   const links = [
     { href: `${base}/settings/booking`, icon: CalendarCheck, label: "Online booking", hint: "Your booking page, hours and rules", show: !!blueprint.scheduling },
+    { href: `${base}/settings/website`, icon: Globe, label: "Website", hint: "A website made from your app, with booking and a contact form", show: true },
     { href: `${base}/settings/payments`, icon: CreditCard, label: "Payments", hint: "Stripe, deposits, payment links", show: true },
     { href: `${base}/settings/email`, icon: Mail, label: "Email", hint: "Sender name, replies, inbound address", show: true },
     { href: `${base}/settings/whatsapp`, icon: MessageCircle, label: "WhatsApp", hint: "Your number and message templates", show: true },
