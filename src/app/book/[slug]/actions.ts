@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createCheckout, getAccount, stripeConfigured } from "@/server/payments";
 import { depositAmount, MIN_CHECKOUT_MINUTES } from "@/payments/core";
 import type { Blueprint } from "@/schema/blueprint";
+import { ensureBookingLink } from "@/server/bookingLinks";
 
 /** Currency of the services' price field (money fields carry one), else CAD. */
 function currencyOf(bp: Blueprint): string {
@@ -131,7 +132,8 @@ export async function submitBooking(
       });
       checkoutUrl = checkout.url;
     }
-    return { ok: true as const, start: booked.slot.start, practitionerId: booked.slot.practitionerId, confirmed: booked.state === "confirmed", demo: r.demo, checkoutUrl };
+    const manage = !r.demo && "page" in r ? `/book/${slug}/b/${await ensureBookingLink(createAdminClient("public"), r.page.businessId, booked.bookingId)}` : undefined;
+    return { ok: true as const, start: booked.slot.start, end: booked.slot.end, practitionerId: booked.slot.practitionerId, confirmed: booked.state === "confirmed", demo: r.demo, checkoutUrl, manage, price: booked.price };
   } catch (e) {
     return fail(e);
   }
