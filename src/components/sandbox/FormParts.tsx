@@ -145,6 +145,7 @@ export function AddField({ table, onAdded }: { table: string; onAdded: (f: Field
   // On a quote or invoice the new field can go on the document the client sees too.
   const doc = edit?.blueprint.documents?.find((d) => d.table === table);
   const [onDoc, setOnDoc] = useState(true);
+  const [secret, setSecret] = useState(false);
   if (!edit || !t) return null;
   if (!open)
     return (
@@ -165,7 +166,7 @@ export function AddField({ table, onAdded }: { table: string; onAdded: (f: Field
     const optTaken = new Set<string>();
     const options = pick ? choices.split(/[,\n]/).map((c) => c.trim()).filter(Boolean).slice(0, 50).map((c) => ({ id: newId("opt", c, optTaken), label: c })) : [];
     if (pick && !options.length) return setError("Type the choices, separated by commas");
-    const field = KINDS.find((k) => k.id === kind)!.field(id, name, options);
+    const field = { ...KINDS.find((k) => k.id === kind)!.field(id, name, options), ...(secret ? { sensitive: true } : {}) } as BpField;
     setBusy(true);
     const ops: Parameters<typeof edit.applyNow>[0] = [{ op: "addField", tableId: table, field }];
     if (doc && onDoc) ops.push({ op: "setDocument", document: { ...doc, show: [...(doc.show ?? []), id].slice(0, 12) } });
@@ -190,6 +191,12 @@ export function AddField({ table, onAdded }: { table: string; onAdded: (f: Field
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={onDoc} onChange={(e) => setOnDoc(e.target.checked)} />
           Show it on the {doc.label.toLowerCase()} your client sees
+        </label>
+      )}
+      {(kind === "text" || kind === "long_text" || kind === "number") && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={secret} onChange={(e) => setSecret(e.target.checked)} />
+          Private (alarm code, lockbox) — hidden until tapped, kept from the assistant
         </label>
       )}
       {pick && <input className="input" placeholder="Choices, separated by commas (Colour, Balayage, Curly hair)" value={choices} onChange={(e) => setChoices(e.target.value)} aria-label="Choices" />}

@@ -74,6 +74,11 @@ const Values = z.record(FieldId, z.unknown()).describe("Field values keyed by fi
 
 const tableLabel = (bp: Blueprint, id: string) => bp.tables.find((t) => t.id === id)?.label ?? id;
 
+/** Private fields of a table (field.sensitive): left out of what the assistant reads by default. */
+const sensitiveFields = (bp: Blueprint, table: string) => new Set(bp.tables.find((t) => t.id === table)?.fields.filter((f) => f.sensitive).map((f) => f.id) ?? []);
+const redact = (data: Record<string, unknown>, hidden: Set<string>) =>
+  hidden.size ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, hidden.has(k) && v != null && v !== "" ? "[private — get_record with reveal: true if needed]" : v])) : data;
+
 export const OWNER_TOOLS: OwnerTool[] = [
   tool({
     name: "query_records",
@@ -88,18 +93,20 @@ export const OWNER_TOOLS: OwnerTool[] = [
     risk: "read",
     run: async (b, i) => {
       const { records, total } = await b.query({ table: i.table, filters: i.filters ?? [], sort: i.sort ?? [], limit: i.limit ?? 25 });
-      return { total, records: records.map((r) => ({ id: r.id, ...r.data })) };
+      const hidden = sensitiveFields(await b.blueprint(), i.table);
+      return { total, records: records.map((r) => ({ id: r.id, ...redact(r.data, hidden) })) };
     },
   }),
 
   tool({
     name: "get_record",
-    description: "Get one record by id.",
-    input: z.strictObject({ table: TableId, id: RecordId }),
+    description: "Get one record by id. Private fields (alarm codes and the like) show as hidden unless you pass reveal: true — only when the task needs that value.",
+    input: z.strictObject({ table: TableId, id: RecordId, reveal: z.boolean().optional() }),
     risk: "read",
     run: async (b, i) => {
       const r = await b.getRecord(i.table, i.id);
-      return { id: r.id, ...r.data, _created_at: r.createdAt, _updated_at: r.updatedAt };
+      const data = i.reveal ? r.data : redact(r.data, sensitiveFields(await b.blueprint(), i.table));
+      return { id: r.id, ...data, _created_at: r.createdAt, _updated_at: r.updatedAt };
     },
   }),
 

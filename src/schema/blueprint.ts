@@ -60,6 +60,12 @@ const fieldBase = {
   label: Label,
   required: z.boolean().optional(),
   description: z.string().max(500).optional(),
+  /**
+   * Private (alarm codes, lockbox codes, health notes): shown only when tapped, left out of
+   * exports and of what the assistant reads unless it asks for that one record. Changes are in
+   * the activity log like any other.
+   */
+  sensitive: z.boolean().optional(),
 };
 
 const SimpleField = z.strictObject({
