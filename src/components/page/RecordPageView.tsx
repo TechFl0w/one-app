@@ -4,6 +4,7 @@ import type { Blueprint } from "@/schema/blueprint";
 import type { Device } from "@/engine/layout";
 import { recordLabel } from "@/engine/blockData";
 import { listPageFor, recordPageFor } from "@/engine/recordPage";
+import { parentFieldOf } from "@/engine/hierarchy";
 import { BlockView, type BlockEnv } from "@/components/blocks/BlockView";
 import { PageView } from "./PageView";
 import { ROW_HEIGHT } from "./EditablePage";
@@ -21,6 +22,11 @@ export async function RecordPageView({ tableId, recordId, device, userId, env }:
   const basePath = env.sandbox?.basePath ?? "";
   // Back to the page that lists this table best: a full list of it (no filters) beats a filtered one.
   const listPage = listPageFor(bp, tableId);
+  // A record that belongs to another (a pet to its owner, a room to its building) leads with it.
+  const parentF = table ? parentFieldOf(bp.tables, tableId) : undefined;
+  const parentId = parentF && record ? record.data[parentF.id] : undefined;
+  const parentTable = parentF && "to" in parentF ? bp.tables.find((t) => t.id === parentF.to) : undefined;
+  const [parent] = parentTable && typeof parentId === "string" ? await env.store.getMany(parentTable.id, [parentId]) : [];
   const header = (
     <div className="mb-4 flex items-center gap-2 text-sm text-muted">
       {listPage ? (
@@ -29,6 +35,11 @@ export async function RecordPageView({ tableId, recordId, device, userId, env }:
         </Link>
       ) : (
         <span>{table?.label}</span>
+      )}
+      {parent && parentTable && (
+        <Link href={`${basePath}/r/${parentTable.id}/${parent.id}`} className="truncate rounded-full px-2 py-1 hover:bg-card hover:text-ink">
+          › {recordLabel(parentTable, parent)}
+        </Link>
       )}
       {record && table && <span className="truncate">› {recordLabel(table, record)}</span>}
     </div>

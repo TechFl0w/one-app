@@ -131,6 +131,12 @@ const LinkField = z.strictObject({
   type: z.literal("link"),
   to: TableId,
   multiple: z.boolean().optional(),
+  /**
+   * Narrows this picker by another link on the same record: a pet picker narrowed by the chosen
+   * owner is { field: "fld_owner", via: "fld_pet_owner" } (the pet's own link to its owner).
+   * Worked out from the setup when left out (src/engine/hierarchy.ts); false turns it off.
+   */
+  narrowBy: z.union([z.literal(false), z.strictObject({ field: FieldId, via: FieldId })]).optional(),
 });
 
 /** How a computed number is shown. */
