@@ -6,7 +6,7 @@ import { buildAggregate, buildRecordQuery, RecordError, type QueryContext } from
 import type { RecordStore } from "./store";
 import type { AuditRow } from "./auditText";
 import { documentFor, loadDocument, type DocView } from "./documents";
-import { isoDate, localToday } from "./dates";
+import { isoDate, localToday, startOfWeek } from "./dates";
 
 /** Loads what a block needs to render. Pure apart from the store, so the demo and tests can use it. */
 
@@ -229,8 +229,17 @@ export async function loadBlockData(
         if (block.type === "calendar") {
           const dateField = calendarField(table, block);
           if (!dateField) return { kind: "error", message: `${table.label} has no date field to show on a calendar.` };
-          const view = block.options?.view === "week" ? "@this_week" : "@today";
-          filters.push({ field: dateField.id, op: "eq", value: view });
+          const week = block.options?.view === "week";
+          const endField = table.fields.find((f) => f.id === block.options?.endField && (f.type === "date" || f.type === "datetime"));
+          if (endField) {
+            // Jobs that span days: anything that starts before the period ends and ends after it starts.
+            const tz = ctx.timezone ?? blueprint.business.timezone;
+            const today = localToday(ctx.now ?? new Date(), tz);
+            const from = week ? Math.round((Date.UTC(startOfWeek(today).year, startOfWeek(today).month - 1, startOfWeek(today).day) - Date.UTC(today.year, today.month - 1, today.day)) / 86_400_000) : 0;
+            const to = week ? from + 6 : 0;
+            const tok = (n: number) => (n === 0 ? "@today" : `@today${n > 0 ? "+" : "-"}${Math.abs(n)}d`);
+            filters.push({ field: dateField.id, op: "lt", value: tok(to + 1) }, { field: endField.id, op: "gte", value: tok(from) });
+          } else filters.push({ field: dateField.id, op: "eq", value: week ? "@this_week" : "@today" });
         }
         const gf = groupField(table, block);
         if (block.type === "board" && !gf) return { kind: "error", message: `Pick a status or choice field to group ${table.label} by.` };
