@@ -1,6 +1,5 @@
 import "server-only";
 import { approvedLearnings } from "./control";
-import { ensureBookingPage } from "./bookingPage";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { OwnerBackend } from "@/agent/types";
 import { ChangeSetError, previewChangeSet } from "@/engine/changeSet";
@@ -28,13 +27,15 @@ export function supabaseOwnerBackend(supabase: SupabaseClient, businessId: strin
   const manager = () => (opts.verifiedManager ? Promise.resolve() : requireManager(supabase, businessId));
   return {
     blueprint: () => getCurrentBlueprint(supabase, businessId),
-    bookingPageUrl: async () => {
+    learnings: async () => (await approvedLearnings((await getCurrentBlueprint(supabase, businessId)).business.type)).advice,
+    bookingPage: async () => {
       const bp = await getCurrentBlueprint(supabase, businessId);
       if (!bp.scheduling) return null;
+      // Imported here: bookingPage.ts imports this file.
+      const { ensureBookingPage, bookingPageUrl } = await import("./bookingPage");
       const page = await ensureBookingPage(supabase, businessId, bp.business.name).catch(() => null);
-      return page?.enabled ? `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/book/${page.slug}` : null;
+      return page ? { url: bookingPageUrl(page.slug), enabled: page.enabled } : null;
     },
-    learnings: async () => (await approvedLearnings((await getCurrentBlueprint(supabase, businessId)).business.type)).advice,
     query: (q) => listRecords(supabase, businessId, q),
     getRecord: (t, id) => getRecord(supabase, businessId, t, id),
     createRecord: (t, input) => createRecord(supabase, businessId, t, input),

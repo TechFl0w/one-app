@@ -12,6 +12,11 @@ export interface BookingPage {
   intro: string | null;
 }
 type Row = { business_id: string; slug: string; enabled: boolean; intro: string | null };
+/** Full public link for a booking page slug (relative when the app URL isn't configured). */
+export function bookingPageUrl(slug: string): string {
+  return `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/book/${slug}`;
+}
+
 const toPage = (r: Row): BookingPage => ({ businessId: r.business_id, slug: r.slug, enabled: r.enabled, intro: r.intro });
 
 /** The business's booking page, created (enabled, slug from the name) on first use. Owner/admin client. */

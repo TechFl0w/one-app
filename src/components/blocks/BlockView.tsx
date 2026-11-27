@@ -110,7 +110,17 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
         </BlockFrame>
       );
     case "header":
-      return <HeaderBlock block={block} blueprint={blueprint} stats={data.stats} ctx={ctx} now={now} />;
+      return (
+        <HeaderBlock
+          block={block}
+          blueprint={blueprint}
+          stats={data.stats}
+          ctx={ctx}
+          now={now}
+          // Real businesses only (the demo has no settings): the owner's booking link lives in Settings › Booking.
+          bookingHref={blueprint.scheduling && env.sandbox?.basePath?.startsWith("/b/") ? `${env.sandbox.basePath}/settings/booking` : undefined}
+        />
+      );
     case "form": {
       const wanted = Array.isArray(block.options?.fields) ? (block.options.fields as string[]) : undefined;
       return (

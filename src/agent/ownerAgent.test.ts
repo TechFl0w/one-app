@@ -334,3 +334,19 @@ describe("multi-step builds", () => {
     for (let i = 1; i < roles.length; i++) expect(roles[i]).not.toBe(roles[i - 1]);
   });
 });
+
+describe("setupSummary: online booking", () => {
+  it("tells the agent the business has a booking page and where the owner finds it", () => {
+    const s = setupSummary(demoBlueprint, new Date("2026-07-06T16:00:00Z"));
+    expect(s).toContain("Online booking:");
+    expect(s).toContain("Settings › Booking");
+  });
+  it("gives the real link when it's known", () => {
+    const s = setupSummary(demoBlueprint, new Date("2026-07-06T16:00:00Z"), { url: "https://app.example/book/studio-mila", enabled: true });
+    expect(s).toContain("Public booking page: https://app.example/book/studio-mila (taking bookings)");
+  });
+  it("says nothing about booking when bookings aren't set up", () => {
+    const s = setupSummary({ ...demoBlueprint, scheduling: undefined }, new Date("2026-07-06T16:00:00Z"));
+    expect(s).not.toContain("Online booking:");
+  });
+});
