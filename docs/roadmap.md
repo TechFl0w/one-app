@@ -2,6 +2,16 @@
 
 Work top to bottom. Each task should end with tests passing and a short PR.
 
+## Priority — Integrations (owner feedback, 27 Nov 2026)
+Owners judge the app by whether it plugs into what they already use. Do these before more templates.
+Each one: offered during setup when the business needs it, a health status in Settings, and the AI asks
+for it at the moment it's needed ("Connect Stripe so Sarah can pay this invoice online"). See docs/integrations.md.
+25. **Stripe** — Connect exists; offer it in onboarding, prompt on unsent invoices and deposits, recurring charges.
+26. **Calendar sync** — two-way Google / Outlook, Apple via iCal subscribe; jobs, site visits and bookings out, busy times in.
+27. **Twilio** — SMS reminders and replies (WhatsApp settings exist), one number per business.
+28. **Accounting** — QuickBooks Online and Xero: push invoices, payments and clients; map tax (GST/PST).
+29. **Connection health** — one Settings page listing every connection, its status and what uses it.
+
 ## Phase 0 — Foundation
 1. Next.js + TypeScript + Supabase project, auth, `businesses` + `memberships`, RLS policies.
 2. zod schemas for the blueprint (`src/schema/`) + `blueprints` / `blueprint_history` tables.
