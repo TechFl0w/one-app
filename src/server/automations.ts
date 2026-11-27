@@ -18,15 +18,19 @@ import { resolvePhone } from "@/whatsapp/recipient";
 import { templateVariables } from "@/whatsapp/core";
 import { formatDateTime } from "@/components/blocks/format";
 import { bookingPageUrl } from "./bookingPage";
+import { ensureBookingLink, manageUrl } from "./bookingLinks";
 import { documentUrl, ensureDocumentLink } from "./documents";
 import { documentFor } from "@/engine/documents";
 
 /** {{booking_link}} and {{document_link}}: only looked up when the message uses them. */
 async function links(bp: Blueprint, businessId: string, record: { tableId: string; recordId: string }, text: string, db: SupabaseClient) {
-  const out: { bookingLink?: string; documentLink?: string } = {};
-  if (/booking_link|tpl_rebook/.test(text)) {
+  const out: { bookingLink?: string; documentLink?: string; manageLink?: string } = {};
+  if (/booking_link|manage_link|tpl_rebook|tpl_reminder/.test(text)) {
     const { data } = await db.from("booking_pages").select("slug, enabled").eq("business_id", businessId).maybeSingle();
-    if (data?.enabled) out.bookingLink = bookingPageUrl(data.slug as string);
+    if (data?.enabled) {
+      out.bookingLink = bookingPageUrl(data.slug as string);
+      if (/manage_link|tpl_reminder/.test(text) && record.tableId === bp.scheduling?.bookings.table) out.manageLink = manageUrl(data.slug as string, await ensureBookingLink(db, businessId, record.recordId));
+    }
   }
   const def = /document_link/.test(text) ? documentFor(bp, record.tableId) : undefined;
   if (def) out.documentLink = documentUrl(await ensureDocumentLink(db, businessId, def.id, record.recordId));

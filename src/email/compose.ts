@@ -98,7 +98,7 @@ export function slugFromRecipients(recipients: string[], d: EmailDomains): strin
 
 /** Built-in message templates referenced by automations (owner-editable templates come later). */
 export const EMAIL_TEMPLATES: Record<string, { subject: string; text: string }> = {
-  tpl_reminder: { subject: "See you tomorrow at {{business}}", text: "Hi {{name}},\n\nJust a reminder of your appointment on {{when}}.\n\nReply to this email if you need to change it.\n\n{{business}}" },
+  tpl_reminder: { subject: "See you tomorrow at {{business}}", text: "Hi {{name}},\n\nJust a reminder of your appointment on {{when}}.\n\nNeed to cancel? {{manage_link}}\n\nReply to this email if you need to change it.\n\n{{business}}" },
   tpl_rebook: { subject: "Time for your next visit?", text: "Hi {{name}},\n\nIt’s been a few weeks — would you like to book your next appointment?\n\nBook online: {{booking_link}}\n\nOr just reply to this email.\n\n{{business}}" },
   tpl_review: { subject: "How was your visit to {{business}}?", text: "Hi {{name}},\n\nThank you for coming in! If you have a minute, a short review helps us a lot:\n{{review_link}}\n\n{{business}}" },
   tpl_thanks: { subject: "Thank you from {{business}}", text: "Hi {{name}},\n\nThank you for coming in. We hope to see you again soon!\n\n{{business}}" },
@@ -114,7 +114,7 @@ export const EMAIL_TEMPLATES: Record<string, { subject: string; text: string }> 
 export function renderTemplate(
   templateId: string | undefined,
   message: string | undefined,
-  vars: { business: string; name?: string; when?: string; tracking?: string; reviewLink?: string; bookingLink?: string; documentLink?: string; data: Record<string, unknown> },
+  vars: { business: string; name?: string; when?: string; tracking?: string; reviewLink?: string; bookingLink?: string; documentLink?: string; manageLink?: string; data: Record<string, unknown> },
 ): { subject: string; text: string } {
   const known = templateId ? EMAIL_TEMPLATES[templateId] : undefined;
   const t = known ?? { subject: "A message from {{business}}", text: message ?? "Hi {{name}},\n\n{{business}}" };
@@ -123,6 +123,7 @@ export function renderTemplate(
       .replace(/\{\{\s*(business|business_name)\s*\}\}/g, vars.business)
       // A line with a link the business doesn't have (no booking page yet) is left out whole.
       .replace(/^(.*)\{\{\s*booking_link\s*\}\}(.*)$/gm, (_, a: string, b: string) => (vars.bookingLink ? `${a}${vars.bookingLink}${b}` : "\u0000"))
+      .replace(/^(.*)\{\{\s*manage_link\s*\}\}(.*)$/gm, (_, a: string, b: string) => (vars.manageLink ? `${a}${vars.manageLink}${b}` : "\u0000"))
       .replace(/^(.*)\{\{\s*document_link\s*\}\}(.*)$/gm, (_, a: string, b: string) => (vars.documentLink ? `${a}${vars.documentLink}${b}` : "\u0000"))
       .replace(/\{\{\s*name\s*\}\}/g, vars.name || "there")
       .replace(/\{\{\s*when\s*\}\}/g, vars.when ?? "")
