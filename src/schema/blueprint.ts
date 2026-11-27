@@ -673,25 +673,30 @@ export const DocumentDef = z.strictObject({
 export type DocumentDef = z.infer<typeof DocumentDef>;
 
 /**
- * A charge that repeats while an agreement runs: rent every week, a membership every month.
- * One App creates each charge record a few days before it's due, from the start date until the
- * end date, only while `when` holds (e.g. signed, not ended) — and never twice for one due date.
+ * Work or charges that repeat while a plan runs: rent every week, a membership every month, a
+ * cleaning every 2 weeks on Tuesday at 9. One App creates each record ahead of time (leadDays),
+ * from the start until the end, only while `when` holds (signed, not cancelled) — never twice
+ * for one date, and a visit that was deleted (skipped) isn't made again. Future records follow
+ * edits to the plan (copied fields, amount) and are removed when the plan ends or stops.
  */
 export const RecurringCharge = z.strictObject({
   id: z.string().regex(/^rec_[a-z0-9_]{1,60}$/),
   label: Label,
-  /** The agreement (rental, membership, contract) and its fields. */
+  /** The plan (rental, membership, cleaning plan) and its fields. */
   table: TableId,
-  amount: FieldId,
-  /** "week", "2weeks", "month", or a choice field whose chosen option says weekly / monthly. */
-  every: z.union([z.enum(["week", "2weeks", "month"]), FieldId]),
+  amount: FieldId.optional(),
+  /** "week", "2weeks", "4weeks", "month", or a choice field whose chosen option says weekly / every 2 weeks / monthly. */
+  every: z.union([z.enum(["week", "2weeks", "4weeks", "month"]), FieldId]),
+  /** First date (a date-and-time keeps that time of day on every visit). */
   start: FieldId,
   end: FieldId.optional(),
   when: z.array(RollupWhere).max(5).optional(),
-  /** Where charges go: their table, link back to the agreement, amount and due date fields. */
-  charges: z.strictObject({ table: TableId, via: FieldId, amount: FieldId, due: FieldId }),
-  /** Days before the due date the charge is created (default 3). */
-  leadDays: z.int().min(0).max(31).optional(),
+  /** Where the records go: their table, link back to the plan, amount and date fields. */
+  charges: z.strictObject({ table: TableId, via: FieldId, amount: FieldId.optional(), due: FieldId }),
+  /** Plan fields copied onto every record (client, address, crew, service). */
+  copy: z.array(z.strictObject({ from: FieldId, to: FieldId })).max(12).optional(),
+  /** Days ahead each record is created (default 3; visits usually 21 so the schedule shows them). */
+  leadDays: z.int().min(0).max(62).optional(),
 });
 export type RecurringCharge = z.infer<typeof RecurringCharge>;
 
@@ -848,7 +853,11 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
     for (const [wi, w] of (r.when ?? []).entries()) if (!own.has(w.field)) issue([...at, "when", wi, "field"], `unknown field ${w.field} on ${r.table}`);
     const ct = tables.get(r.charges.table);
     if (!ct) return issue([...at, "charges", "table"], `unknown table ${r.charges.table}`);
-    for (const k of ["amount", "due", "via"] as const) if (!ct.fields.some((f) => f.id === r.charges[k])) issue([...at, "charges", k], `unknown field ${r.charges[k]} on ${ct.id}`);
+    for (const k of ["amount", "due", "via"] as const) if (r.charges[k] && !ct.fields.some((f) => f.id === r.charges[k])) issue([...at, "charges", k], `unknown field ${r.charges[k]} on ${ct.id}`);
+    for (const [ci, c] of (r.copy ?? []).entries()) {
+      if (!own.has(c.from)) issue([...at, "copy", ci, "from"], `unknown field ${c.from} on ${r.table}`);
+      if (!ct.fields.some((f) => f.id === c.to)) issue([...at, "copy", ci, "to"], `unknown field ${c.to} on ${ct.id}`);
+    }
     const via = ct.fields.find((f) => f.id === r.charges.via);
     if (via && (via.type !== "link" || via.to !== r.table)) issue([...at, "charges", "via"], `charges must link to ${r.table}`);
   });

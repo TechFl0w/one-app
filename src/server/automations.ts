@@ -213,7 +213,7 @@ export async function automationTick(db: SupabaseClient, now = new Date()) {
     const bp = Blueprint.safeParse(c.json);
     if (bp.success && bp.data.recurring?.length) {
       const backend = supabaseOwnerBackend(db, c.business_id);
-      await runRecurring(bp.data, { query: (q) => backend.query(q), createRecord: (t, v) => backend.createRecord(t, v) }, now).catch((e) => console.error("recurring failed", c.business_id, e));
+      await runRecurring(bp.data, { query: (q) => backend.query(q), createRecord: (t, v) => backend.createRecord(t, v), updateRecord: (t, id, v) => backend.updateRecord(t, id, v, { confirmed: true }), deleteRecord: (t, id) => backend.deleteRecord(t, id) }, now).catch((e) => console.error("recurring failed", c.business_id, e));
     }
   }
 
