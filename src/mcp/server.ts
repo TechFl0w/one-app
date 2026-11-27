@@ -1,7 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { executeOwnerTool, ownerToolDefinitions, type ToolEffects } from "@/agent/ownerTools";
-import { buildGuide, setupSummary } from "@/agent/ownerAgent";
+import { buildGuide, setupExtras, setupSummary } from "@/agent/ownerAgent";
 import type { OwnerBackend, PendingAction } from "@/agent/types";
 
 /**
@@ -31,7 +31,7 @@ export function buildMcpServer(input: {
   server.setRequestHandler(CallToolRequestSchema, async (req): Promise<CallToolResult> => {
     const text = (v: unknown, isError = false): CallToolResult => ({ content: [{ type: "text", text: typeof v === "string" ? v : JSON.stringify(v) }], ...(isError ? { isError: true } : {}) });
     if (req.params.name === "get_setup") {
-      const learned = backend.learnings ? await backend.learnings().catch(() => "") : "";
+      const learned = await setupExtras(backend);
       return text(`${setupSummary(await backend.blueprint(), now())}${learned ? `\n\n${learned}` : ""}`);
     }
     if (req.params.name === "get_build_guide") return text(buildGuide({ renderCheck: false }));

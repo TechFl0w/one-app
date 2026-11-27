@@ -6,6 +6,14 @@ import { ArrowLeft, Check, Plus, Sparkles, X, Zap } from "lucide-react";
 import { TEMPLATES, templateById, type Answers, type Question } from "@/templates";
 import { initialValue, resolve } from "@/templates/types";
 import { HoursEditor } from "./HoursEditor";
+import { guessName, guessTemplate } from "@/templates/guess";
+
+const EXAMPLES = [
+  "I run a hair salon and want online booking",
+  "I'm a landscaper and need quotes and invoices",
+  "We repair cars and need a workshop board",
+  "I make candles and sell online",
+];
 import { menuPages } from "@/engine/layout";
 import { PageIcon } from "@/components/shell/Icon";
 
@@ -18,20 +26,39 @@ type BuildAction = (input: { templateId: string; name: string; timezone: string;
 export function Wizard({ build }: { build?: BuildAction }) {
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [about, setAbout] = useState("");
+  const [picking, setPicking] = useState(false);
+  // Answers the owner's own words already gave (the trade, the kind of salon) aren't asked again.
+  const [known, setKnown] = useState<string[]>([]);
   const [answers, setAnswers] = useState<Answers>({});
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const template = templateId ? templateById(templateId) : undefined;
-  const questions = template?.questions ?? [];
+  // At most three follow-up questions; anything after that starts from its default (changeable later).
+  const questions = (template?.questions ?? []).filter((q) => !known.includes(q.id)).slice(0, 3);
   const lastStep = questions.length + 1; // 0 = type+name, 1..n = questions, n+1 = preview
   const preview = template && step === lastStep ? template.build({ name: name.trim() || "Your business", timezone: "UTC" }, answers) : null;
 
+  const describe = (text: string) => {
+    setAbout(text);
+    const g = guessTemplate(text);
+    if (g && !picking) {
+      setTemplateId(g.templateId);
+      setAnswers(g.answers);
+      setKnown(Object.keys(g.answers));
+    }
+    const n = guessName(text);
+    if (n && !name.trim()) setName(n);
+  };
   const next = () => {
     setError(null);
     if (step === 0) {
-      if (!template) return setError("Pick what kind of business you run.");
+      if (!template) {
+        setPicking(true);
+        return setError("Tell me a bit more, or pick the closest below.");
+      }
       if (!name.trim()) return setError("Give your business a name.");
     }
     setStep((s) => Math.min(s + 1, lastStep));
@@ -67,25 +94,48 @@ export function Wizard({ build }: { build?: BuildAction }) {
       {step === 0 && (
         <div className="space-y-5">
           <div>
-            <h1 className="text-2xl font-bold">Let’s set up your business</h1>
-            <p className="mt-1 text-sm text-muted">A few questions, then I’ll build it. You can change everything later.</p>
+            <h1 className="text-2xl font-bold">What business do you run, and what do you need help with?</h1>
+            <p className="mt-1 text-sm text-muted">In your own words. I’ll ask two or three things, show you the plan, then build it.</p>
+          </div>
+          <textarea
+            className="input min-h-28"
+            value={about}
+            onChange={(e) => describe(e.target.value)}
+            placeholder="I run a hair salon with 3 stylists and want online booking and fewer no-shows"
+            maxLength={600}
+            autoFocus
+            aria-label="Your business, in your own words"
+          />
+          <div className="flex flex-wrap gap-2">
+            {EXAMPLES.map((ex) => (
+              <button key={ex} type="button" className="rounded-full bg-ground px-3 py-1.5 text-left text-xs text-muted hover:bg-accent-tint hover:text-accent" onClick={() => describe(ex)}>
+                {ex}
+              </button>
+            ))}
           </div>
           <div>
             <label className="label" htmlFor="biz-name">Business name</label>
-            <input id="biz-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Glorious Hair" maxLength={80} autoFocus />
+            <input id="biz-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Studio Mila" maxLength={80} />
           </div>
-          <fieldset>
-            <legend className="label">What do you want to run with One App?</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {TEMPLATES.map((t) => (
-                <label key={t.id} className={`cursor-pointer rounded-2xl border p-4 ${templateId === t.id ? "border-accent bg-accent-tint" : "border-line hover:bg-ground"}`}>
-                  <input type="radio" name="template" className="sr-only" checked={templateId === t.id} onChange={() => { setTemplateId(t.id); setAnswers({}); }} />
-                  <span className={`block font-semibold ${templateId === t.id ? "text-accent" : ""}`}>{t.label}</span>
-                  <span className="mt-1 block text-xs text-muted">{t.description}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          {template && !picking ? (
+            <p className="rounded-2xl bg-accent-tint px-4 py-3 text-sm text-accent">
+              I’ll start from <b>{template.label.toLowerCase()}</b> — {template.description.charAt(0).toLowerCase() + template.description.slice(1)}{" "}
+              <button type="button" className="font-semibold underline" onClick={() => setPicking(true)}>Not quite?</button>
+            </p>
+          ) : (
+            <fieldset>
+              <legend className="label">Pick the closest</legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {TEMPLATES.map((t) => (
+                  <label key={t.id} className={`cursor-pointer rounded-2xl border p-4 ${templateId === t.id ? "border-accent bg-accent-tint" : "border-line hover:bg-ground"}`}>
+                    <input type="radio" name="template" className="sr-only" checked={templateId === t.id} onChange={() => { setTemplateId(t.id); setAnswers({}); setKnown([]); }} />
+                    <span className={`block font-semibold ${templateId === t.id ? "text-accent" : ""}`}>{t.label}</span>
+                    <span className="mt-1 block text-xs text-muted">{t.description}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
         </div>
       )}
 
@@ -95,7 +145,7 @@ export function Wizard({ build }: { build?: BuildAction }) {
         <div className="space-y-5">
           <div>
             <h1 className="text-2xl font-bold">Here’s what I’ll build</h1>
-            <p className="mt-1 text-sm text-muted">For {name.trim()}. Rename, move or remove anything later — by clicking or by asking the assistant.</p>
+            <p className="mt-1 text-sm text-muted">For {name.trim()}. Anything I didn’t ask about starts with a sensible default. Rename, move or remove anything later — by clicking or by asking the assistant.</p>
           </div>
           <section>
             <h2 className="mb-2 text-sm font-semibold">Pages</h2>
@@ -120,9 +170,15 @@ export function Wizard({ build }: { build?: BuildAction }) {
               ))}
             </ul>
           </section>
+          {preview.blueprint.scheduling && (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold">Online booking</h2>
+              <p className="text-sm">Clients book from your own booking page (you get a link and a QR code to share){preview.blueprint.scheduling.deposit ? ", and pay a deposit to hold the time" : ""}. Reminders go out the day before.</p>
+            </section>
+          )}
           {preview.blueprint.automations.length > 0 && (
             <section>
-              <h2 className="mb-2 text-sm font-semibold">Automations</h2>
+              <h2 className="mb-2 text-sm font-semibold">Done for you automatically</h2>
               <ul className="space-y-1 text-sm">
                 {preview.blueprint.automations.map((a) => (
                   <li key={a.id} className="flex items-center gap-2"><Zap className="h-3.5 w-3.5 text-accent" /> {a.label}</li>

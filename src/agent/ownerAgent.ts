@@ -120,6 +120,7 @@ Data that stays true (docs/data-rules.md — learned from real apps that sent re
   - {"type": "send_message", "to": "<field: the person, e.g. the client link, or an email/phone field>", "channel": "auto" | "email" | "whatsapp" (auto = WhatsApp when connected, else email), "message": "text" or "template": "tpl_reminder" | "tpl_rebook" | "tpl_review" | "tpl_thanks" | "tpl_shipped" | …}. The email subject comes from the template or "A message from <business>".
   - Placeholders in message: {{fld_x}} (shown readable: dates and times in the business's time, money, option names, a linked record's name), {{fld_link.fld_y}} (a field of the linked record, e.g. {{fld_service.fld_price}}), and {{name}} (the person's first name), {{business}}, {{when}} (the record's date/time).
   - {"type": "notify", "message": "…"} tells the owner; {"type": "wait", "duration": "30m" | "2h" | "1d" | "1w"}; {"type": "update_record", "values": {…}}; {"type": "create_record", "table": "tbl_…", "values": {…}}.
+- Online booking: every business with scheduling has a public booking page (/book/<slug>; the link is in the setup and in the owner's menu with Share — link, QR code, website button). Don't build a booking page yourself. In screens, useFreeTimes(service, date, staff?) gives real free times and bookTime(...) books one without double-booking (e.g. a walk-in screen).
 - Working hours (scheduling.hours, and a staff member's "hours" field): {"mon": [["09:00","17:00"]], "tue": [["09:00","12:00"],["13:00","17:00"]], …} in the business's time; a missing day is closed. A staff member with no hours works the business's opening hours. Time off is separate records.
 - "eq @today" on a date-and-time field means any time on that local day (also @tomorrow, @yesterday, @this_week, @this_month, @today+7d). On a link that holds several records, filter with "contains" (eq is read as contains).
 - Automations that message or charge people state who still qualifies in their conditions (status active, not paid, renter not ended — add a rollup to see the parent's status). One App checks conditions again right before every run and after every wait, so someone who left, cancelled or paid gets nothing. Don't use a condition the automation's own steps would break.
@@ -266,7 +267,7 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
   const page = input.pageId ? bp.pages.find((p) => p.id === input.pageId) : undefined;
   const userText = page ? `[The owner is looking at page "${page.label}" (${page.id}).]\n\n${input.message}` : input.message;
   const images = (input.images ?? []).slice(0, MAX_IMAGES);
-  const learned = backend.learnings ? await backend.learnings().catch(() => "") : "";
+  const learned = await setupExtras(backend);
   const newContent: Anthropic.Beta.BetaContentBlockParam[] = [
     ...images.map((im) => ({ type: "image" as const, source: { type: "base64" as const, media_type: im.mediaType, data: im.data } })),
     { type: "text" as const, text: userText },
@@ -366,6 +367,12 @@ export async function runOwnerTurn(input: OwnerTurnInput): Promise<OwnerTurnResu
   }
   usage.costUsd = usageCost(usage);
   return { history: messages, response, pending, usage };
+}
+
+/** What the setup summary can't know: the public booking link, and what similar businesses changed. */
+export async function setupExtras(backend: OwnerBackend): Promise<string> {
+  const [url, learned] = await Promise.all([backend.bookingPageUrl ? backend.bookingPageUrl().catch(() => null) : null, backend.learnings ? backend.learnings().catch(() => "") : ""]);
+  return [url ? `Public online booking page (clients book here; the owner shares it from the menu): ${url}` : "", learned].filter(Boolean).join("\n\n");
 }
 
 const setupNote = (bp: Blueprint, now: Date) => `Current setup:\n${setupSummary(bp, now)}`;

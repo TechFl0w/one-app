@@ -714,6 +714,35 @@ function FileInput({ table, field, value, onChange, label, accept = "image/*,vid
   );
 }
 
+// ---------- kit: bookings ----------
+
+type FreeTime = { start: string; end: string; practitionerId: string; local: string };
+/**
+ * Free times for a service on a date (YYYY-MM-DD, the business's time zone), optionally with one
+ * staff member — from the same engine as online booking (hours, time off, clean-up, other bookings).
+ */
+function useFreeTimes(service: string | null | undefined, date: string | null | undefined, practitioner?: string | null, days = 1): { slots: FreeTime[]; loading: boolean; error: string | null; timezone?: string } {
+  const [state, setState] = useState<{ key: string; slots: FreeTime[]; error: string | null; timezone?: string } | null>(null);
+  const key = `${service}|${date}|${practitioner ?? ""}|${days}`;
+  useEffect(() => {
+    let live = true;
+    if (!service || !date) return;
+    call<{ timezone: string; slots: FreeTime[] }>("bookings.freeTimes", service, date, practitioner ?? undefined, days).then(
+      (r) => live && setState({ key, slots: r.slots, error: null, timezone: r.timezone }),
+      (e) => live && setState({ key, slots: [], error: e instanceof Error ? e.message.replace(/^[a-z_]+: /, "") : "Couldn’t load free times" }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cur = state && state.key === key ? state : null;
+  return { slots: cur?.slots ?? [], loading: !!service && !!date && !cur, error: cur?.error ?? null, timezone: cur?.timezone };
+}
+/** Books a free time (from useFreeTimes) for a client — found by email/phone or added. Refuses a time that's no longer free. */
+function bookTime(service: string, start: string, client: { name: string; email?: string; phone?: string }, practitioner?: string): Promise<{ bookingId: string; state: string }> {
+  return call("bookings.book", service, start, client, practitioner);
+}
+
 // ---------- kit: board ----------
 
 /**
@@ -811,7 +840,7 @@ function Board({ table, field, records: rows, renderCard, columns, onCardClick, 
 
 const kit = {
   useRecords, useRecord, useSchema, useProps, records, recordLabel, optionLabel, navigate, openRecord, openRecordForm, toast, plural, formatMoney, formatDate,
-  uploadFile, useFileUrl, openFile, viewFiles,
+  uploadFile, useFileUrl, openFile, viewFiles, useFreeTimes, bookTime,
   Card, Button, Badge, Collapsible, Tabs, Input, Textarea, Select, DateTimeInput, RecordForm, Spinner, Empty, Icon, FileImage, FileInput, Gallery, Board,
 };
 

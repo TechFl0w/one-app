@@ -21,7 +21,7 @@ export type HostToFrame =
   /** Asks the frame for a picture of what it shows (the assistant's self-check). */
   | { type: "capture"; id: number };
 
-export type CallMethod = "records.list" | "records.get" | "records.create" | "records.update" | "records.remove" | "navigate" | "toast" | "form.open" | "files.upload" | "files.read" | "files.open" | "files.view" | "record.open";
+export type CallMethod = "records.list" | "records.get" | "records.create" | "records.update" | "records.remove" | "navigate" | "toast" | "form.open" | "files.upload" | "files.read" | "files.open" | "files.view" | "record.open" | "bookings.freeTimes" | "bookings.book";
 
 /** What a file field holds (schema/records FileValue). */
 export interface SandboxFile {
@@ -56,6 +56,9 @@ export interface SandboxBridge {
   fileUrl?(path: string): Promise<BridgeResult<string>>;
   /** A screen's compiled code and styles, for screens the page didn't render (Edit mode drafts). */
   loadComponent?(componentId: string): Promise<BridgeResult<{ compiled: string; css?: string }>>;
+  /** Online booking: free times for a service (business time zone) and booking one (no double-booking). */
+  freeTimes?(service: string, date: string, practitioner?: string, days?: number): Promise<BridgeResult<{ timezone: string; slots: { start: string; end: string; practitionerId: string; local: string }[] }>>;
+  bookTime?(service: string, start: string, client: { name: string; email?: string; phone?: string }, practitioner?: string): Promise<BridgeResult<{ bookingId: string; state: string }>>;
   /** Quotes and invoices (One App's own document block, not frames). Missing in the demo. */
   sendDocument?(table: string, id: string): Promise<BridgeResult<{ link: string; emailed: boolean; reason?: string }>>;
   documentLink?(table: string, id: string): Promise<BridgeResult<string>>;

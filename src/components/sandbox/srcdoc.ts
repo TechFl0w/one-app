@@ -43,8 +43,8 @@ export function sandboxSrcdoc(appOrigin: string, theme?: Theme, css?: string): s
 ${css === undefined ? legacyStyles : `<link rel="stylesheet" href="${appOrigin}/sandbox/kit.css?v=${V}">\n<style>${css}</style>`}
 <style>
 :root {
-  --one-ground: ${c.ground ?? "#f7f5f0"}; --one-card: ${c.card ?? "#ffffff"}; --one-line: ${c.line ?? "#e8e4da"}; --one-ink: ${c.ink ?? "#1c1b19"}; --one-muted: ${c.muted ?? "#5e5b55"};
-  --one-accent: ${c.accent ?? "#17694f"}; --one-accent-hover: ${c.accentHover ?? "#0f5640"}; --one-accent-tint: ${c.accentTint ?? "#e4f2ea"};
+  --one-ground: ${c.ground ?? "#f7f5f0"}; --one-card: ${c.card ?? "#ffffff"}; --one-line: ${c.line ?? "#e7e2d8"}; --one-ink: ${c.ink ?? "#1f1b14"}; --one-muted: ${c.muted ?? "#6e685d"};
+  --one-accent: ${c.accent ?? "#17694f"}; --one-accent-hover: ${c.accentHover ?? "#0f4f3b"}; --one-accent-tint: ${c.accentTint ?? "#e3f1eb"};
   --one-font: "${font}", ui-sans-serif, system-ui, sans-serif; --one-heading: "${heading}", ui-serif, Georgia, serif;
   --card-radius: ${theme?.radius ?? 20}px; --button-radius: ${theme?.squareButtons ? Math.min(theme.radius ?? 12, 12) : 9999}px;
 }

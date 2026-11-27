@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { History, Inbox, Settings, ShieldCheck, Zap } from "lucide-react";
+import QRCode from "qrcode";
 import { AppShell } from "@/components/shell/AppShell";
+import { ShareBooking } from "@/components/booking/ShareBooking";
+import { ensureBookingPage } from "@/server/bookingPage";
 import { forBrowser } from "@/server/clientBlueprint";
 import { getBusinessContext } from "@/server/context";
 import { supabaseStore } from "@/server/store";
 import { withComputed } from "@/engine/computed";
 import { menuCounts } from "@/engine/menuCounts";
 import { loadConversation } from "@/server/ownerChat";
-import { sandboxComponent, sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "./sandbox-actions";
+import { sandboxComponent, sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxFreeTimes, sandboxBookTime, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "./sandbox-actions";
 
 // The assistant's server actions run here: rebuilding pages from a design can take a few minutes.
 export const maxDuration = 300;
@@ -34,6 +37,10 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
     .eq("status", "pending");
   // A broken count never takes the app down.
   const counts = await menuCounts(blueprint, withComputed(supabaseStore(supabase, businessId), blueprint)).catch(() => ({}));
+  // Every business that takes online bookings has a public booking page (made on first visit).
+  const booking = blueprint.scheduling ? await ensureBookingPage(supabase, businessId, blueprint.business.name).catch(() => null) : null;
+  const bookingUrl = booking?.enabled ? `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/book/${booking.slug}` : null;
+  const qrSvg = bookingUrl ? await QRCode.toString(bookingUrl, { type: "svg", margin: 1, color: { dark: "#1f1b14", light: "#ffffff" } }) : "";
   const { transcript } = userId ? await loadConversation(supabase, businessId, userId).catch(() => ({ transcript: [] })) : { transcript: [] };
   return (
     <AppShell
@@ -48,6 +55,8 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
         sendDocument: sandboxSendDocument.bind(null, businessId),
         documentLink: sandboxDocumentLink.bind(null, businessId),
         invoiceFromQuote: sandboxInvoiceFromQuote.bind(null, businessId),
+        freeTimes: sandboxFreeTimes.bind(null, businessId),
+        bookTime: sandboxBookTime.bind(null, businessId),
         loadComponent: sandboxComponent.bind(null, businessId),
       }}
       blueprint={forBrowser(blueprint)}
@@ -68,6 +77,7 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
               <span className="ml-auto rounded-full bg-accent px-2 text-xs font-semibold text-white">{approvals}</span>
             </Link>
           )}
+          {bookingUrl && <ShareBooking url={bookingUrl} qrSvg={qrSvg} business={blueprint.business.name} />}
           <Link href={`/b/${businessId}/automations`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
             <Zap className="h-4 w-4" /> Automations
           </Link>

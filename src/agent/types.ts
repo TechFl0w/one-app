@@ -13,6 +13,8 @@ export interface OwnerBackend {
   blueprint(): Promise<Blueprint>;
   /** What other businesses of this type changed after setup (approved in the control center). */
   learnings?(): Promise<string>;
+  /** The public online booking page, when the business takes online bookings. */
+  bookingPageUrl?(): Promise<string | null>;
   query(q: RecordQuery): Promise<{ records: RecordRow[]; total: number }>;
   getRecord(tableId: string, id: string): Promise<RecordRow>;
   createRecord(tableId: string, input: Record<string, unknown>): Promise<RecordRow>;

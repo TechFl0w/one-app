@@ -4,7 +4,7 @@ import { supabaseStore } from "@/server/store";
 import { PageView } from "@/components/page/PageView";
 import { EditablePage } from "@/components/page/EditablePage";
 import { submitRecordForm } from "../../actions";
-import { sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "../../sandbox-actions";
+import { sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxFreeTimes, sandboxBookTime, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "../../sandbox-actions";
 
 export default async function BusinessPage({ params }: PageProps<"/b/[businessId]/p/[pageId]">) {
   const { businessId, pageId } = await params;
@@ -35,6 +35,8 @@ export default async function BusinessPage({ params }: PageProps<"/b/[businessId
             sendDocument: sandboxSendDocument.bind(null, businessId),
             documentLink: sandboxDocumentLink.bind(null, businessId),
             invoiceFromQuote: sandboxInvoiceFromQuote.bind(null, businessId),
+            freeTimes: sandboxFreeTimes.bind(null, businessId),
+            bookTime: sandboxBookTime.bind(null, businessId),
           },
         },
       }}
