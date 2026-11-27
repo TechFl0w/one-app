@@ -3,7 +3,7 @@
 import { Select } from "@/components/ui/Select";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FlaskConical, Zap } from "lucide-react";
+import { ChevronRight, FlaskConical, Zap } from "lucide-react";
 import { describeStep, describeTrigger, planStep } from "@/automations/engine";
 import { testAutomation } from "@/automations/runner";
 import { applyChangeSet } from "@/engine/changeSet";
@@ -59,6 +59,12 @@ export function AutomationsView({ mode, runs, samples }: { mode: EditMode; runs:
       setConfirming(null);
     });
 
+  // Grouped by what they're about (bookings, invoices, pets), so dozens stay easy to scan.
+  const areas = [...blueprint.automations.reduce((m, a) => {
+    const area = blueprint.tables.find((t) => t.id === a.trigger.table)?.label ?? "General";
+    return m.set(area, [...(m.get(area) ?? []), a]);
+  }, new Map<string, Automation[]>())];
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-2 flex items-center gap-3">
@@ -69,8 +75,15 @@ export function AutomationsView({ mode, runs, samples }: { mode: EditMode; runs:
       {error && <p className="mb-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-800" role="alert">{error}</p>}
 
       {blueprint.automations.length === 0 && <div className="card p-10 text-center text-sm text-muted">No automations yet.</div>}
+      {areas.map(([area, list], gi) => (
+      <details key={area} open={blueprint.automations.length <= 6 || gi === 0} className="group mb-4">
+        <summary className="mb-3 flex cursor-pointer list-none items-center gap-2 rounded-xl px-1 py-1 text-sm font-bold uppercase tracking-wider text-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
+          {area}
+          <span className="rounded-full bg-card px-2 text-xs font-semibold normal-case tracking-normal">{list.length}</span>
+        </summary>
       <ul className="space-y-4">
-        {blueprint.automations.map((a) => {
+        {list.map((a) => {
           const mine = runs.filter((r) => r.automation_id === a.id).slice(0, 5);
           const table = blueprint.tables.find((t) => t.id === a.trigger.table);
           return (
@@ -121,6 +134,8 @@ export function AutomationsView({ mode, runs, samples }: { mode: EditMode; runs:
           );
         })}
       </ul>
+      </details>
+      ))}
 
       <Dialog open={!!confirming} onClose={() => setConfirming(null)} title="Please confirm">
         <p className="mb-6 text-sm">
