@@ -18,7 +18,9 @@ const ICONS: [RegExp, LucideIcon][] = [
   [/health|care|wellness/i, HeartPulse],
   [/home|house|move/i, Home],
 ];
-export const iconFor = (name: string): LucideIcon => ICONS.find(([re]) => re.test(name))?.[1] ?? Sparkles;
+export const iconFor = (name: string): LucideIcon => matchIcon(name) ?? Sparkles;
+/** The fitting icon, or nothing when the name says nothing (a person's name). */
+export const matchIcon = (name: string): LucideIcon | undefined => ICONS.find(([re]) => re.test(name))?.[1];
 
 export const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 
