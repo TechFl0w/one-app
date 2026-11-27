@@ -35,6 +35,8 @@ export interface BlockEnv {
   sandbox?: { bridge: SandboxBridge; basePath: string };
   /** On a record page: the record the page is about. */
   recordId?: string;
+  /** Online payments: ready, or not yet connected (then invoices offer to connect Stripe). */
+  payments?: { ready: boolean; settingsHref: string };
 }
 
 export async function BlockView({ block, env, fullPage = false }: { block: Block; env: BlockEnv; fullPage?: boolean }) {
@@ -98,6 +100,11 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
       return (
         <section className="card flex h-full flex-col gap-4 overflow-hidden p-4 md:p-6">
           <DocumentActions table={block.source!.table} recordId={env.recordId!} kind={data.view.kind} label={data.view.label} sent={data.view.state !== "draft"} canInvoice={data.canInvoice} invoice={data.invoice} />
+          {data.view.kind === "invoice" && env.payments && !env.payments.ready && data.view.state !== "paid" && (
+            <a href={env.payments.settingsHref} className="no-print flex items-center gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:underline">
+              <span className="font-semibold">Connect Stripe to get paid online.</span> Until then {data.view.customer.name || "your client"} can’t pay this invoice from the link.
+            </a>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line p-5 md:p-8">
             <DocumentView doc={data.view} />
           </div>

@@ -95,7 +95,7 @@ export const contractor: Template = {
           longText("fld_c_address", "Billing address"),
           longText("fld_c_notes", "Notes"),
           rollup({ id: "fld_c_jobs", label: "Open jobs", from: "tbl_jobs", via: "fld_j_client", field: "fld_j_title", agg: "count", where: [OPEN, { field: "fld_j_stage", op: "neq", value: S("Done") }] }),
-          rollup({ id: "fld_c_owed", label: "Owes", from: "tbl_invoices", via: "fld_i_client", field: "fld_i_balance", agg: "sum", format: "money" }),
+          rollup({ id: "fld_c_owed", label: "Owes", from: "tbl_invoices", via: "fld_i_client", field: "fld_i_balance", agg: "sum", format: "money", where: [{ field: "fld_i_sent", op: "not_empty" }] }),
         ],
       },
       {
@@ -133,7 +133,7 @@ export const contractor: Template = {
           rollup({ id: "fld_j_quoted", label: "Quoted", from: "tbl_quotes", via: "fld_q_job", field: "fld_q_total", agg: "sum", where: [{ field: "fld_q_status", op: "neq", value: S("Declined") }], format: "money" }),
           rollup({ id: "fld_j_won", label: "Accepted", from: "tbl_quotes", via: "fld_q_job", field: "fld_q_total", agg: "sum", where: [{ field: "fld_q_status", op: "eq", value: S("Accepted") }], format: "money" }),
           rollup({ id: "fld_j_invoiced", label: "Invoiced", from: "tbl_invoices", via: "fld_i_job", field: "fld_i_total", agg: "sum", format: "money" }),
-          rollup({ id: "fld_j_owed", label: "Owed", from: "tbl_invoices", via: "fld_i_job", field: "fld_i_balance", agg: "sum", format: "money" }),
+          rollup({ id: "fld_j_owed", label: "Owed", from: "tbl_invoices", via: "fld_i_job", field: "fld_i_balance", agg: "sum", format: "money", where: [{ field: "fld_i_sent", op: "not_empty" }] }),
         ],
       },
       ...inv.tables,

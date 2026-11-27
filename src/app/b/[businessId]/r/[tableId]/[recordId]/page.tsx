@@ -1,6 +1,7 @@
 import { withComputed } from "@/engine/computed";
 import { getBusinessContext, getDevice } from "@/server/context";
 import { supabaseStore } from "@/server/store";
+import { getAccount } from "@/server/payments";
 import { RecordPageView } from "@/components/page/RecordPageView";
 import { submitRecordForm } from "../../../actions";
 import { sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxFreeTimes, sandboxBookTime, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "../../../sandbox-actions";
@@ -9,6 +10,8 @@ import { sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocu
 export default async function RecordPage({ params }: PageProps<"/b/[businessId]/r/[tableId]/[recordId]">) {
   const { businessId, tableId, recordId } = await params;
   const [{ blueprint, userId, supabase }, device] = await Promise.all([getBusinessContext(businessId), getDevice()]);
+  const hasInvoices = blueprint.documents?.some((d) => d.kind === "invoice" && d.table === tableId);
+  const account = hasInvoices ? await getAccount(supabase, businessId).catch(() => null) : null;
   return (
     <RecordPageView
       tableId={tableId}
@@ -17,6 +20,7 @@ export default async function RecordPage({ params }: PageProps<"/b/[businessId]/
       userId={userId}
       env={{
         blueprint,
+        ...(hasInvoices ? { payments: { ready: !!account?.chargesEnabled, settingsHref: `/b/${businessId}/settings/payments` } } : {}),
         store: withComputed(supabaseStore(supabase, businessId), blueprint),
         formAction: (t, fields) => submitRecordForm.bind(null, businessId, t, fields),
         sandbox: {
