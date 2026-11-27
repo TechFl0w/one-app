@@ -60,8 +60,12 @@ export const formatNumber = (prefix: string | undefined, n: number) => `${prefix
  */
 export async function assignNumber(bp: Blueprint, tableId: string, data: Record<string, unknown>, next: (docId: string) => Promise<number>): Promise<Record<string, unknown>> {
   const def = documentFor(bp, tableId);
-  if (!def?.number || str(data[def.number])) return data;
-  return { ...data, [def.number]: formatNumber(def.prefix, await next(def.id)) };
+  if (!def) return data;
+  let out = data;
+  // New quotes and invoices charge the business's sales tax unless a rate was given.
+  if (def.taxRate && (out[def.taxRate] === undefined || out[def.taxRate] === null) && bp.business.taxRate) out = { ...out, [def.taxRate]: bp.business.taxRate };
+  if (def.number && !str(out[def.number])) out = { ...out, [def.number]: formatNumber(def.prefix, await next(def.id)) };
+  return out;
 }
 
 function documentState(def: DocumentDef, rec: RecordRow, today: string): DocView["state"] {

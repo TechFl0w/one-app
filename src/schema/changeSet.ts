@@ -9,6 +9,7 @@ import {
   ComponentId,
   DocumentDef,
   DocumentId,
+  RecurringCharge,
   FunctionId,
   ServerFunction,
   Theme,
@@ -57,6 +58,9 @@ export const Operation = z.discriminatedUnion("op", [
   /** Adds or replaces a quote/invoice document (matched by id); removeDocument takes it away. */
   z.strictObject({ op: z.literal("setDocument"), document: DocumentDef }),
   z.strictObject({ op: z.literal("removeDocument"), documentId: DocumentId }),
+  /** Adds or replaces a recurring charge (rent, membership); removeRecurring stops it. */
+  z.strictObject({ op: z.literal("setRecurring"), recurring: RecurringCharge }),
+  z.strictObject({ op: z.literal("removeRecurring"), recurringId: z.string() }),
   /** The live count next to the page in the menu; null removes it. */
   z.strictObject({ op: z.literal("setPageBadge"), pageId: PageId, badge: Page.shape.badge.unwrap().nullable() }),
   /** Full menu order: every page id, in the new order. */
@@ -134,6 +138,8 @@ export const OP_RISK: Record<OpName, "safe" | "risky"> = {
   setPageBadge: "safe",
   setDocument: "safe",
   removeDocument: "risky",
+  setRecurring: "risky",
+  removeRecurring: "risky",
   reorderPages: "safe",
   addBlock: "safe",
   removeBlock: "safe",

@@ -10,6 +10,7 @@ import { getRecord } from "./records";
 import { getCurrentBlueprint } from "./blueprints";
 import { supabaseOwnerBackend } from "./ownerBackend";
 import { expireHolds, hasUpcomingBooking } from "@/booking/service";
+import { runRecurring } from "@/engine/recurring";
 import { ensureEmailSettings, sendEmail } from "./email";
 import { renderTemplate, resolveRecipient } from "@/email/compose";
 import { approvedTemplate, getLine, sendWhatsApp, whatsappConfigured } from "./whatsapp";
@@ -184,6 +185,15 @@ export async function automationTick(db: SupabaseClient, now = new Date()) {
     const bp = Blueprint.safeParse(c.json);
     if (bp.success && bp.data.automations.some((a) => a.enabled && a.trigger.type === "date_reached")) {
       queued += await enqueueDueDates(c.business_id, io, queue, now);
+    }
+  }
+
+  // Recurring charges coming due (rent, memberships): created once per due date.
+  for (const c of current) {
+    const bp = Blueprint.safeParse(c.json);
+    if (bp.success && bp.data.recurring?.length) {
+      const backend = supabaseOwnerBackend(db, c.business_id);
+      await runRecurring(bp.data, { query: (q) => backend.query(q), createRecord: (t, v) => backend.createRecord(t, v) }, now).catch((e) => console.error("recurring failed", c.business_id, e));
     }
   }
 

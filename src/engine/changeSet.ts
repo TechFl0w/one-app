@@ -290,14 +290,14 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
     }
 
     case "updateBusiness": {
-      const old: Partial<Blueprint["business"]> = {};
-      for (const key of Object.keys(op.business) as (keyof Blueprint["business"])[]) {
-        const value = op.business[key];
+      const old: Record<string, unknown> = {};
+      const biz = bp.business as Record<string, unknown>;
+      for (const [key, value] of Object.entries(op.business)) {
         if (value === undefined) continue;
-        old[key] = bp.business[key];
-        bp.business[key] = value;
+        old[key] = biz[key];
+        biz[key] = value;
       }
-      return [{ op: "updateBusiness", business: old }];
+      return [{ op: "updateBusiness", business: old as Partial<Blueprint["business"]> }];
     }
 
     case "addTable": {
@@ -369,6 +369,22 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
       const [old] = docs.splice(i, 1);
       if (!docs.length) delete bp.documents;
       return [{ op: "setDocument", document: old }];
+    }
+    case "setRecurring": {
+      const list = (bp.recurring ??= []);
+      const i = list.findIndex((r) => r.id === op.recurring.id);
+      const old = i >= 0 ? structuredClone(list[i]) : null;
+      if (i >= 0) list[i] = op.recurring;
+      else list.push(op.recurring);
+      return [old ? { op: "setRecurring", recurring: old } : { op: "removeRecurring", recurringId: op.recurring.id }];
+    }
+    case "removeRecurring": {
+      const list = bp.recurring ?? [];
+      const i = list.findIndex((r) => r.id === op.recurringId);
+      if (i < 0) throw new ChangeSetError("not_found", `Recurring charge ${op.recurringId} not found`);
+      const [old] = list.splice(i, 1);
+      if (!list.length) delete bp.recurring;
+      return [{ op: "setRecurring", recurring: old }];
     }
     case "setPageBadge": {
       const page = pageOf(bp, op.pageId);
@@ -583,6 +599,13 @@ function describe(bp: Blueprint, op: Operation): string {
       return `Set up ${q(op.document.label)} (${op.document.kind}) on ${table(op.document.table)}`;
     case "removeDocument":
       return `Remove document ${op.documentId}`;
+    case "setRecurring": {
+      const r = op.recurring;
+      const every = r.every === "week" ? "every week" : r.every === "2weeks" ? "every 2 weeks" : r.every === "month" ? "every month" : "weekly or monthly as set on each";
+      return `Charge ${q(r.label)} ${every} from the start date until the end date (into ${table(r.charges.table)})`;
+    }
+    case "removeRecurring":
+      return `Stop the recurring charge ${labelOrId(bp.recurring ?? [], op.recurringId)}`;
     case "setPageBadge":
       return `${op.badge ? "Show a count" : "Remove the count"} next to page ${page(op.pageId)}`;
     case "reorderPages":

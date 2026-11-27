@@ -1,6 +1,6 @@
 import type { Automation, Field, Page, Table } from "@/schema/blueprint";
 import { choice, list, multi, type Question, type Template } from "./types";
-import { automation, block, COLORS, date, derived, email, file, finish, link, longText, money, optId, page, phone, status, text } from "./kit";
+import { automation, block, COLORS, taxFrom, taxQuestion, date, derived, email, file, finish, link, longText, money, optId, page, phone, status, text } from "./kit";
 
 const chairs: Question & { kind: "list" } = {
   id: "chairs",
@@ -37,10 +37,18 @@ export const chairRental: Template = {
   label: "Rent out chairs or booths",
   description: "Renters, rent due, payments, documents with expiry, applicants.",
   businessType: "chair_rental",
-  questions: [chairs, period, extras],
+  questions: [chairs, period, taxQuestion, extras],
   build(business, answers) {
     const want = new Set(multi(answers, extras));
     const weekly = choice(answers, period) === "weekly";
+    const tax = taxFrom(choice(answers, taxQuestion));
+    // With sales tax, each rent charge shows the tax and the total to pay.
+    const taxFields: Field[] = tax.taxRate
+      ? [
+          { id: "fld_tax", label: tax.taxName ?? "Tax", type: "formula", expression: `round(fld_amount * ${tax.taxRate / 100}, 2)`, format: "money" } as Field,
+          { id: "fld_total", label: "Total", type: "formula", expression: `fld_amount + round(fld_amount * ${tax.taxRate / 100}, 2)`, format: "money" } as Field,
+        ]
+      : [];
     // The renter's (derived) status on their payments and documents, so reminders skip people who left.
     const renterStatus: Field = { id: "fld_renter_status", label: "Renter status", type: "rollup", via: "fld_renter", field: "fld_status", agg: "latest" };
     const tables: Table[] = [
@@ -56,6 +64,8 @@ export const chairRental: Template = {
           link("fld_chair", "Chair", "tbl_chairs"),
           date("fld_start", "Starts"),
           date("fld_end", "Leaves on"),
+          // Rent starts once the agreement is signed (charges wait for this date).
+          date("fld_signed", "Agreement signed"),
           money("fld_rent", weekly ? "Weekly rent" : "Monthly rent"),
           // Follows the dates, never set by hand: it can't say "active" for someone who left.
           derived(status("fld_status", "Status", [["Starting", COLORS.BLUE], ["Active", COLORS.GREEN], ["Notice given", COLORS.AMBER], ["Ended", COLORS.GREY]]), [
@@ -73,6 +83,7 @@ export const chairRental: Template = {
           link("fld_renter", "Renter", "tbl_renters", { required: true }),
           date("fld_due", "Due", true),
           money("fld_amount", "Amount"),
+          ...taxFields,
           date("fld_paid_on", "Paid on"),
           derived(status("fld_status", "Status", [["Due", COLORS.AMBER], ["Paid", COLORS.GREEN], ["Late", COLORS.RED]]), [
             [[{ field: "fld_paid_on", op: "not_empty" }], "Paid"],
@@ -166,12 +177,27 @@ export const chairRental: Template = {
     return {
       blueprint: finish({
         version: 1,
-        business: { ...business, type: "chair_rental" },
+        business: { ...business, type: "chair_rental", ...tax },
         tables,
         pages,
         automations,
         connections: [{ id: "con_stripe", provider: "stripe", status: "not_connected" }],
         modules: ["payments", "messaging", ...(want.has("documents") ? (["documents"] as const) : [])],
+        // Rent charges make themselves: one per week (or month) from the start until they leave,
+        // only once the agreement is signed, never twice for the same due date.
+        recurring: [
+          {
+            id: "rec_rent",
+            label: weekly ? "Weekly rent" : "Monthly rent",
+            table: "tbl_renters",
+            amount: "fld_rent",
+            every: weekly ? "week" : "month",
+            start: "fld_start",
+            end: "fld_end",
+            when: [{ field: "fld_signed", op: "not_empty" }],
+            charges: { table: "tbl_rent", via: "fld_renter", amount: "fld_amount", due: "fld_due" },
+          },
+        ],
       }),
       seed: list(answers, chairs).map((name) => ({ table: "tbl_chairs", data: { fld_name: name, fld_status: optId("Available") } })),
     };

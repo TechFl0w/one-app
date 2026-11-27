@@ -1,7 +1,7 @@
 import type { Automation, Field, Page, Table } from "@/schema/blueprint";
 import { choice, list, multi, type Question, type Seed, type Template } from "./types";
 import { isoDate, localToday } from "@/engine/dates";
-import { automation, block, check, COLORS, date, email, file, finish, link, longText, money, optId, page, phone, status, text } from "./kit";
+import { automation, taxFrom, taxQuestion, block, check, COLORS, date, email, file, finish, link, longText, money, optId, page, phone, status, text } from "./kit";
 import { invoicingTables } from "./invoicing";
 
 /**
@@ -73,7 +73,7 @@ export const contractor: Template = {
   label: "Quote & invoice jobs",
   description: "Landscapers, electricians, plumbers, builders: clients and sites, jobs, quotes clients accept online, invoices they pay online.",
   businessType: "contractor",
-  questions: [trade, crew, extras, sample],
+  questions: [trade, taxQuestion, crew, extras, sample],
   build(business, answers) {
     const kind = choice(answers, trade);
     const want = new Set(multi(answers, extras));
@@ -268,7 +268,7 @@ export const contractor: Template = {
     return {
       blueprint: finish({
         version: 1,
-        business: { ...business, type: "contractor" },
+        business: { ...business, type: "contractor", ...taxFrom(choice(answers, taxQuestion)) },
         tables,
         pages,
         automations,

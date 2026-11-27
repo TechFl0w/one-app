@@ -401,6 +401,9 @@ export const BusinessInfo = z.strictObject({
    * without asking — only deleting tables or fields still waits for the owner.
    */
   setupUntil: z.iso.datetime().optional(),
+  /** Sales tax the business charges (GST, HST, VAT), in percent; 0/absent = none. */
+  taxRate: z.number().min(0).max(30).optional(),
+  taxName: z.string().max(20).optional(),
 });
 
 // ---------- scheduling (bookings) ----------
@@ -543,6 +546,8 @@ export const DocumentDef = z.strictObject({
   /** "Quote", "Estimate", "Invoice". */
   label: Label,
   table: TableId,
+  /** Tax rate field (percent) filled with the business's tax rate on new documents. */
+  taxRate: FieldId.optional(),
   /** Text field that gets the next number ("Q-0007") when a record is created without one. */
   number: FieldId.optional(),
   prefix: z.string().max(10).optional(),
@@ -604,6 +609,29 @@ export const DocumentDef = z.strictObject({
 });
 export type DocumentDef = z.infer<typeof DocumentDef>;
 
+/**
+ * A charge that repeats while an agreement runs: rent every week, a membership every month.
+ * One App creates each charge record a few days before it's due, from the start date until the
+ * end date, only while `when` holds (e.g. signed, not ended) — and never twice for one due date.
+ */
+export const RecurringCharge = z.strictObject({
+  id: z.string().regex(/^rec_[a-z0-9_]{1,60}$/),
+  label: Label,
+  /** The agreement (rental, membership, contract) and its fields. */
+  table: TableId,
+  amount: FieldId,
+  /** "week", "2weeks", "month", or a choice field whose chosen option says weekly / monthly. */
+  every: z.union([z.enum(["week", "2weeks", "month"]), FieldId]),
+  start: FieldId,
+  end: FieldId.optional(),
+  when: z.array(RollupWhere).max(5).optional(),
+  /** Where charges go: their table, link back to the agreement, amount and due date fields. */
+  charges: z.strictObject({ table: TableId, via: FieldId, amount: FieldId, due: FieldId }),
+  /** Days before the due date the charge is created (default 3). */
+  leadDays: z.int().min(0).max(31).optional(),
+});
+export type RecurringCharge = z.infer<typeof RecurringCharge>;
+
 const BlueprintShape = z.strictObject({
   version: z.int().min(1),
   business: BusinessInfo,
@@ -617,6 +645,7 @@ const BlueprintShape = z.strictObject({
   functions: z.array(ServerFunction).max(100).optional(),
   theme: Theme.optional(),
   documents: z.array(DocumentDef).max(20).optional(),
+  recurring: z.array(RecurringCharge).max(20).optional(),
 });
 
 /** Full blueprint with referential-integrity checks. */
@@ -727,7 +756,7 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
     const own = fieldsOf(d.table);
     if (!tables.has(d.table)) return issue([...at, "table"], `unknown table ${d.table}`);
     const need = (path: (string | number)[], table: string, id: string | undefined) => id && !fieldsOf(table).has(id) && issue([...at, ...path], `unknown field ${id} on ${table}`);
-    for (const k of ["number", "customer", "title", "intro", "terms", "issued", "due", "sent"] as const) need([k], d.table, d[k]);
+    for (const k of ["number", "customer", "title", "intro", "terms", "issued", "due", "sent", "taxRate"] as const) need([k], d.table, d[k]);
     for (const [k, v] of Object.entries(d.totals)) need(["totals", k], d.table, v);
     for (const [k, v] of Object.entries(d.accept ?? {})) need(["accept", k], d.table, v);
     if (!tables.has(d.lines.table)) issue([...at, "lines", "table"], `unknown table ${d.lines.table}`);
@@ -743,6 +772,21 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
       if (!own.has(d.from.link)) issue([...at, "from", "link"], `unknown field ${d.from.link} on ${d.table}`);
     }
     if ((bp.documents ?? []).filter((x) => x.table === d.table).length > 1) issue([...at, "table"], `${d.table} already has a document`);
+  });
+
+  (bp.recurring ?? []).forEach((r, ri) => {
+    claim(r.id, ["recurring", ri, "id"]);
+    const at = ["recurring", ri];
+    if (!tables.has(r.table)) return issue([...at, "table"], `unknown table ${r.table}`);
+    const own = fieldsOf(r.table);
+    for (const k of ["amount", "start", "end"] as const) if (r[k] && !own.has(r[k]!)) issue([...at, k], `unknown field ${r[k]} on ${r.table}`);
+    if (r.every.startsWith("fld_") && !own.has(r.every)) issue([...at, "every"], `unknown field ${r.every} on ${r.table}`);
+    for (const [wi, w] of (r.when ?? []).entries()) if (!own.has(w.field)) issue([...at, "when", wi, "field"], `unknown field ${w.field} on ${r.table}`);
+    const ct = tables.get(r.charges.table);
+    if (!ct) return issue([...at, "charges", "table"], `unknown table ${r.charges.table}`);
+    for (const k of ["amount", "due", "via"] as const) if (!ct.fields.some((f) => f.id === r.charges[k])) issue([...at, "charges", k], `unknown field ${r.charges[k]} on ${ct.id}`);
+    const via = ct.fields.find((f) => f.id === r.charges.via);
+    if (via && (via.type !== "link" || via.to !== r.table)) issue([...at, "charges", "via"], `charges must link to ${r.table}`);
   });
 
   const recordPages = new Set<string>();
