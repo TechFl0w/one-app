@@ -4,7 +4,7 @@ import type { BridgeResult } from "./result";
 
 export interface SandboxSchema {
   business: { name: string; timezone: string; currency: string };
-  tables: { id: string; label: string; primaryField?: string; openIn?: "page" | "modal"; fields: { id: string; label: string; type: string; required?: boolean; computed?: boolean; multiple?: boolean; options?: { id: string; label: string; color?: string }[]; to?: string; narrowBy?: false | { field: string; via: string } }[] }[];
+  tables: { id: string; label: string; primaryField?: string; openIn?: "page" | "modal"; fields: { id: string; label: string; type: string; required?: boolean; computed?: boolean; multiple?: boolean; options?: { id: string; label: string; color?: string }[]; to?: string; narrowBy?: false | { field: string; via: string }; fill?: { from: string; field: string }; sensitive?: boolean }[] }[];
 }
 
 export interface SandboxRecord {

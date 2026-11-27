@@ -66,6 +66,11 @@ const fieldBase = {
    * the activity log like any other.
    */
   sensitive: z.boolean().optional(),
+  /**
+   * Filled in from the record a link points to when that link is chosen (still editable): a
+   * labour line's price from the chosen rate, a job's address from its client.
+   */
+  fill: z.strictObject({ from: FieldId, field: FieldId }).optional(),
 };
 
 const SimpleField = z.strictObject({

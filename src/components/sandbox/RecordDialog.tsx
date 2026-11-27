@@ -76,6 +76,8 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
   const [linkRecs, setLinkRecs] = useState<Record<string, SandboxRecord[]>>({});
   // Link pickers are controlled here so one can narrow another (owner → pets).
   const [linkVals, setLinkVals] = useState<Record<string, string | string[]>>({});
+  // Fields filled from a chosen link (a line's price from its rate), still editable.
+  const [filled, setFilled] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmAmount, setConfirmAmount] = useState<"no" | "asking" | "yes">("no");
@@ -120,6 +122,9 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
       else next[child.id] = child.multiple ? keep : keep[0] ?? "";
     }
     setLinkVals((x) => ({ ...x, ...next }));
+    const picked = typeof v === "string" ? recOf(f, v) : Array.isArray(v) && v[0] ? recOf(f, v[0]) : undefined;
+    const fills = Object.fromEntries(shown.filter((x) => x.fill?.from === f.id && picked && picked.data[x.fill.field] != null).map((x) => [x.id, picked!.data[x.fill!.field]]));
+    if (Object.keys(fills).length) setFilled((x) => ({ ...x, ...fills }));
   };
   const optionsFor = (f: Field) => {
     const all = links[f.to ?? ""] ?? [];
@@ -260,7 +265,7 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
                   searchable
                 />
               ) : (
-                <FieldInput field={f} value={values[f.id]} table={t.id} bridge={bridge} options={(f.options ?? []).map((o) => ({ value: o.id, label: o.label }))} />
+                <FieldInput key={`${f.id}:${JSON.stringify(filled[f.id] ?? null)}`} field={f} value={f.id in filled ? filled[f.id] : values[f.id]} table={t.id} bridge={bridge} options={(f.options ?? []).map((o) => ({ value: o.id, label: o.label }))} />
               )}
             </>
           )}

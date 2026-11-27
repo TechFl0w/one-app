@@ -1,3 +1,4 @@
+import { fillInput } from "@/engine/fill";
 import { assignNumber } from "@/engine/documents";
 import type { Blueprint } from "@/schema/blueprint";
 import type { RecordRow } from "@/schema/records";
@@ -36,7 +37,8 @@ export function memoryBackend(initial: { blueprint: Blueprint; records: RecordRo
     getRecord: async (t, id) => (await computed(state.blueprint, t, [view(find(t, id))]))[0],
     createRecord: async (t, input) => {
       // Documents are numbered after the highest number so far (in memory there is no sequence).
-      const data = await assignNumber(state.blueprint, t, validateRecordInput(tableOrThrow(state.blueprint, t), input, "create"), async (docId) => {
+      const load = async (lt: string, lid: string) => state.records.find((r) => r.tableId === lt && r.id === lid)?.data ?? null;
+      const data = await assignNumber(state.blueprint, t, validateRecordInput(tableOrThrow(state.blueprint, t), await fillInput(tableOrThrow(state.blueprint, t), input, load), "create"), async (docId) => {
         const def = state.blueprint.documents?.find((d) => d.id === docId);
         const nums = state.records.filter((r) => r.tableId === def?.table).map((r) => Number(String(r.data[def?.number ?? ""] ?? "").replace(/\D/g, "")) || 0);
         return Math.max(0, ...nums) + 1;
@@ -48,7 +50,7 @@ export function memoryBackend(initial: { blueprint: Blueprint; records: RecordRo
       return (await computed(state.blueprint, t, [view(row)]))[0];
     },
     updateRecord: async (t, id, input, opts = {}) => {
-      const patch = validateRecordInput(tableOrThrow(state.blueprint, t), input, "update");
+      const patch = validateRecordInput(tableOrThrow(state.blueprint, t), await fillInput(tableOrThrow(state.blueprint, t), input, async (lt, lid) => state.records.find((r) => r.tableId === lt && r.id === lid)?.data ?? null), "update");
       if (recordUpdateIsRisky(tableOrThrow(state.blueprint, t), patch) && !opts.confirmed) {
         throw new RecordError("needs_confirmation", "Changing a price or amount needs confirmation");
       }
