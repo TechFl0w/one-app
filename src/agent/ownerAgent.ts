@@ -77,6 +77,7 @@ export function buildGuide(opts: { renderCheck: boolean }): string {
   - list rows and board / gallery cards lead with the table's photo (first file field, or options.cover; cover: false to hide). list options.tone colours the rows (red for "late", amber for "to reorder"). Boards colour each column by its option colour; for a pipeline (stages in order) set options.nextButton: true so cards get a one-tap "→ next stage" button.
   - Record pages: a "details" block with options.part "hero" (photo, title, badges, a stage stepper for the stage field), "facts" (the remaining values) and "photos" (photo/video fields, add straight in); an "activity" block (source: { table }) shows the record's timeline. A table of child records can carry one-tap buttons: options.quickSet { field, buttons: [{ value: option id, label: "Approve" }, …] }.
   - gallery options.colorBy (a status, or a rollup of one) fills each card with that colour, empty ones show as "Free" — a map of bays, rooms or chairs.
+  - Online booking: setScheduling turns it on, and the business then has a public booking page (service → staff or "anyone" → free time → details → deposit) in its own theme, at the link get_setup shows. After setting bookings up, give the owner that link and say they can share it on Instagram, Google or their website (Settings › Booking has the link, an on/off switch and an embed snippet). Don't build a booking page as a component: the kit can't see free times, so it would double-book.
   - Quotes and invoices: set up with change_setup setDocument (docs/documents.md) on a table with a client link, lines table and totals; statuses derive from sent/accepted/declined dates and payments. Put a "document" block (source: { table }) on its record page: the owner sends it (email + link), the client accepts or pays online at the link, an accepted quote becomes an invoice in one tap.
   - page.badge { source: { table, filters }, label?, tone? } puts a live count next to the page in the menu ("4", "1 late").
 - Pick option colours that read as a sequence for stages (blue → amber → purple → green when done), red/amber only for problems. When the owner wants something they can't do — collapsible or tabbed sections, a different look, combined views, a custom page or flow — write a component instead of saying no.
@@ -147,7 +148,7 @@ ${SERVER_KIT_DTS}`;
 export const OWNER_SYSTEM = `${CHAT_INTRO}\n${buildGuide({ renderCheck: true })}`;
 
 /** Compact, id-annotated summary of the setup for the model. */
-export function setupSummary(bp: Blueprint, now = new Date()): string {
+export function setupSummary(bp: Blueprint, now = new Date(), booking?: { url: string; enabled: boolean } | null): string {
   const lines: string[] = [];
   lines.push(`Business: ${bp.business.name} (${bp.business.type}), timezone ${bp.business.timezone}, today is ${isoDate(localToday(now, bp.business.timezone))}.`);
   lines.push("", "Tables:");
@@ -179,6 +180,16 @@ export function setupSummary(bp: Blueprint, now = new Date()): string {
   if (bp.automations.length) {
     lines.push("", "Automations:");
     for (const a of bp.automations) lines.push(`- ${a.id} "${a.label}" ${a.enabled ? "on" : "off"}, trigger ${a.trigger.type}${a.trigger.table ? ` on ${a.trigger.table}` : ""}`);
+  }
+  if (bp.scheduling) {
+    const s = bp.scheduling;
+    lines.push("", "Online booking:");
+    lines.push(`- Set up: bookings in ${s.bookings.table}, services in ${s.services.table}, staff in ${s.practitioners.table}${s.deposit ? `, deposit ${s.deposit.kind === "percent" ? `${s.deposit.value}%` : s.deposit.value}` : ""}.`);
+    lines.push(
+      booking
+        ? `- Public booking page: ${booking.url} (${booking.enabled ? "taking bookings" : "switched off"}). Give the owner this link to share; they change it under Settings › Booking.`
+        : "- The business has a public booking page where clients pick a service, a time and pay any deposit. The owner finds the link, switches it on or off and shares it under Settings › Booking — tell them so after setting bookings up.",
+    );
   }
   if (bp.functions?.length) {
     lines.push("", "Server code (read_function for source):");

@@ -1,6 +1,7 @@
 import { CalendarCheck } from "lucide-react";
 import { getBusinessContext } from "@/server/context";
-import { ensureBookingPage, updateBookingPage } from "@/server/bookingPage";
+import { bookingPageUrl, ensureBookingPage, updateBookingPage } from "@/server/bookingPage";
+import { ShareBookingLink } from "@/components/booking/ShareBookingLink";
 import { revalidatePath } from "next/cache";
 
 /** Owner settings for the public booking page: the link, on/off, a short intro. */
@@ -39,8 +40,8 @@ export default async function BookingSettingsPage({ params }: PageProps<"/b/[bus
         <form action={save} className="card space-y-5 p-6">
           <div>
             <p className="label">Your booking link</p>
-            <a className="font-medium text-accent underline" href={`/book/${page.slug}`} target="_blank" rel="noreferrer">/book/{page.slug}</a>
-            <p className="mt-1 text-xs text-muted">Share it on Instagram, Google or WhatsApp. Customers pick a service, a time and leave their details.</p>
+            <ShareBookingLink url={bookingPageUrl(page.slug)} />
+            <p className="mt-2 text-xs text-muted">Share it on Instagram, Google or WhatsApp. Customers pick a service, a time and leave their details.</p>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="enabled" defaultChecked={page.enabled} className="h-4 w-4 accent-[var(--accent)]" />
