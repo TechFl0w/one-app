@@ -28,6 +28,14 @@ export function supabaseOwnerBackend(supabase: SupabaseClient, businessId: strin
   return {
     blueprint: () => getCurrentBlueprint(supabase, businessId),
     learnings: async () => (await approvedLearnings((await getCurrentBlueprint(supabase, businessId)).business.type)).advice,
+    bookingPage: async () => {
+      const bp = await getCurrentBlueprint(supabase, businessId);
+      if (!bp.scheduling) return null;
+      // Imported here: bookingPage.ts imports this file.
+      const { ensureBookingPage, bookingPageUrl } = await import("./bookingPage");
+      const page = await ensureBookingPage(supabase, businessId, bp.business.name).catch(() => null);
+      return page ? { url: bookingPageUrl(page.slug), enabled: page.enabled } : null;
+    },
     query: (q) => listRecords(supabase, businessId, q),
     getRecord: (t, id) => getRecord(supabase, businessId, t, id),
     createRecord: (t, input) => createRecord(supabase, businessId, t, input),

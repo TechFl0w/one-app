@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { CalendarCheck } from "lucide-react";
 import type { Block, Blueprint, Field } from "@/schema/blueprint";
 import { singular } from "@/lib/words";
 import { AddRecordButton } from "./RecordOpener";
@@ -18,7 +20,8 @@ function greeting(now: Date, timezone: string) {
  * The top of a page: who and when ("Good morning · Wednesday, 25 November"), a line of live
  * counts ("4 cars in the shop · 1 job late"), and New buttons. Options: title, text, stats, add.
  */
-export function HeaderBlock({ block, blueprint, stats, ctx, now = new Date() }: { block: Block; blueprint: Blueprint; stats: Stat[]; ctx: FormatCtx; now?: Date }) {
+/** bookingHref: where the owner finds their public booking link (shown when online booking is set up). */
+export function HeaderBlock({ block, blueprint, stats, ctx, now = new Date(), bookingHref }: { block: Block; blueprint: Blueprint; stats: Stat[]; ctx: FormatCtx; now?: Date; bookingHref?: string }) {
   const o = block.options ?? {};
   const name = blueprint.business.name;
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
@@ -48,8 +51,14 @@ export function HeaderBlock({ block, blueprint, stats, ctx, now = new Date() }: 
           </p>
         )}
       </div>
-      {add.length > 0 && (
+      {(add.length > 0 || bookingHref) && (
         <div className="flex flex-wrap gap-2">
+          {bookingHref && (
+            <Link href={bookingHref} className="btn-ghost inline-flex items-center gap-1.5" title="Your public booking link — share it with clients">
+              <CalendarCheck className="h-4 w-4" aria-hidden />
+              Booking page
+            </Link>
+          )}
           {add.map((t) => (
             <AddRecordButton key={t.id} table={t.id} label={singular(t.label).toLowerCase()} big />
           ))}
