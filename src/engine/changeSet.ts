@@ -553,7 +553,7 @@ function describe(bp: Blueprint, op: Operation): string {
     case "addTable":
       return `Add table ${q(op.table.label)}`;
     case "removeTable":
-      return `Delete ${table(op.tableId)} and everything in it`;
+      return `Remove ${table(op.tableId)} and everything in it (you can undo this; adding a table with that name later starts it empty)`;
     case "addField":
       return `Add field ${q(op.field.label)} to ${table(op.tableId)}`;
     case "removeField":
