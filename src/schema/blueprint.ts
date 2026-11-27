@@ -407,6 +407,12 @@ export const BusinessInfo = z.strictObject({
    * without asking — only deleting tables or fields still waits for the owner.
    */
   setupUntil: z.iso.datetime().optional(),
+  /** Shown on the booking page and website: where to find the business and how to reach it. */
+  address: z.string().max(300).optional(),
+  phone: z.string().max(40).optional(),
+  /** Uploaded images (file paths in the business's storage) for the booking page and website. */
+  logo: z.strictObject({ path: z.string().min(1).max(500), name: z.string().max(255) }).optional(),
+  cover: z.strictObject({ path: z.string().min(1).max(500), name: z.string().max(255) }).optional(),
   /** Sales tax the business charges (GST, HST, VAT), in percent; 0/absent = none. */
   taxRate: z.number().min(0).max(30).optional(),
   taxName: z.string().max(20).optional(),
@@ -454,8 +460,57 @@ export const Scheduling = z.strictObject({
     resourceType: FieldId.optional(),
     /** Checkbox: shown on the public booking page (missing field = all shown). */
     online: FieldId.optional(),
+    /** For the booking page: a choice to group services by, a photo, a short description. */
+    category: FieldId.optional(),
+    photo: FieldId.optional(),
+    description: FieldId.optional(),
   }),
-  practitioners: z.strictObject({ table: TableId, hours: FieldId.optional(), maxPerDay: FieldId.optional(), online: FieldId.optional() }),
+  practitioners: z.strictObject({ table: TableId, hours: FieldId.optional(), maxPerDay: FieldId.optional(), online: FieldId.optional(), photo: FieldId.optional() }),
+  /**
+   * Bookings made *for* something the client has — a pet, a car, a child. The booking page asks
+   * "Which pet?" (by name; new ones are added under the client), and the booking links to it.
+   */
+  for: z
+    .strictObject({
+      table: TableId,
+      /** The booking's link to it. */
+      booking: FieldId,
+      /** Its link to the client (a pet's owner). */
+      client: FieldId,
+      /** Its name. */
+      name: FieldId,
+      /** A choice (a dog's size) that picks the service variant. */
+      kind: FieldId.optional(),
+      /** Other fields to ask when it's new (breed, notes). */
+      ask: z.array(FieldId).max(6).optional(),
+      /** What one is called on the booking page ("pet", "vehicle"); default: the table's name. */
+      label: z.string().min(1).max(40).optional(),
+    })
+    .optional(),
+  /**
+   * Duration and price that depend on that kind (a small dog 90 min for $75, a giant one 150
+   * min for $120): one row per service and kind. Without a matching row the service's own apply.
+   */
+  variants: z
+    .strictObject({ table: TableId, service: FieldId, kind: FieldId, duration: FieldId, price: FieldId.optional() })
+    .optional(),
+  /**
+   * What must be true before an online booking ("vaccines valid on the appointment date",
+   * "waiver signed"). Checked on the "for" record or the client; the page asks for what's missing.
+   */
+  requirements: z
+    .array(
+      z.strictObject({
+        on: z.enum(["for", "client"]),
+        field: FieldId,
+        /** checked: a ticked checkbox; filled: any value (a file, a text); valid_on_date: a date on or after the appointment's day. */
+        rule: z.enum(["checked", "filled", "valid_on_date"]),
+        /** What the client reads when it's missing ("Rabies vaccine valid on the day"). */
+        label: z.string().min(1).max(160),
+      }),
+    )
+    .max(8)
+    .optional(),
   resources: z.strictObject({ table: TableId, type: FieldId.optional() }).optional(),
   timeOff: z.strictObject({ table: TableId, who: FieldId, start: FieldId, end: FieldId }).optional(),
   clients: z.strictObject({ table: TableId, name: FieldId, email: FieldId.optional(), phone: FieldId.optional() }),
@@ -889,6 +944,37 @@ function checkScheduling(
     role(["timeOff", "start"], sc.timeOff.table, sc.timeOff.start, ["datetime", "date"]);
     role(["timeOff", "end"], sc.timeOff.table, sc.timeOff.end, ["datetime", "date"]);
   }
+  role(["services", "category"], s.table, s.category, ["choice", "status"]);
+  role(["services", "photo"], s.table, s.photo, ["file"]);
+  role(["services", "description"], s.table, s.description, ["text", "long_text"]);
+  role(["practitioners", "photo"], sc.practitioners.table, sc.practitioners.photo, ["file"]);
+  if (sc.for) {
+    const f = sc.for;
+    if (!tables.has(f.table)) issue(["scheduling", "for", "table"], `unknown table ${f.table}`);
+    else {
+      role(["for", "booking"], b.table, f.booking, ["link"], f.table);
+      role(["for", "client"], f.table, f.client, ["link"], sc.clients.table);
+      role(["for", "name"], f.table, f.name, ["text"]);
+      role(["for", "kind"], f.table, f.kind, ["choice", "status"]);
+      (f.ask ?? []).forEach((a, i) => role(["for", "ask", String(i)], f.table, a, ["text", "long_text", "number", "date", "choice", "checkbox", "phone", "email"]));
+    }
+  }
+  if (sc.variants) {
+    const v = sc.variants;
+    if (!tables.has(v.table)) issue(["scheduling", "variants", "table"], `unknown table ${v.table}`);
+    else {
+      if (!sc.for?.kind) issue(["scheduling", "variants"], "variants need for.kind (the choice that picks one)");
+      role(["variants", "service"], v.table, v.service, ["link"], s.table);
+      role(["variants", "kind"], v.table, v.kind, ["choice", "status"]);
+      role(["variants", "duration"], v.table, v.duration, ["number"]);
+      role(["variants", "price"], v.table, v.price, ["money", "number"]);
+    }
+  }
+  (sc.requirements ?? []).forEach((r, i) => {
+    const t = r.on === "for" ? sc.for?.table : sc.clients.table;
+    if (!t) return issue(["scheduling", "requirements", i], "requirements on: for need the for section");
+    role(["requirements", String(i), "field"], t, r.field, r.rule === "checked" ? ["checkbox"] : r.rule === "valid_on_date" ? ["date", "datetime"] : ["text", "long_text", "file", "date", "datetime", "number", "choice", "checkbox"]);
+  });
   role(["clients", "name"], sc.clients.table, sc.clients.name, ["text"]);
   role(["clients", "email"], sc.clients.table, sc.clients.email, ["email"]);
   role(["clients", "phone"], sc.clients.table, sc.clients.phone, ["phone"]);

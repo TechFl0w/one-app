@@ -44,11 +44,11 @@ export async function loadDays(slug: string, serviceId: string, practitionerId: 
 }
 
 /** Every free time for a service over the next `days` days (one call powers the whole calendar). */
-export async function loadAvailability(slug: string, serviceId: string, practitionerId: string | null, days = 35) {
+export async function loadAvailability(slug: string, serviceId: string, practitionerId: string | null, days = 35, kind?: string | null) {
   try {
     const r = await resolve(slug);
     if (!r) return fail(new RecordError("not_found", "Not found"));
-    const slots = await availableSlots(r.blueprint, r.backend, { serviceId, practitionerId: practitionerId ?? undefined, days: Math.min(Math.max(days, 1), 60) });
+    const slots = await availableSlots(r.blueprint, r.backend, { serviceId, practitionerId: practitionerId ?? undefined, kind: kind ?? undefined, days: Math.min(Math.max(days, 1), 60) });
     return { slots: slots.map((s) => ({ start: s.start, end: s.end, practitionerId: s.practitionerId })) };
   } catch (e) {
     return fail(e);
@@ -69,7 +69,19 @@ export async function loadSlots(slug: string, serviceId: string, practitionerId:
 
 export async function submitBooking(
   slug: string,
-  req: { serviceId: string; practitionerId: string | null; start: string; name: string; email: string; phone: string; website?: string },
+  req: {
+    serviceId: string;
+    practitionerId: string | null;
+    start: string;
+    name: string;
+    email: string;
+    phone: string;
+    website?: string;
+    kind?: string | null;
+    forName?: string;
+    forValues?: Record<string, string | boolean>;
+    clientValues?: Record<string, string | boolean>;
+  },
 ) {
   if (req.website) return { error: "Something went wrong. Please try again." }; // honeypot: bots fill hidden fields
   try {
@@ -79,7 +91,8 @@ export async function submitBooking(
     const services = await catalog(r.blueprint, r.backend);
     const service = services.services.find((s) => s.id === req.serviceId);
     // Deposit: only for real businesses with Stripe ready and a deposit rule that yields an amount.
-    const deposit = !r.demo && sc.deposit && service ? depositAmount(service.price, sc.deposit) : null;
+    const price = (req.kind ? service?.variants?.[req.kind]?.price : undefined) ?? service?.price ?? null;
+    const deposit = !r.demo && sc.deposit && service ? depositAmount(price, sc.deposit) : null;
     const account = deposit && "page" in r ? await getAccount(createAdminClient("public"), r.page.businessId) : null;
     const takeDeposit = !!(deposit && account?.chargesEnabled && stripeConfigured());
     const holdMinutes = Math.max(sc.rules.holdMin, MIN_CHECKOUT_MINUTES) + 1;
@@ -93,6 +106,9 @@ export async function submitBooking(
         practitionerId: req.practitionerId ?? undefined,
         start: req.start,
         client: { name: req.name.slice(0, 100), email: req.email.trim() || undefined, phone: req.phone.trim() || undefined },
+        kind: req.kind ?? undefined,
+        ...(req.forName !== undefined ? { for: { name: req.forName.slice(0, 100), values: req.forValues } } : {}),
+        clientValues: req.clientValues,
       },
       now,
       takeDeposit ? { holdUntil: new Date(now.getTime() + holdMinutes * 60_000) } : {},
