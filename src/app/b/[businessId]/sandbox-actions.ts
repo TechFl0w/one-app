@@ -7,7 +7,7 @@ import type { SandboxRecord } from "@/sandbox/protocol";
 import { bridged } from "@/sandbox/result";
 import { getCurrentBlueprint } from "@/server/blueprints";
 import { createInvoiceFromQuote, documentUrl, ensureDocumentLink, sendDocument } from "@/server/documents";
-import { documentFor } from "@/engine/documents";
+import { documentFor, invoiceWork } from "@/engine/documents";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { availableSlots, bookSlot } from "@/booking/service";
 import { localLabel } from "@/engine/dates";
@@ -106,6 +106,15 @@ export async function sandboxDocumentLink(businessId: string, table: string, id:
 }
 export async function sandboxInvoiceFromQuote(businessId: string, table: string, id: string, depositPercent?: number) {
   return bridged(async () => createInvoiceFromQuote(await createClient(), businessId, table, id, { depositPercent: typeof depositPercent === "number" ? depositPercent : undefined }));
+}
+
+export async function sandboxInvoiceWork(businessId: string, table: string, client: string, from: string, to: string) {
+  return bridged(async () => {
+    if (![from, to].every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error("invalid: dates must look like 2026-11-01");
+    const supabase = await createClient();
+    const bp = await getCurrentBlueprint(supabase, businessId);
+    return invoiceWork(bp, supabaseOwnerBackend(supabase, businessId), table, client, { from, to });
+  });
 }
 
 /** Free times and booking for screens (useFreeTimes / bookTime in the kit). */

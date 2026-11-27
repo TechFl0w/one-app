@@ -47,7 +47,7 @@ describe("owner agent", () => {
     expect(req.cache_control).toEqual({ type: "ephemeral" });
     expect(JSON.stringify(req.messages[0].content)).toContain('blk_cal calendar \\"Today’s calendar\\" from tbl_bookings');
     expect(req.tools!.map((t) => (t as Anthropic.Beta.BetaTool).name)).toEqual([
-      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "write_component", "plan_build", "read_component", "write_function", "read_function", "list_api_keys", "test_function", "create_invoice_from_quote", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
+      "query_records", "get_record", "create_record", "update_record", "delete_record", "change_setup", "write_component", "plan_build", "read_component", "write_function", "read_function", "list_api_keys", "test_function", "create_invoice_from_quote", "invoice_work", "find_free_times", "book_appointment", "create_payment_link", "list_payments", "refund_payment", "explain_automation",
     ]);
     expect(JSON.stringify(req.messages[0].content)).toContain('looking at page \\"Today\\" (pg_today)');
     expect(r.usage).toMatchObject({ model: "claude-opus-5-5" });

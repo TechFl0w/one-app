@@ -680,6 +680,24 @@ export const DocumentDef = z.strictObject({
     .optional(),
   /** Invoices made from an accepted quote: the quote document, and this table's link to it. */
   from: z.strictObject({ document: DocumentId, link: FieldId }).optional(),
+  /**
+   * Invoices for work done (visits, hours): "Invoice November for Hannah" adds every finished
+   * visit of that client in the period that isn't on an invoice yet, and links each to it.
+   */
+  bill: z
+    .strictObject({
+      table: TableId,
+      /** The work's link to the customer, its date, a line description and its amount. */
+      customer: FieldId,
+      date: FieldId,
+      description: FieldId.optional(),
+      amount: FieldId,
+      /** The work's link to the invoice it's on (empty = not invoiced yet). */
+      invoice: FieldId,
+      /** Which work counts as done (status eq Done); all of it when left out. */
+      done: z.array(RollupWhere).max(5).optional(),
+    })
+    .optional(),
 });
 export type DocumentDef = z.infer<typeof DocumentDef>;
 
@@ -850,6 +868,16 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
     if (d.from) {
       if (!(bp.documents ?? []).some((x) => x.id === d.from!.document && x.kind === "quote")) issue([...at, "from", "document"], `unknown quote document ${d.from.document}`);
       if (!own.has(d.from.link)) issue([...at, "from", "link"], `unknown field ${d.from.link} on ${d.table}`);
+    }
+    if (d.bill) {
+      if (d.kind !== "invoice") issue([...at, "bill"], "only invoices bill work");
+      if (!tables.has(d.bill.table)) issue([...at, "bill", "table"], `unknown table ${d.bill.table}`);
+      else {
+        for (const k of ["customer", "date", "description", "amount", "invoice"] as const) if (d.bill[k]) need(["bill", k], d.bill.table, d.bill[k]!);
+        for (const [wi, w] of (d.bill.done ?? []).entries()) need(["bill", "done", String(wi), "field"], d.bill.table, w.field);
+        const inv = tables.get(d.bill.table)?.fields.find((f) => f.id === d.bill!.invoice);
+        if (inv && (inv.type !== "link" || inv.to !== d.table)) issue([...at, "bill", "invoice"], `must link to ${d.table}`);
+      }
     }
     if ((bp.documents ?? []).filter((x) => x.table === d.table).length > 1) issue([...at, "table"], `${d.table} already has a document`);
   });

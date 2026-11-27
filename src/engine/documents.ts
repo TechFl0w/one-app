@@ -4,6 +4,8 @@ import { recordLabel } from "./blockData";
 import { readable } from "@/automations/check";
 import { buildRecordQuery } from "./records";
 import type { RecordStore } from "./store";
+import { isoDate, localToday } from "./dates";
+import { valueMatches } from "./computed";
 
 /**
  * Quotes and invoices (blueprint.documents): what a customer sees, built from ordinary records —
@@ -262,4 +264,45 @@ export async function makeInvoiceFromQuote(bp: Blueprint, b: InvoiceBackend, quo
   for (const l of made.lines) await b.createRecord(invoice.lines.table, { ...l, [invoice.lines.via]: inv.id });
   const fresh = await b.getRecord(invoice.table, inv.id);
   return { table: invoice.table, id: inv.id, number: invoice.number ? String(fresh.data[invoice.number] ?? "") : undefined, total: Number(fresh.data[invoice.totals.total]) || undefined };
+}
+
+/**
+ * An invoice for a period's work: every finished, not-yet-invoiced record of `def.bill` for the
+ * customer between `from` and `to` (dates, inclusive) becomes a line, and is linked to the new
+ * invoice so it's never billed twice.
+ */
+export async function invoiceWork(
+  bp: Blueprint,
+  b: InvoiceBackend & { updateRecord(table: string, id: string, values: Record<string, unknown>, opts?: { confirmed?: boolean }): Promise<unknown> },
+  invoiceTable: string,
+  customerId: string,
+  period: { from: string; to: string },
+  now = new Date(),
+): Promise<{ table: string; id: string; number?: string; total?: number; count: number } | { count: 0 }> {
+  const def = documentFor(bp, invoiceTable);
+  const bill = def?.bill;
+  if (!def || def.kind !== "invoice" || !bill) throw new Error("Invoicing work isn’t set up here.");
+  const tz = bp.business.timezone;
+  const wt = bp.tables.find((t) => t.id === bill.table);
+  if (!wt) throw new Error("Invoicing work isn’t set up here.");
+  const dayOf = (v: unknown) => (typeof v !== "string" ? "" : v.length > 10 ? new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(v)) : v.slice(0, 10));
+  const today = isoDate(localToday(now, tz));
+  const work = (await b.query({ table: bill.table, filters: [{ field: bill.customer, op: "eq", value: customerId }], limit: 500 })).records
+    .filter((r) => !r.data[bill.invoice])
+    .filter((r) => { const d = dayOf(r.data[bill.date]); return d >= period.from && d <= period.to; })
+    .filter((r) => (bill.done ?? []).every((w) => valueMatches(r.data[w.field], w, today, now, tz)))
+    .sort((x, y) => String(x.data[bill.date]).localeCompare(String(y.data[bill.date])));
+  if (!work.length) return { count: 0 };
+  const fmtDay = (d: string) => new Intl.DateTimeFormat("en-CA", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${d}T12:00:00Z`));
+  const il = def.lines;
+  const label = (r: RecordRow) => (bill.description && r.data[bill.description] ? String(r.data[bill.description]) : wt.label.replace(/s$/, ""));
+  const month = period.from.slice(0, 7) === period.to.slice(0, 7) ? new Intl.DateTimeFormat("en-CA", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${period.from}T12:00:00Z`)) : `${fmtDay(period.from)} – ${fmtDay(period.to)}`;
+  const inv = await b.createRecord(def.table, { [def.customer]: customerId, ...(def.title ? { [def.title]: `${wt.label} — ${month}` } : {}) });
+  for (const r of work) {
+    const amount = Number(r.data[bill.amount]) || 0;
+    await b.createRecord(il.table, { [il.via]: inv.id, [il.description]: `${label(r)} — ${fmtDay(dayOf(r.data[bill.date]))}`, ...(il.qty ? { [il.qty]: 1 } : {}), ...(il.price ? { [il.price]: Math.round(amount * 100) / 100 } : {}) });
+    await b.updateRecord(bill.table, r.id, { [bill.invoice]: inv.id }, { confirmed: true });
+  }
+  const fresh = await b.getRecord(def.table, inv.id);
+  return { table: def.table, id: inv.id, number: def.number ? String(fresh.data[def.number] ?? "") : undefined, total: Number(fresh.data[def.totals.total]) || undefined, count: work.length };
 }

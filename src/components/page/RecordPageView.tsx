@@ -5,6 +5,7 @@ import type { Device } from "@/engine/layout";
 import { recordLabel } from "@/engine/blockData";
 import { listPageFor, recordPageFor } from "@/engine/recordPage";
 import { parentFieldOf } from "@/engine/hierarchy";
+import { InvoiceWork } from "@/components/documents/InvoiceWork";
 import { BlockView, type BlockEnv } from "@/components/blocks/BlockView";
 import { PageView } from "./PageView";
 import { ROW_HEIGHT } from "./EditablePage";
@@ -27,6 +28,8 @@ export async function RecordPageView({ tableId, recordId, device, userId, env }:
   const parentId = parentF && record ? record.data[parentF.id] : undefined;
   const parentTable = parentF && "to" in parentF ? bp.tables.find((t) => t.id === parentF.to) : undefined;
   const [parent] = parentTable && typeof parentId === "string" ? await env.store.getMany(parentTable.id, [parentId]) : [];
+  // A client whose work is invoiced by period gets "Invoice work".
+  const billing = bp.documents?.find((d) => d.kind === "invoice" && d.bill && bp.tables.find((t) => t.id === d.bill!.table)?.fields.some((f) => f.id === d.bill!.customer && f.type === "link" && f.to === tableId));
   const header = (
     <div className="mb-4 flex items-center gap-2 text-sm text-muted">
       {listPage ? (
@@ -42,6 +45,7 @@ export async function RecordPageView({ tableId, recordId, device, userId, env }:
         </Link>
       )}
       {record && table && <span className="truncate">› {recordLabel(table, record)}</span>}
+      {billing && record && table && <InvoiceWork table={billing.table} client={record.id} label={recordLabel(table, record)} />}
     </div>
   );
   if (!table || !found || !record) {

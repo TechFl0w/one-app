@@ -8,7 +8,7 @@ import { OP_RISK, Operation } from "@/schema/changeSet";
 import { RecordFilter, RecordId } from "@/schema/records";
 import { previewChangeSet, type OpPreview } from "@/engine/changeSet";
 import { recordLabel } from "@/engine/blockData";
-import { makeInvoiceFromQuote } from "@/engine/documents";
+import { makeInvoiceFromQuote, invoiceWork } from "@/engine/documents";
 import type { UndoToken } from "@/engine/commit";
 import type { BuildPlan, OwnerBackend, PendingAction } from "./types";
 import { recordUpdateIsRisky } from "@/engine/risk";
@@ -398,6 +398,22 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const r = await makeInvoiceFromQuote(bp, b, quote.table, i.quote, { depositPercent: i.deposit_percent });
       fx.changed = true;
       return { invoice: r };
+    },
+  }),
+
+  tool({
+    name: "invoice_work",
+    description:
+      "Invoice a client's finished work for a period (\"invoice November for Hannah\"): every done visit or job in those dates that isn't on an invoice yet becomes a line, and is marked as invoiced. Needs an invoice with `bill` set up (documents). Returns the draft invoice; send it with the usual tools.",
+    input: z.strictObject({ client: RecordId, from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+    risk: "safe",
+    run: async (b, i, fx) => {
+      const bp = await b.blueprint();
+      const inv = bp.documents?.find((d) => d.kind === "invoice" && d.bill);
+      if (!inv) throw new Error("Invoicing work isn’t set up: add bill to the invoice document (change_setup setDocument).");
+      const r = await invoiceWork(bp, b, inv.table, i.client, { from: i.from, to: i.to });
+      if (r.count) fx.changed = true;
+      return r.count ? { invoice: r } : { message: "Nothing to invoice: no finished, unbilled work for that client in those dates." };
     },
   }),
 
