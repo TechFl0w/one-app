@@ -29,6 +29,19 @@
   --font-sans: var(--font-body);
   --radius-card: var(--card-radius);
   --shadow-soft: 0 1px 2px rgb(28 27 25 / 0.04), 0 4px 16px rgb(28 27 25 / 0.05);
+  /* Alert tints follow the theme: mixed into the card colour, so a dark theme gets dark tints
+     and the text (mixed towards the theme's ink) stays readable. */
+  --color-red-50: color-mix(in srgb, #dc2626 10%, var(--card));
+  --color-red-100: color-mix(in srgb, #dc2626 18%, var(--card));
+  --color-amber-50: color-mix(in srgb, #d97706 12%, var(--card));
+  --color-amber-100: color-mix(in srgb, #d97706 20%, var(--card));
+  --color-blue-50: color-mix(in srgb, #2563eb 10%, var(--card));
+  --color-green-50: color-mix(in srgb, #16a34a 10%, var(--card));
+  --color-emerald-50: color-mix(in srgb, #059669 10%, var(--card));
+  --color-red-700: color-mix(in srgb, #b91c1c 80%, var(--ink));
+  --color-red-800: color-mix(in srgb, #991b1b 75%, var(--ink));
+  --color-amber-800: color-mix(in srgb, #92400e 75%, var(--ink));
+  --color-amber-900: color-mix(in srgb, #78350f 70%, var(--ink));
 }
 
 body {
