@@ -64,6 +64,12 @@ export function DocumentView({ doc, className = "" }: { doc: DocView; className?
               <dd className="text-right font-medium" style={doc.state === "overdue" || doc.state === "expired" ? { color: s.color } : undefined}>{date(doc.due, doc.business.timezone)}</dd>
             </>
           )}
+          {doc.extra.map((x) => (
+            <span key={x.label} className="contents">
+              <dt className="text-[#6E685D]">{x.label}</dt>
+              <dd className="text-right font-medium">{x.value}</dd>
+            </span>
+          ))}
         </dl>
       </section>
 

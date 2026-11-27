@@ -249,7 +249,7 @@ export function EditablePage({
               style={{ gridColumn: `${b.x + 1} / span ${b.w}`, gridRow: `${b.y + 1} / span ${b.h}`, "--h": b.h, "--fixed": `${fixedHeight(b.h)}px` } as React.CSSProperties}
               data-block={b.id}
             >
-              <div className={`h-full ${editing ? "pointer-events-none select-none" : ""}`} aria-hidden={editing || undefined}>
+              <div className={`h-full ${editing ? "pointer-events-none select-none overflow-hidden rounded-card pt-11" : ""}`} aria-hidden={editing || undefined}>
                 {view(b) ?? (
                   <div className="card flex h-full items-center justify-center p-4 text-center text-sm text-muted">
                     New {b.type} block — save to load its data

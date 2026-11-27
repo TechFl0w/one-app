@@ -557,6 +557,8 @@ export const DocumentDef = z.strictObject({
   title: FieldId.optional(),
   intro: FieldId.optional(),
   terms: FieldId.optional(),
+  /** More of the record's fields shown on the document, under the dates (a timeline, a site). */
+  show: z.array(FieldId).max(12).optional(),
   /** Fixed small print when there's no terms field. */
   footer: z.string().max(2000).optional(),
   /** Dates: issued (defaults to the created date), due (invoices) / valid until (quotes). */
@@ -757,6 +759,7 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
     if (!tables.has(d.table)) return issue([...at, "table"], `unknown table ${d.table}`);
     const need = (path: (string | number)[], table: string, id: string | undefined) => id && !fieldsOf(table).has(id) && issue([...at, ...path], `unknown field ${id} on ${table}`);
     for (const k of ["number", "customer", "title", "intro", "terms", "issued", "due", "sent", "taxRate"] as const) need([k], d.table, d[k]);
+    for (const [si, f] of (d.show ?? []).entries()) need(["show", si], d.table, f);
     for (const [k, v] of Object.entries(d.totals)) need(["totals", k], d.table, v);
     for (const [k, v] of Object.entries(d.accept ?? {})) need(["accept", k], d.table, v);
     if (!tables.has(d.lines.table)) issue([...at, "lines", "table"], `unknown table ${d.lines.table}`);

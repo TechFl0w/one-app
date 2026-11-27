@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Select, timeOptions } from "@/components/ui/Select";
 import { useEditOptional } from "@/components/edit/editContext";
+import { ChoicesEditor } from "@/components/edit/ChoicesEditor";
 import { newId } from "@/engine/editing";
 import { singular } from "@/lib/words";
 import type { Field as BpField } from "@/schema/blueprint";
@@ -38,6 +39,7 @@ export function ChoiceInput({ id, name, required, initial, options, table, field
         return optionId;
       }
     : undefined;
+  const [editing, setEditing] = useState(false);
   const all = [...options, ...extra.filter((e) => !options.some((o) => o.value === e.value))];
   return (
     <>
@@ -52,7 +54,9 @@ export function ChoiceInput({ id, name, required, initial, options, table, field
         options={[...(!multiple && !required && value ? [{ value: "", label: "—" }] : []), ...all]}
         onAdd={onAdd}
         addLabel={singular(field.label).toLowerCase()}
+        onEditChoices={canAdd ? () => setEditing(true) : undefined}
       />
+      {editing && <ChoicesEditor open onClose={() => setEditing(false)} table={table} fieldId={field.id} />}
       {error && <p className="mt-1 text-sm text-red-700">{error}</p>}
     </>
   );
@@ -136,13 +140,20 @@ export function AddField({ table, onAdded }: { table: string; onAdded: (f: Field
   const [choices, setChoices] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
   const t = edit?.blueprint.tables.find((x) => x.id === table);
+  // On a quote or invoice the new field can go on the document the client sees too.
+  const doc = edit?.blueprint.documents?.find((d) => d.table === table);
+  const [onDoc, setOnDoc] = useState(true);
   if (!edit || !t) return null;
   if (!open)
     return (
-      <button type="button" className="inline-flex items-center gap-1 justify-self-start text-sm font-semibold text-accent hover:underline" onClick={() => setOpen(true)}>
-        <Plus className="h-4 w-4" /> Add field
-      </button>
+      <div className="grid gap-1">
+        {done && <p role="status" className="rounded-xl bg-accent-tint px-3 py-2 text-sm text-accent">{done}</p>}
+        <button type="button" className="inline-flex items-center gap-1 justify-self-start text-sm font-semibold text-accent hover:underline" onClick={() => setOpen(true)}>
+          <Plus className="h-4 w-4" /> Add field
+        </button>
+      </div>
     );
   const pick = kind === "choice" || kind === "choices";
   const add = async () => {
@@ -156,10 +167,13 @@ export function AddField({ table, onAdded }: { table: string; onAdded: (f: Field
     if (pick && !options.length) return setError("Type the choices, separated by commas");
     const field = KINDS.find((k) => k.id === kind)!.field(id, name, options);
     setBusy(true);
-    const err = await edit.applyNow([{ op: "addField", tableId: table, field }], `Add “${name}” to ${t.label}`);
+    const ops: Parameters<typeof edit.applyNow>[0] = [{ op: "addField", tableId: table, field }];
+    if (doc && onDoc) ops.push({ op: "setDocument", document: { ...doc, show: [...(doc.show ?? []), id].slice(0, 12) } });
+    const err = await edit.applyNow(ops, `Add “${name}” to ${t.label}`);
     setBusy(false);
     if (err) return setError(err);
     onAdded({ id, label: name, type: field.type, ...(options.length ? { options } : {}), ...("multiple" in field && field.multiple ? { multiple: true } : {}) });
+    setDone(`“${name}” added to ${t.label} — it’s on this form, the ${singular(t.label).toLowerCase()} page and in lists${doc && onDoc ? `, and on the ${doc.label.toLowerCase()} your client sees` : ""}. Fill it in above.`);
     setOpen(false);
     setLabel("");
     setChoices("");
@@ -172,6 +186,12 @@ export function AddField({ table, onAdded }: { table: string; onAdded: (f: Field
         <input className="input min-w-0 flex-[1_1_10rem]" placeholder="Name, e.g. Specialities" value={label} onChange={(e) => setLabel(e.target.value)} aria-label="Field name" />
         <Select className="w-44" value={kind} onChange={(v) => setKind(String(v))} options={KINDS.map((k) => ({ value: k.id, label: k.label }))} ariaLabel="Kind of field" />
       </div>
+      {doc && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={onDoc} onChange={(e) => setOnDoc(e.target.checked)} />
+          Show it on the {doc.label.toLowerCase()} your client sees
+        </label>
+      )}
       {pick && <input className="input" placeholder="Choices, separated by commas (Colour, Balayage, Curly hair)" value={choices} onChange={(e) => setChoices(e.target.value)} aria-label="Choices" />}
       {error && <p className="text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">

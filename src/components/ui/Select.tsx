@@ -29,7 +29,10 @@ export function Select({
   size = "md",
   onAdd,
   addLabel = "option",
+  onEditChoices,
 }: {
+  /** Shows "Edit choices…" (rename, recolour, reorder, remove). */
+  onEditChoices?: () => void;
   /** Shows "+ Add …" at the bottom: makes a new choice and returns its value (null if it failed). */
   onAdd?: (label: string) => Promise<string | null>;
   /** What one choice is called ("category"). */
@@ -207,9 +210,14 @@ export function Select({
               );
             })}
           </ul>
-          {onAdd && (
+          {(onAdd || onEditChoices) && (
             <div className="border-t border-line p-1.5">
-              {adding === null ? (
+              {onEditChoices && adding === null && (
+                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setOpen(false); onEditChoices(); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-muted hover:bg-ground hover:text-ink">
+                  Edit choices…
+                </button>
+              )}
+              {!onAdd ? null : adding === null ? (
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}

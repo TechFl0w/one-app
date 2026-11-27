@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown, Eye, EyeOff, Menu, Plus, X } from "lucide-react";
 import { menuPages } from "@/engine/layout";
+import { listPageFor } from "@/engine/recordPage";
 import { menuOrder, movePageOp } from "@/engine/editing";
 import { useEdit } from "@/components/edit/EditProvider";
 import { AddPageDialog } from "@/components/edit/AddDialogs";
@@ -47,7 +48,9 @@ export function Sidebar({ basePath, businesses = [], footer, counts = {} }: Side
   // Record pages (a car's page, a job's page) open from their records, not from the menu.
   const pages = (editing ? menuOrder(blueprint) : menuPages(blueprint)).filter((p) => !p.recordOf);
   // Only page routes highlight a menu item (Automations / Activity are not pages).
-  const activeId = pathname.match(/\/p\/([^/]+)/)?.[1];
+  // On a record's page (a quote), the page that lists those records (Quotes) is highlighted.
+  const recordTable = pathname.match(/\/r\/(tbl_[a-z0-9_]+)\//)?.[1];
+  const activeId = pathname.match(/\/p\/([^/]+)/)?.[1] ?? (recordTable ? listPageFor(blueprint, recordTable)?.id : undefined);
   // The theme can move the menu to a top bar, or hide it behind a menu button.
   const menu = blueprint.theme?.menu ?? "side";
 

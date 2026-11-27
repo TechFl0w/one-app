@@ -1,6 +1,7 @@
 import type { Blueprint, DocumentDef, Field, Table } from "@/schema/blueprint";
 import type { RecordRow } from "@/schema/records";
 import { recordLabel } from "./blockData";
+import { readable } from "@/automations/check";
 import { buildRecordQuery } from "./records";
 import type { RecordStore } from "./store";
 
@@ -33,6 +34,8 @@ export interface DocView {
   issued: string;
   due?: string;
   sent?: string;
+  /** Extra fields the owner chose to show (label and value as text). */
+  extra: { label: string; value: string }[];
   customer: { name: string; email?: string; phone?: string; address?: string };
   business: { name: string; currency: string; timezone: string };
   lines: DocLine[];
@@ -132,6 +135,11 @@ export async function loadDocument(bp: Blueprint, def: DocumentDef, rec: RecordR
     issued: (def.issued ? str(d[def.issued]) : undefined) ?? (def.sent ? str(d[def.sent]) : undefined) ?? rec.createdAt,
     due: def.due ? str(d[def.due]) : undefined,
     sent: def.sent ? str(d[def.sent]) : undefined,
+    extra: (def.show ?? [])
+      .map((id) => table.fields.find((f) => f.id === id))
+      .filter((f): f is Field => !!f && d[f.id] != null && d[f.id] !== "")
+      .map((f) => ({ label: f.label, value: readable(f, d[f.id], bp) }))
+      .filter((x) => x.value),
     customer: { name: customer && customerTable ? recordLabel(customerTable, customer) : "—", ...(email ? { email } : {}), ...(phone ? { phone } : {}), ...(address ? { address } : {}) },
     business: { name: bp.business.name, currency: bp.business.currency ?? "CAD", timezone: bp.business.timezone },
     lines,

@@ -65,3 +65,15 @@ export function recordDefaults(filters: { field: string; op: string; value?: unk
     (filters ?? []).filter((f) => (f.op === "eq" || f.op === "contains") && f.value === RECORD_TOKEN).map((f) => [f.field, f.op === "contains" ? [recordId] : recordId]),
   );
 }
+
+/** The menu page that lists a table best (a full list beats a filtered one): "back" from a record, and what the menu highlights. */
+export function listPageFor(bp: Blueprint, tableId: string): Blueprint["pages"][number] | undefined {
+  const score = (p: Blueprint["pages"][number]) =>
+    Math.max(-1, ...p.layout.blocks.filter((b) => b.source?.table === tableId && b.type !== "number").map((b) => (b.type === "table" || b.type === "board" || b.type === "gallery" ? 2 : 1) + (b.source?.filters?.length ? 0 : 2)));
+  return [...bp.pages]
+    .filter((p) => !p.recordOf && !p.hidden)
+    .sort((a, b) => a.menuOrder - b.menuOrder)
+    .map((p) => ({ p, s: score(p) }))
+    .filter((x) => x.s >= 0)
+    .sort((a, b) => b.s - a.s)[0]?.p;
+}
