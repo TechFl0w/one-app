@@ -14,11 +14,13 @@ describe("phone numbers", () => {
 });
 
 describe("inbound", () => {
-  it("parses Twilio's WhatsApp webhook fields", () => {
+  it("parses Twilio's WhatsApp and text message webhook fields", () => {
     expect(parseInbound({ MessageSid: "SM1", From: "whatsapp:+16045550101", To: "whatsapp:+16045550199", Body: "Hi!", ProfileName: "Ava", NumMedia: "0" })).toEqual({
-      messageSid: "SM1", from: "+16045550101", to: "+16045550199", body: "Hi!", profileName: "Ava", numMedia: 0,
+      channel: "whatsapp", messageSid: "SM1", from: "+16045550101", to: "+16045550199", body: "Hi!", profileName: "Ava", numMedia: 0,
     });
-    expect(parseInbound({ MessageSid: "SM1", From: "+16045550101", To: "+16045550199", Body: "SMS, not WhatsApp" })).toBeNull();
+    expect(parseInbound({ MessageSid: "SM2", From: "+16045550101", To: "+16045550199", Body: "Can I move to 3pm?" })).toMatchObject({ channel: "sms", body: "Can I move to 3pm?" });
+    // Delivery status callbacks (no body) are not messages.
+    expect(parseInbound({ MessageSid: "SM3", From: "+16045550199", To: "+16045550101", MessageStatus: "delivered" })).toBeNull();
     expect(parseInbound({ From: "whatsapp:+16045550101", To: "whatsapp:+16045550199" })).toBeNull();
   });
 

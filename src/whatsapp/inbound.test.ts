@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { handleInboundWhatsApp, type Conversation, type InboundDeps } from "./inbound";
 
-const msg = { messageSid: "SM1", from: "+16045550101", to: "+16045550199", body: "Do you have time Friday?", profileName: "Ava", numMedia: 0 };
+const msg = { channel: "whatsapp" as const, messageSid: "SM1", from: "+16045550101", to: "+16045550199", body: "Do you have time Friday?", profileName: "Ava", numMedia: 0 };
 
 function fakes(over: Partial<InboundDeps> & { mode?: Conversation["mode"] } = {}) {
   const log: string[] = [];
-  const conv: Conversation = { id: "c1", businessId: "b1", customerPhone: msg.from, mode: over.mode ?? "agent", history: [] };
+  const conv: Conversation = { id: "c1", businessId: "b1", customerPhone: msg.from, channel: "whatsapp", mode: over.mode ?? "agent", history: [] };
   const seen = new Set<string>();
   const deps: InboundDeps = {
     businessForNumber: async (n) => (n === "+16045550199" ? "b1" : null),
@@ -29,7 +29,7 @@ describe("inbound WhatsApp", () => {
     expect(await handleInboundWhatsApp(msg, deps)).toBe("answered");
     expect(log).toEqual(["send(agent): Yes, Friday at 2 works!", 'save: {"history":["h"]}']);
     expect(await handleInboundWhatsApp(msg, deps)).toBe("duplicate");
-    expect(await handleInboundWhatsApp({ ...msg, messageSid: "SM2", to: "+19999999999" }, deps)).toBe("ignored");
+    expect(await handleInboundWhatsApp({ ...msg, channel: "whatsapp" as const, messageSid: "SM2", to: "+19999999999" }, deps)).toBe("ignored");
   });
 
   it("hands over to the owner when the agent escalates", async () => {

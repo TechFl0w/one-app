@@ -22,6 +22,8 @@ export const inSessionWindow = (lastInboundAt: string | null | undefined, now = 
 
 /** The fields we use from Twilio's inbound webhook (application/x-www-form-urlencoded). */
 export interface InboundWhatsApp {
+  /** WhatsApp, or a plain text message (SMS) to the same business number. */
+  channel: "whatsapp" | "sms";
   messageSid: string;
   from: string; // E.164 of the customer
   to: string; // E.164 of the business line
@@ -33,8 +35,11 @@ export interface InboundWhatsApp {
 export function parseInbound(params: Record<string, string>): InboundWhatsApp | null {
   const from = toE164(params.From ?? "");
   const to = toE164(params.To ?? "");
-  if (!params.MessageSid || !from || !to || !(params.From ?? "").startsWith("whatsapp:")) return null;
+  if (!params.MessageSid || !from || !to) return null;
+  // Delivery status callbacks also carry MessageSid; only incoming messages have a body/media field.
+  if (params.Body === undefined && params.NumMedia === undefined) return null;
   return {
+    channel: (params.From ?? "").startsWith("whatsapp:") ? "whatsapp" : "sms",
     messageSid: params.MessageSid,
     from,
     to,

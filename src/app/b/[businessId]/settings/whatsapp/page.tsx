@@ -18,7 +18,7 @@ export default async function WhatsAppSettingsPage({ params }: PageProps<"/b/[bu
     <div className="mx-auto max-w-2xl">
       <div className="mb-6 flex items-center gap-3">
         <MessageCircle className="h-6 w-6 text-accent" />
-        <h1 className="text-2xl font-bold tracking-tight">WhatsApp</h1>
+        <h1 className="text-2xl font-bold tracking-tight">WhatsApp & texts</h1>
       </div>
       <WhatsAppSettings
         configured={whatsappConfigured()}

@@ -16,7 +16,7 @@ declare global {
 
 const STATUS: Record<LineStatus, string> = {
   none: "Not set up",
-  number_ready: "Number ready — connect it to WhatsApp",
+  number_ready: "Texts are on — connect the number to WhatsApp too",
   registering: "Waiting for WhatsApp to approve your number",
   online: "WhatsApp is on",
   offline: "WhatsApp is offline",
@@ -113,15 +113,16 @@ export function WhatsAppSettings({
           )}
         </div>
         <p className="text-sm text-muted">
-          Customers message your own WhatsApp number. The assistant answers questions, books and cancels appointments, and hands anything else to you in the Inbox.
-          Reminders and other automation messages go out on WhatsApp once your message templates are approved.
+          Your business gets its own phone number. Texts work as soon as you have it: reminders and confirmations go out, and replies land in your Inbox.
+          Connect it to WhatsApp too and customers can message you there — the assistant answers questions, books and cancels, and hands anything else to you.
         </p>
         {line?.lastError && <p className="text-sm text-red-700">{line.lastError}</p>}
       </section>
 
       {status === "none" && (
         <section className="card space-y-4 p-6">
-          <h2 className="font-semibold">1. Get a number</h2>
+          <h2 className="font-semibold">1. Get your business number</h2>
+          <p className="text-sm text-muted">A local number in your area, about $1.50 a month. It’s yours: texts and WhatsApp both use it.</p>
           <div className="flex flex-wrap gap-2">
             <Select className="w-44" value={country} onChange={(v) => setCountry(v as "CA" | "US")} ariaLabel="Country" options={[{ value: "CA", label: "Canada" }, { value: "US", label: "United States" }]} />
             <input className="input w-32" inputMode="numeric" placeholder="Area code" value={area} onChange={(e) => setArea(e.target.value.replace(/\D/g, "").slice(0, 3))} aria-label="Area code" />

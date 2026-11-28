@@ -9,8 +9,8 @@ import type { Message } from "@/agent/ownerAgent";
 import { supabaseOwnerBackend } from "./ownerBackend";
 
 /**
- * Twilio WhatsApp wiring (service role for all writes). One Twilio account for the platform;
- * each business gets its own number + WhatsApp sender. Without TWILIO_* env vars nothing here
+ * Twilio WhatsApp and text wiring (service role for all writes). The platform's Twilio account
+ * has one sub-account per business, holding its own number + WhatsApp sender. Without TWILIO_* env vars nothing here
  * runs and messages fall back to email.
  */
 
@@ -19,6 +19,33 @@ export const whatsappConfigured = () => !!(process.env.TWILIO_ACCOUNT_SID && pro
 export function twilioClient() {
   if (!whatsappConfigured()) throw new Error("WhatsApp isn’t set up on this server (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN)");
   return twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+}
+
+/**
+ * The business's own Twilio sub-account (made on first use, under the platform's account): its
+ * number, WhatsApp sender, templates and usage stay separate from every other business's.
+ */
+export async function businessTwilio(admin: SupabaseClient, businessId: string) {
+  const { data } = await admin.from("twilio_subaccounts").select("account_sid, auth_token").eq("business_id", businessId).maybeSingle();
+  if (data) return twilio(data.account_sid as string, data.auth_token as string);
+  const { data: biz } = await admin.from("businesses").select("name").eq("id", businessId).maybeSingle();
+  const sub = await twilioClient().api.v2010.accounts.create({ friendlyName: `${String(biz?.name ?? "Business").slice(0, 40)} · ${businessId.slice(0, 8)}` });
+  const ins = await admin.from("twilio_subaccounts").insert({ business_id: businessId, account_sid: sub.sid, auth_token: sub.authToken });
+  if (ins.error) {
+    // Made at the same moment by another request: use theirs, close ours.
+    const again = await admin.from("twilio_subaccounts").select("account_sid, auth_token").eq("business_id", businessId).maybeSingle();
+    if (!again.data) throw new Error(`Couldn’t save the business’s Twilio account: ${ins.error.message}`);
+    await twilioClient().api.v2010.accounts(sub.sid).update({ status: "closed" }).catch(() => undefined);
+    return twilio(again.data.account_sid as string, again.data.auth_token as string);
+  }
+  return twilio(sub.sid, sub.authToken);
+}
+
+/** The token Twilio signs a webhook with: the sub-account's for business numbers, else the platform's. */
+export async function signingToken(admin: SupabaseClient, accountSid: string | undefined): Promise<string | null> {
+  if (!accountSid || accountSid === process.env.TWILIO_ACCOUNT_SID) return process.env.TWILIO_AUTH_TOKEN ?? null;
+  const { data } = await admin.from("twilio_subaccounts").select("auth_token").eq("account_sid", accountSid).maybeSingle();
+  return (data?.auth_token as string | undefined) ?? null;
 }
 
 const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
@@ -74,7 +101,7 @@ export async function sendWhatsApp(
       if (prev.data?.status === "sent") return { sid: prev.data.provider_id };
     }
   }
-  const msg = await twilioClient().messages.create({
+  const msg = await (await businessTwilio(admin, businessId)).messages.create({
     from: waAddress(line.phone),
     to: waAddress(to),
     ...("body" in content ? { body: content.body } : { contentSid: content.contentSid, contentVariables: JSON.stringify(content.variables) }),
@@ -90,18 +117,18 @@ export async function sendWhatsApp(
   return { sid: msg.sid };
 }
 
-type ConvRow = { id: string; business_id: string; customer_phone: string; mode: "agent" | "owner"; agent_history: unknown[] };
-const toConv = (r: ConvRow): Conversation => ({ id: r.id, businessId: r.business_id, customerPhone: r.customer_phone, mode: r.mode, history: r.agent_history ?? [] });
+type ConvRow = { id: string; business_id: string; customer_phone: string; channel: "whatsapp" | "sms"; mode: "agent" | "owner"; agent_history: unknown[] };
+const toConv = (r: ConvRow): Conversation => ({ id: r.id, businessId: r.business_id, customerPhone: r.customer_phone, channel: r.channel ?? "whatsapp", mode: r.mode, history: r.agent_history ?? [] });
 
-async function upsertConversation(admin: SupabaseClient, businessId: string, phone: string, name: string | null): Promise<Conversation> {
-  const existing = await admin.from("conversations").select("*").eq("business_id", businessId).eq("channel", "whatsapp").eq("customer_phone", phone).maybeSingle();
+async function upsertConversation(admin: SupabaseClient, businessId: string, phone: string, name: string | null, channel: "whatsapp" | "sms" = "whatsapp"): Promise<Conversation> {
+  const existing = await admin.from("conversations").select("*").eq("business_id", businessId).eq("channel", channel).eq("customer_phone", phone).maybeSingle();
   if (existing.data) {
     if (name && existing.data.customer_name !== name) await admin.from("conversations").update({ customer_name: name }).eq("id", existing.data.id);
     return toConv(existing.data as ConvRow);
   }
   const ins = await admin
     .from("conversations")
-    .upsert({ business_id: businessId, channel: "whatsapp", customer_phone: phone, customer_name: name }, { onConflict: "business_id,channel,customer_phone" })
+    .upsert({ business_id: businessId, channel, customer_phone: phone, customer_name: name }, { onConflict: "business_id,channel,customer_phone" })
     .select("*")
     .single();
   return toConv(must(ins, "conversation") as ConvRow);
@@ -110,11 +137,13 @@ async function upsertConversation(admin: SupabaseClient, businessId: string, pho
 /** Real dependencies for handleInboundWhatsApp. */
 export function inboundDeps(admin: SupabaseClient): InboundDeps {
   return {
-    async businessForNumber(e164) {
-      const { data } = await admin.from("whatsapp_lines").select("business_id").eq("phone_e164", e164).eq("status", "online").maybeSingle();
+    async businessForNumber(e164, channel) {
+      // Texts work as soon as the number is bought; WhatsApp once the line is approved.
+      const q = admin.from("whatsapp_lines").select("business_id").eq("phone_e164", e164);
+      const { data } = await (channel === "whatsapp" ? q.eq("status", "online") : q).maybeSingle();
       return data?.business_id ?? null;
     },
-    conversation: (businessId, phone, name) => upsertConversation(admin, businessId, phone, name),
+    conversation: (businessId, phone, name, channel) => upsertConversation(admin, businessId, phone, name, channel),
     async saveInbound(conv, msg: InboundWhatsApp) {
       const ins = await admin
         .from("conversation_messages")
@@ -135,7 +164,8 @@ export function inboundDeps(admin: SupabaseClient): InboundDeps {
       return runCustomerTurn({ backend, ctx: { phone: conv.customerPhone, profileName: msg.profileName }, history, message: msg.body });
     },
     async send(conv, body, author) {
-      await sendWhatsApp(admin, conv.businessId, conv.customerPhone, { body }, { author });
+      if (conv.channel === "sms") await sendSms(admin, conv.businessId, conv.customerPhone, body, { author });
+      else await sendWhatsApp(admin, conv.businessId, conv.customerPhone, { body }, { author });
     },
     async saveConversation(conv, patch) {
       await admin
@@ -161,7 +191,8 @@ export async function searchNumbers(country: "CA" | "US", areaCode?: number) {
 export async function buyNumber(admin: SupabaseClient, businessId: string, phone: string, label: string) {
   const existing = await getLine(admin, businessId);
   if (existing?.phone) throw new Error("This business already has a WhatsApp number");
-  const n = await twilioClient().incomingPhoneNumbers.create({ phoneNumber: phone, friendlyName: label.slice(0, 64), smsUrl: webhookUrl() });
+  // Bought in the business's own sub-account, with replies coming to our webhook.
+  const n = await (await businessTwilio(admin, businessId)).incomingPhoneNumbers.create({ phoneNumber: phone, friendlyName: label.slice(0, 64), smsUrl: webhookUrl(), smsMethod: "POST" });
   must(
     await admin.from("whatsapp_lines").upsert({ business_id: businessId, phone_e164: n.phoneNumber, twilio_number_sid: n.sid, status: "number_ready", updated_at: new Date().toISOString() }),
     "save number",
@@ -173,7 +204,7 @@ export async function registerSender(admin: SupabaseClient, businessId: string, 
   const line = await getLine(admin, businessId);
   if (!line?.phone) throw new Error("Get a number first");
   // The SDK sends this object as-is, so it uses the API's snake_case field names.
-  const sender = await twilioClient().messaging.v2.channelsSenders.create({
+  const sender = await (await businessTwilio(admin, businessId)).messaging.v2.channelsSenders.create({
     sender_id: waAddress(line.phone),
     configuration: { waba_id: wabaId },
     webhook: { callback_url: webhookUrl(), callback_method: "POST" },
@@ -192,7 +223,7 @@ export async function registerSender(admin: SupabaseClient, businessId: string, 
 export async function refreshLine(admin: SupabaseClient, businessId: string) {
   const line = await getLine(admin, businessId);
   if (!line?.senderSid) return line;
-  const client = twilioClient();
+  const client = await businessTwilio(admin, businessId);
   const s = await client.messaging.v2.channelsSenders(line.senderSid).fetch();
   await admin.from("whatsapp_lines").update({ status: lineStatusFromSender(s.status), updated_at: new Date().toISOString() }).eq("business_id", businessId);
   const { data: templates } = await admin.from("whatsapp_templates").select("template_key, content_sid, status").eq("business_id", businessId).neq("status", "approved");
@@ -208,7 +239,7 @@ export async function refreshLine(admin: SupabaseClient, businessId: string) {
 
 /** Creates the starter templates (Content API) and submits them to WhatsApp for approval. */
 export async function submitStarterTemplates(admin: SupabaseClient, businessId: string, slug: string) {
-  const client = twilioClient();
+  const client = await businessTwilio(admin, businessId);
   const { data: have } = await admin.from("whatsapp_templates").select("template_key").eq("business_id", businessId);
   const done = new Set((have ?? []).map((t) => t.template_key));
   let submitted = 0;
@@ -240,7 +271,7 @@ export async function approvedTemplate(admin: SupabaseClient, businessId: string
  * A text message (SMS) from the business's number (the same Twilio number as its WhatsApp line).
  * With a `key`, sent at most once (automations retry).
  */
-export async function sendSms(admin: SupabaseClient, businessId: string, to: string, body: string, opts: { key?: string } = {}): Promise<{ sid: string }> {
+export async function sendSms(admin: SupabaseClient, businessId: string, to: string, body: string, opts: { key?: string; author?: "agent" | "owner" | "automation" } = {}): Promise<{ sid: string }> {
   if (await isTestBusiness(admin, businessId)) {
     await admin.from("outbound_messages").upsert({ business_id: businessId, key: opts.key ?? `sms:${Date.now()}`, channel: "sms", to_address: to, body_text: body.slice(0, 2000), status: "captured" }, { onConflict: "business_id,key", ignoreDuplicates: true });
     return { sid: "captured" };
@@ -258,7 +289,11 @@ export async function sendSms(admin: SupabaseClient, businessId: string, to: str
       if (prev.data?.status === "sent") return { sid: prev.data.provider_id };
     }
   }
-  const msg = await twilioClient().messages.create({ from: line.phone, to, body: body.slice(0, 1500) });
+  const msg = await (await businessTwilio(admin, businessId)).messages.create({ from: line.phone, to, body: body.slice(0, 1500) });
   if (opts.key) await admin.from("outbound_messages").update({ status: "sent", provider_id: msg.sid, sent_at: new Date().toISOString() }).eq("business_id", businessId).eq("key", opts.key);
+  // In the Inbox with the rest of the conversation.
+  const conv = await upsertConversation(admin, businessId, to, null, "sms");
+  await admin.from("conversation_messages").insert({ conversation_id: conv.id, business_id: businessId, direction: "out", author: opts.author ?? "automation", body: body.slice(0, 1500), provider_sid: msg.sid, status: msg.status });
+  await admin.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conv.id);
   return { sid: msg.sid };
 }

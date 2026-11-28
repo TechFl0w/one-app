@@ -11,15 +11,17 @@ export interface Conversation {
   id: string;
   businessId: string;
   customerPhone: string;
+  /** Where the conversation happens: replies go back the same way. */
+  channel: "whatsapp" | "sms";
   /** agent = the customer agent answers; owner = handed over, the owner answers. */
   mode: "agent" | "owner";
   history: unknown[];
 }
 
 export interface InboundDeps {
-  /** Business whose WhatsApp line is this number (only lines that are online). */
-  businessForNumber(e164: string): Promise<string | null>;
-  conversation(businessId: string, customerPhone: string, profileName: string | null): Promise<Conversation>;
+  /** Business whose number this is (WhatsApp: only lines that are online). */
+  businessForNumber(e164: string, channel: "whatsapp" | "sms"): Promise<string | null>;
+  conversation(businessId: string, customerPhone: string, profileName: string | null, channel: "whatsapp" | "sms"): Promise<Conversation>;
   /** Stores the message; false if this MessageSid was already stored (Twilio retries). */
   saveInbound(conv: Conversation, msg: InboundWhatsApp): Promise<boolean>;
   agentReply(conv: Conversation, msg: InboundWhatsApp): Promise<{ reply: string; history: unknown[]; escalated: string | null }>;
@@ -32,14 +34,14 @@ export interface InboundDeps {
 export type InboundOutcome = "ignored" | "duplicate" | "owner_notified" | "answered" | "escalated";
 
 export async function handleInboundWhatsApp(msg: InboundWhatsApp, deps: InboundDeps): Promise<InboundOutcome> {
-  const businessId = await deps.businessForNumber(msg.to);
+  const businessId = await deps.businessForNumber(msg.to, msg.channel);
   if (!businessId) return "ignored";
-  const conv = await deps.conversation(businessId, msg.from, msg.profileName);
+  const conv = await deps.conversation(businessId, msg.from, msg.profileName, msg.channel);
   if (!(await deps.saveInbound(conv, msg))) return "duplicate";
 
   const who = msg.profileName ? `${msg.profileName} (${msg.from})` : msg.from;
   if (conv.mode === "owner") {
-    await deps.notifyOwner(businessId, `New WhatsApp from ${who}: ${msg.body.slice(0, 140)}`, conv);
+    await deps.notifyOwner(businessId, `New ${msg.channel === "sms" ? "text" : "WhatsApp"} from ${who}: ${msg.body.slice(0, 140)}`, conv);
     return "owner_notified";
   }
   if (!msg.body.trim()) {
