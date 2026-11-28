@@ -4,8 +4,12 @@ import { getBusinessContext } from "@/server/context";
 import { ensureBookingPage } from "@/server/bookingPage";
 import { ShareBookingLink } from "@/components/booking/ShareBookingLink";
 import { defaultSite } from "@/engine/site";
+import { SiteEditor } from "@/components/site/SiteEditor";
+import { signPhotos } from "@/server/site";
+import { siteImageTarget } from "./actions";
 
-const siteUrl = (slug: string) => `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/s/${slug}`;
+// Its own address (<slug>.oneapp.site) once SITE_DOMAIN is set up, else a path on the app.
+const siteUrl = (slug: string) => (process.env.SITE_DOMAIN ? `https://${slug}.${process.env.SITE_DOMAIN}` : `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/s/${slug}`);
 
 /** The business's public website: make it, publish it, share it; address and phone for it. */
 export default async function WebsiteSettingsPage({ params }: { params: Promise<{ businessId: string }> }) {
@@ -13,6 +17,7 @@ export default async function WebsiteSettingsPage({ params }: { params: Promise<
   const { supabase, blueprint } = await getBusinessContext(businessId);
   const page = await ensureBookingPage(supabase, businessId, blueprint.business.name).catch(() => null);
   const site = blueprint.site;
+  const photos = site ? await signPhotos(businessId, site.sections.flatMap((x) => ("image" in x && x.image ? [x.image.path] : "images" in x ? x.images.map((i) => i.path) : []))) : {};
 
   async function save(form: FormData) {
     "use server";
@@ -58,7 +63,7 @@ export default async function WebsiteSettingsPage({ params }: { params: Promise<
                 Published (anyone with the link can see it)
               </label>
               <p className="rounded-xl bg-ground px-4 py-3 text-sm text-muted">
-                To change it, ask the assistant — “make the hero photo the grooming table”, “add a winter special banner”, “add an about section”. It has {site.sections.length} sections: {site.sections.map((x) => x.title ?? x.type).join(" · ")}.
+                Edit the words and photos below, or ask the assistant — “make the hero photo the grooming table”, “add a winter special banner”.
               </p>
             </>
           ) : (
@@ -85,6 +90,12 @@ export default async function WebsiteSettingsPage({ params }: { params: Promise<
             )}
           </div>
         </form>
+      )}
+      {page && site && (
+        <section className="mt-8">
+          <h2 className="mb-3 text-lg font-semibold">Sections</h2>
+          <SiteEditor site={site} upload={siteImageTarget.bind(null, businessId)} photos={photos} />
+        </section>
       )}
     </div>
   );
