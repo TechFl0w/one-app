@@ -135,6 +135,7 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
           <FormBlock
             fields={data.fields}
             choices={data.choices}
+            narrow={data.narrow}
             action={env.formAction(data.table.id, wanted)}
             submitLabel={typeof block.options?.submitLabel === "string" ? block.options.submitLabel : "Save"}
           />

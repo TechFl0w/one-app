@@ -7,6 +7,7 @@ import type { RecordStore } from "./store";
 import type { AuditRow } from "./auditText";
 import { documentFor, loadDocument, type DocView } from "./documents";
 import { isoDate, localToday, startOfWeek } from "./dates";
+import { narrowings } from "./hierarchy";
 
 /** Loads what a block needs to render. Pure apart from the store, so the demo and tests can use it. */
 
@@ -16,7 +17,7 @@ export type LinkLabels = Record<string, string>;
 export type BlockData =
   | { kind: "records"; table: Table; records: RecordRow[]; total: number; labels: LinkLabels; groups?: Group[] }
   | { kind: "number"; table: Table; value: number | null; field?: Field }
-  | { kind: "form"; table: Table; fields: Field[]; choices: Record<string, { id: string; label: string }[]> }
+  | { kind: "form"; table: Table; fields: Field[]; choices: Record<string, { id: string; label: string; parent?: string }[]>; narrow?: Record<string, string> }
   | { kind: "details"; table: Table; record: RecordRow; labels: LinkLabels }
   | { kind: "header"; stats: { label: string; value: number | null; field?: Field; tone?: string }[] }
   | { kind: "activity"; rows: AuditRow[] }
@@ -216,11 +217,26 @@ export async function loadBlockData(
 
       case "form": {
         const fields = formFieldsFor(table, block.options?.fields);
-        const choices: Record<string, { id: string; label: string }[]> = {};
+        const choices: Record<string, { id: string; label: string; parent?: string }[]> = {};
         for (const f of fields) {
           if (f.type === "link") choices[f.id] = await groupsFor(blueprint, f, store, ctx).then((g) => g.map(({ id, label }) => ({ id: id!, label })));
         }
-        return { kind: "form", table, fields, choices };
+        // Pickers narrowed by another on the form (pets by owner): each option carries its parent.
+        const narrowed = narrowings(blueprint.tables, table.id, fields.map((f) => f.id));
+        const narrow: Record<string, string> = {};
+        for (const [childId, n] of Object.entries(narrowed)) {
+          const child = fields.find((f) => f.id === childId);
+          if (!child || child.type !== "link") continue;
+          const { records } = await store.query(buildRecordQuery(blueprint, { table: child.to, limit: 500 }, ctx));
+          const parentOf = new Map(records.map((r) => [r.id, Array.isArray(r.data[n.via]) ? String((r.data[n.via] as unknown[])[0] ?? "") : String(r.data[n.via] ?? "")]));
+          const parentLabels = new Map((choices[n.parent] ?? []).map((o) => [o.id, o.label]));
+          choices[childId] = (choices[childId] ?? []).map((o) => {
+            const p = parentOf.get(o.id);
+            return { ...o, ...(p ? { parent: p, label: parentLabels.has(p) ? `${o.label} · ${parentLabels.get(p)}` : o.label } : {}) };
+          });
+          narrow[childId] = n.parent;
+        }
+        return { kind: "form", table, fields, choices, ...(Object.keys(narrow).length ? { narrow } : {}) };
       }
 
       case "board":
