@@ -18,6 +18,7 @@ import { resolvePhone } from "@/whatsapp/recipient";
 import { templateVariables } from "@/whatsapp/core";
 import { formatDateTime } from "@/components/blocks/format";
 import { bookingPageUrl } from "./bookingPage";
+import { syncBooking } from "./googleCalendar";
 import { ensureBookingLink, manageUrl } from "./bookingLinks";
 import { documentUrl, ensureDocumentLink } from "./documents";
 import { documentFor } from "@/engine/documents";
@@ -218,6 +219,11 @@ export async function automationTick(db: SupabaseClient, now = new Date()) {
   let queued = 0;
   for (const e of events) {
     queued += await enqueueForEvent({ id: String(e.id), businessId: e.business_id, tableId: e.table_id, recordId: e.record_id, kind: e.kind, before: e.before, after: e.after, at: e.at, depth: e.depth ?? 0 }, io, queue);
+    // Bookings go to the owner's and staff's Google calendars (new, moved, cancelled).
+    const bpNow = await io.blueprint(e.business_id).catch(() => null);
+    if (bpNow?.scheduling && e.table_id === bpNow.scheduling.bookings.table) {
+      await syncBooking(db, bpNow, e.business_id, e.record_id, e.kind === "deleted" ? null : e.after, e.before).catch((err) => console.error("calendar sync", err));
+    }
     must(await db.from("record_events").update({ processed_at: now.toISOString() }).eq("id", e.id), "mark event");
   }
 

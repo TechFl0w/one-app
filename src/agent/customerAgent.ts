@@ -19,7 +19,7 @@ import type { OwnerBackend } from "./types";
 export const CUSTOMER_MODEL = "claude-opus-5-5";
 const MAX_STEPS = 6;
 
-type Backend = Pick<OwnerBackend, "blueprint" | "query" | "createRecord" | "updateRecord">;
+type Backend = Pick<OwnerBackend, "blueprint" | "query" | "createRecord" | "updateRecord" | "externalBusy">;
 
 export interface CustomerContext {
   /** E.164, decided by the webhook from the sender — the model can't change it. */
@@ -80,7 +80,7 @@ export const CUSTOMER_TOOLS: CustomerTool<unknown>[] = [
     input: z.strictObject({ service: RecordId, practitioner: RecordId.optional(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), days: z.int().min(1).max(7).optional() }),
     run: async (b, bp, _ctx, i, _fx, now) => {
       const [y, m, d] = i.date.split("-").map(Number);
-      const slots = await availableSlots(bp, b, { serviceId: i.service, practitionerId: i.practitioner, from: { year: y, month: m, day: d }, days: i.days ?? 1 }, now);
+      const slots = await availableSlots(bp, b, { serviceId: i.service, practitionerId: i.practitioner, from: { year: y, month: m, day: d }, days: i.days ?? 1, externalBusy: b.externalBusy }, now);
       return { timezone: bp.business.timezone, count: slots.length, slots: slots.slice(0, 20) };
     },
   }),
@@ -89,7 +89,7 @@ export const CUSTOMER_TOOLS: CustomerTool<unknown>[] = [
     description: "Book a free time for this customer (use find_free_times first, and confirm the details with them before calling).",
     input: z.strictObject({ service: RecordId, start: z.string(), practitioner: RecordId.optional(), name: z.string().min(1).max(100).optional() }),
     run: async (b, bp, ctx, i, fx, now) => {
-      const r = await bookSlot(bp, b, { serviceId: i.service, practitionerId: i.practitioner, start: i.start, client: { name: i.name ?? ctx.profileName ?? "WhatsApp customer", phone: ctx.phone } }, now);
+      const r = await bookSlot(bp, b, { serviceId: i.service, practitionerId: i.practitioner, start: i.start, client: { name: i.name ?? ctx.profileName ?? "WhatsApp customer", phone: ctx.phone } }, now, { externalBusy: b.externalBusy });
       fx.booked = true;
       return { booked: { start: r.slot.start, status: r.state === "confirmed" ? "confirmed" : "requested — the business will confirm" } };
     },

@@ -11,6 +11,7 @@ import { createCheckout, getAccount, stripeConfigured } from "@/server/payments"
 import { depositAmount, MIN_CHECKOUT_MINUTES } from "@/payments/core";
 import type { Blueprint } from "@/schema/blueprint";
 import { ensureBookingLink } from "@/server/bookingLinks";
+import { googleBusy } from "@/server/googleCalendar";
 import { FILES_BUCKET, filePathFor, maxBytesFor, sizeLabel } from "@/lib/files";
 
 /** Currency of the services' price field (money fields carry one), else CAD. */
@@ -50,7 +51,7 @@ export async function loadAvailability(slug: string, serviceId: string, practiti
   try {
     const r = await resolve(slug);
     if (!r) return fail(new RecordError("not_found", "Not found"));
-    const slots = await availableSlots(r.blueprint, r.backend, { serviceId, practitionerId: practitionerId ?? undefined, kind: kind ?? undefined, days: Math.min(Math.max(days, 1), 60) });
+    const slots = await availableSlots(r.blueprint, r.backend, { serviceId, practitionerId: practitionerId ?? undefined, kind: kind ?? undefined, days: Math.min(Math.max(days, 1), 60), ...("page" in r ? { externalBusy: googleBusy(createAdminClient("public"), r.page.businessId) } : {}) });
     return { slots: slots.map((s) => ({ start: s.start, end: s.end, practitionerId: s.practitionerId })) };
   } catch (e) {
     return fail(e);
@@ -114,7 +115,7 @@ export async function submitBooking(
         filesIn: "page" in r ? r.page.businessId : undefined,
       },
       now,
-      takeDeposit ? { holdUntil: new Date(now.getTime() + holdMinutes * 60_000) } : {},
+      { ...(takeDeposit ? { holdUntil: new Date(now.getTime() + holdMinutes * 60_000) } : {}), ...("page" in r ? { externalBusy: googleBusy(createAdminClient("public"), r.page.businessId) } : {}) },
     );
     let checkoutUrl: string | undefined;
     if (takeDeposit && "page" in r && booked.state === "held") {

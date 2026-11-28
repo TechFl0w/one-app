@@ -430,7 +430,7 @@ export const OWNER_TOOLS: OwnerTool[] = [
     run: async (b, i) => {
       const bp = await b.blueprint();
       const [y, m, d] = i.date.split("-").map(Number);
-      const slots = await availableSlots(bp, b, { serviceId: i.service, practitionerId: i.practitioner, from: { year: y, month: m, day: d }, days: i.days ?? 1 });
+      const slots = await availableSlots(bp, b, { serviceId: i.service, practitionerId: i.practitioner, from: { year: y, month: m, day: d }, days: i.days ?? 1, externalBusy: b.externalBusy });
       // Each slot also in the business's own clock, so nobody converts with a guessed offset.
       const tz = bp.business.timezone;
       return { timezone: tz, count: slots.length, slots: slots.slice(0, 40).map((s) => ({ ...s, local: localLabel(s.start, tz) })) };
@@ -449,7 +449,7 @@ export const OWNER_TOOLS: OwnerTool[] = [
     risk: "safe",
     run: async (b, i, fx) => {
       const bp = await b.blueprint();
-      const r = await bookSlot(bp, b, { serviceId: i.service, practitionerId: i.practitioner, start: i.start, client: i.client });
+      const r = await bookSlot(bp, b, { serviceId: i.service, practitionerId: i.practitioner, start: i.start, client: i.client }, new Date(), { externalBusy: b.externalBusy });
       fx.changed = true;
       return { booked: r };
     },

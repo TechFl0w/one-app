@@ -1,3 +1,4 @@
+import { googleBusy } from "./googleCalendar";
 import "server-only";
 import { approvedLearnings } from "./control";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -27,6 +28,8 @@ export function supabaseOwnerBackend(supabase: SupabaseClient, businessId: strin
   const manager = () => (opts.verifiedManager ? Promise.resolve() : requireManager(supabase, businessId));
   return {
     blueprint: () => getCurrentBlueprint(supabase, businessId),
+    // Calendar connections are server-only data: read with the service role, for this business only.
+    externalBusy: (people, from, to) => googleBusy(createAdminClient(), businessId)(people, from, to),
     learnings: async () => (await approvedLearnings((await getCurrentBlueprint(supabase, businessId)).business.type)).advice,
     bookingPage: async () => {
       const bp = await getCurrentBlueprint(supabase, businessId);
