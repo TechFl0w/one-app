@@ -7,7 +7,8 @@ import { getAccount, stripeConfigured } from "@/server/payments";
 import { getLine, whatsappConfigured } from "@/server/whatsapp";
 import { resendClient } from "@/server/email";
 import { ensureFeed, feedUrl, resetFeed } from "@/server/calendarFeeds";
-import { listConnections, removeConnection } from "@/server/googleCalendar";
+import { listConnections, removeConnection, syncUpcoming } from "@/server/googleCalendar";
+import { redirect } from "next/navigation";
 import { googleConfigured } from "@/integrations/googleCalendar";
 import { CalendarFeedRow } from "@/components/settings/CalendarFeedRow";
 import { IntegrationCatalog, type CatalogItem } from "@/components/settings/IntegrationCatalog";
@@ -57,6 +58,17 @@ export default async function IntegrationsPage({ params, searchParams }: { param
   const googleConns = google ? await listConnections(admin, businessId) : [];
   const googleFor = (personId: string | null) => googleConns.find((c) => c.personId === personId);
   const connectHref = (personId: string | null) => `/api/integrations/google/start?business=${businessId}${personId ? `&person=${personId}` : ""}`;
+
+  async function syncGoogleNow() {
+    "use server";
+    const { supabase: db, blueprint: current } = await getBusinessContext(businessId);
+    const { data: claims } = await db.auth.getClaims();
+    const { data: m } = await db.from("memberships").select("role").eq("business_id", businessId).eq("user_id", (claims?.claims.sub as string) ?? "").maybeSingle();
+    if (!m || !["owner", "admin"].includes(m.role)) return;
+    const r = await syncUpcoming(createAdminClient(), current, businessId);
+    const msg = r.errors.length ? `sync_error:${r.errors[0]}` : `synced:${r.bookings}`;
+    redirect(`${base}/settings/integrations?google=${encodeURIComponent(msg)}#calendar`);
+  }
 
   async function disconnectGoogle(personId: string | null) {
     "use server";
@@ -208,7 +220,9 @@ export default async function IntegrationsPage({ params, searchParams }: { param
               <p className="text-sm font-semibold">Google Calendar — two-way</p>
               <p className="mb-3 text-xs text-muted">Bookings appear in Google Calendar, and anything already in someone’s calendar blocks those times on the booking page.</p>
               {googleMsg === "connected" && <p className="mb-3 rounded-xl bg-accent-tint px-3 py-2 text-sm text-accent">Connected. New and changed bookings will show up in Google Calendar within a few minutes.</p>}
-              {typeof googleMsg === "string" && googleMsg !== "connected" && <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">{googleMsg === "cancelled" ? "Google wasn’t connected — you can try again any time." : googleMsg === "not_allowed" ? "Only owners and admins can connect calendars." : "Google couldn’t be connected. Try again, and make sure you tick the calendar boxes on Google’s screen."}</p>}
+              {typeof googleMsg === "string" && googleMsg.startsWith("synced:") && <p className="mb-3 rounded-xl bg-accent-tint px-3 py-2 text-sm text-accent">Done — {googleMsg.slice(7)} upcoming {googleMsg.slice(7) === "1" ? "booking is" : "bookings are"} in Google Calendar now.</p>}
+              {typeof googleMsg === "string" && googleMsg.startsWith("sync_error:") && <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">Google said: {googleMsg.slice(11)}</p>}
+              {typeof googleMsg === "string" && googleMsg !== "connected" && !googleMsg.startsWith("synced:") && !googleMsg.startsWith("sync_error:") && <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">{googleMsg === "cancelled" ? "Google wasn’t connected — you can try again any time." : googleMsg === "not_allowed" ? "Only owners and admins can connect calendars." : "Google couldn’t be connected. Try again, and make sure you tick the calendar boxes on Google’s screen."}</p>}
               <ul className="divide-y divide-line">
                 {[{ id: null as string | null, name: "Business calendar (every booking)" }, ...feeds.filter((f) => f.id).map((f) => ({ id: f.id, name: f.name }))].map((p) => {
                   const c = googleFor(p.id);
@@ -216,7 +230,7 @@ export default async function IntegrationsPage({ params, searchParams }: { param
                     <li key={p.id ?? "biz"} className="flex flex-wrap items-center gap-2 py-2 text-sm">
                       <span className="min-w-0 flex-1">
                         <span className="font-medium">{p.name}</span>
-                        {c && <span className={`block text-xs ${c.ok ? "text-muted" : "text-red-700"}`}>{c.ok ? `Connected${c.email ? ` as ${c.email}` : ""}` : c.error ?? "Needs connecting again"}</span>}
+                        {c && <span className={`block text-xs ${c.ok && !c.syncError ? "text-muted" : "text-red-700"}`}>{!c.ok ? c.error ?? "Needs connecting again" : c.syncError ? `Last try failed: ${c.syncError}` : `Connected${c.email ? ` as ${c.email}` : ""}${c.syncedAt ? ` · last synced ${new Date(c.syncedAt).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short", timeZone: bp.business.timezone })}` : " · nothing synced yet"}`}</span>}
                       </span>
                       {!c || !c.ok ? (
                         <a className="btn-primary px-3 py-1.5 text-xs" href={connectHref(p.id)}>{c ? "Connect again" : "Connect Google"}</a>
@@ -227,6 +241,12 @@ export default async function IntegrationsPage({ params, searchParams }: { param
                   );
                 })}
               </ul>
+              {googleConns.some((c) => c.ok) && (
+                <form action={syncGoogleNow} className="mt-3">
+                  <button className="btn-ghost px-3 py-1.5 text-xs">Sync now</button>
+                  <span className="ml-2 text-xs text-muted">Puts every upcoming booking in Google right away. New changes go by themselves within minutes.</span>
+                </form>
+              )}
             </div>
           )}
           {feeds.length > 0 && (

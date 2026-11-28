@@ -19,3 +19,6 @@ create table public.calendar_connections (
 create unique index calendar_connections_one_per_person on public.calendar_connections (business_id, provider, coalesce(person_id, '00000000-0000-0000-0000-000000000000'::uuid));
 alter table public.calendar_connections enable row level security;
 revoke all on public.calendar_connections from anon, authenticated;
+
+-- When each connection last wrote to Google, and the last error (shown in Settings › Integrations).
+alter table public.calendar_connections add column last_synced_at timestamptz, add column last_sync_error text;

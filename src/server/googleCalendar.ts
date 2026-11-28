@@ -46,9 +46,23 @@ export async function removeConnection(admin: SupabaseClient, businessId: string
   await (personId ? q.eq("person_id", personId) : q.is("person_id", null));
 }
 
-export async function listConnections(admin: SupabaseClient, businessId: string): Promise<{ personId: string | null; email: string | null; ok: boolean; error: string | null }[]> {
-  const { data } = await admin.from("calendar_connections").select("person_id, account_email, status, last_error").eq("business_id", businessId).eq("provider", "google");
-  return (data ?? []).map((c) => ({ personId: c.person_id as string | null, email: c.account_email as string | null, ok: c.status === "ok", error: c.last_error as string | null }));
+export async function listConnections(admin: SupabaseClient, businessId: string): Promise<{ personId: string | null; email: string | null; ok: boolean; error: string | null; syncedAt: string | null; syncError: string | null }[]> {
+  const { data } = await admin.from("calendar_connections").select("person_id, account_email, status, last_error, last_synced_at, last_sync_error").eq("business_id", businessId).eq("provider", "google");
+  return (data ?? []).map((c) => ({ personId: c.person_id as string | null, email: c.account_email as string | null, ok: c.status === "ok", error: c.last_error as string | null, syncedAt: c.last_synced_at as string | null, syncError: c.last_sync_error as string | null }));
+}
+
+/**
+ * Pushes every booking from yesterday on to the connected calendars now (also the ones made
+ * before connecting). Returns how many and Google's errors, for the "Sync now" button.
+ */
+export async function syncUpcoming(admin: SupabaseClient, bp: Blueprint, businessId: string): Promise<{ bookings: number; errors: string[] }> {
+  const sc = bp.scheduling;
+  if (!sc) return { bookings: 0, errors: [] };
+  const b = supabaseOwnerBackend(admin, businessId);
+  const { records } = await b.query({ table: sc.bookings.table, filters: [{ field: sc.bookings.start, op: "gte", value: new Date(Date.now() - 86_400_000).toISOString() }], limit: 200 });
+  const errors = new Set<string>();
+  for (const r of records) for (const e of await syncBooking(admin, bp, businessId, r.id, r.data, null)) errors.add(e);
+  return { bookings: records.length, errors: [...errors] };
 }
 
 async function connections(admin: SupabaseClient, businessId: string): Promise<Conn[]> {
@@ -75,11 +89,12 @@ const markBroken = (admin: SupabaseClient, c: Conn, why: string) => admin.from("
  * Writes one booking to the calendars it belongs in (the business's, its staff member's), or
  * removes it there when it's cancelled, a no-show or deleted.
  */
-export async function syncBooking(admin: SupabaseClient, bp: Blueprint, businessId: string, recordId: string, data: Record<string, unknown> | null, before: Record<string, unknown> | null): Promise<void> {
+export async function syncBooking(admin: SupabaseClient, bp: Blueprint, businessId: string, recordId: string, data: Record<string, unknown> | null, before: Record<string, unknown> | null): Promise<string[]> {
+  const errors: string[] = [];
   const sc = bp.scheduling;
-  if (!sc) return;
+  if (!sc) return errors;
   const conns = await connections(admin, businessId);
-  if (!conns.length) return;
+  if (!conns.length) return errors;
   const who = data ? (data[sc.bookings.practitioner] as string | undefined) : undefined;
   const was = before ? (before[sc.bookings.practitioner] as string | undefined) : undefined;
   const state = data ? stateOf(sc, data[sc.bookings.status]) : "cancelled";
@@ -116,15 +131,23 @@ export async function syncBooking(admin: SupabaseClient, bp: Blueprint, business
     const wasMine = c.person_id !== null && c.person_id === was && was !== who;
     if (!mine && !wasMine) continue;
     const t = await token(admin, c);
-    if (!t) continue;
+    if (!t) {
+      errors.push("Google access couldn’t be refreshed");
+      continue;
+    }
     try {
       if (event && mine) await upsertEvent(t, c.calendar_id, recordId, event);
       else await deleteEvent(t, c.calendar_id, recordId);
+      await admin.from("calendar_connections").update({ last_synced_at: new Date().toISOString(), last_sync_error: null }).eq("id", c.id);
     } catch (e) {
       if (e instanceof GoogleError && e.revoked) await markBroken(admin, c, "Google access was removed — connect again");
-      else console.error("google calendar sync", businessId, recordId, e);
+      const why = e instanceof Error ? e.message.slice(0, 300) : "Couldn’t write to Google";
+      await admin.from("calendar_connections").update({ last_sync_error: why }).eq("id", c.id);
+      console.error("google calendar sync", businessId, recordId, e);
+      errors.push(why);
     }
   }
+  return errors;
 }
 
 /** Busy times from staff members' own Google calendars, for the booking engine. */
