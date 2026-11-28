@@ -72,7 +72,8 @@ export function buildGuide(opts: { renderCheck: boolean }): string {
   const renderCheck = opts.renderCheck ? CHAT_RENDER_CHECK : MCP_RENDER_CHECK;
   const step4 = opts.renderCheck ? CHAT_STEP4 : MCP_STEP4;
   return `Custom UI (write_component):
-- Standard blocks (header, number, list, gallery, board, table, calendar, form, notes) are quickest and look the part — use them generously:
+- Adding records: every page gets a "+ New …" button at the top right by itself (for its main list's table), and every list has "+ Add"; both open the pop-up form. Never put an add form on a page (no "form" block for adding) — pages show work, pop-ups add it.
+- Standard blocks (header, number, list, gallery, board, table, calendar, notes) are quickest and look the part — use them generously:
   - header (w 12, top of a dashboard): greeting, today's date, a live line options.stats [{ table, filters?, agg?, field?, label: "car in the shop|cars in the shop", tone? }] and New buttons options.add [table ids].
   - number = a KPI tile: options { title, icon (car, clock, check, alert, money, calendar, users, box…), tone (accent | red | amber | blue | purple | neutral), sub (a short line under the number), alert: true (only stands out while not zero), page (page id it links to) }. Four in a row (w 3).
   - list rows and board / gallery cards lead with the table's photo (first file field, or options.cover; cover: false to hide). list options.tone colours the rows (red for "late", amber for "to reorder"). Boards colour each column by its option colour; for a pipeline (stages in order) set options.nextButton: true so cards get a one-tap "→ next stage" button.

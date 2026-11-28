@@ -9,7 +9,9 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { GripVertical, History, Plus, Settings2, Trash2 } from "lucide-react";
 import { GRID_COLUMNS, type Block, type LayoutKey } from "@/schema/blueprint";
-import { gridRows, layoutBlocks, layoutTargets, readingOrder, resolveLayout, stackForPhone, type Device, type LayoutTarget } from "@/engine/layout";
+import { gridRows, layoutBlocks, layoutTargets, pageAddTable, readingOrder, resolveLayout, stackForPhone, withoutAddForms, type Device, type LayoutTarget } from "@/engine/layout";
+import { AddRecordButton } from "@/components/blocks/RecordOpener";
+import { singular } from "@/lib/words";
 import { clampMove, clampSize, layoutOps } from "@/engine/editing";
 import { PageIcon } from "@/components/shell/Icon";
 import { useEdit } from "@/components/edit/EditProvider";
@@ -90,7 +92,9 @@ export function EditablePage({
   const layoutKey: LayoutKey | undefined = active === "default" ? undefined : active;
   const alwaysGrid = active.startsWith("device:");
   const canvas = editing && active === "device:phone" ? "max-w-[420px]" : editing && active === "device:tablet" ? "max-w-[820px]" : "";
-  const blocks = readingOrder(sourceBlocks).map((b) => (drag?.id === b.id ? drag.preview : b));
+  const blocks = readingOrder(editing ? sourceBlocks : withoutAddForms(sourceBlocks)).map((b) => (drag?.id === b.id ? drag.preview : b));
+  // "+ New booking" at the top right: the page's add form's table, else its main list's.
+  const addTable = editing || page.recordOf ? undefined : blueprint.tables.find((t) => t.id === pageAddTable(sourceBlocks));
   const settingsBlock = sourceBlocks.find((b) => b.id === settingsFor);
   const targets = layoutTargets(page, userId);
   const activeLabel = targets.find((t) => t.key === active)?.label ?? "This";
@@ -181,6 +185,7 @@ export function EditablePage({
         ) : (
           <h1 className="min-w-0 flex-1 truncate text-2xl font-bold tracking-tight">{page.label}</h1>
         )}
+        {addTable && <AddRecordButton big table={addTable.id} label={singular(addTable.label).toLowerCase()} />}
         <EditButton />
       </div>
       )}

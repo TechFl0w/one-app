@@ -8,6 +8,7 @@ import { getLine, whatsappConfigured } from "@/server/whatsapp";
 import { resendClient } from "@/server/email";
 import { ensureFeed, feedUrl, resetFeed } from "@/server/calendarFeeds";
 import { ShareBookingLink } from "@/components/booking/ShareBookingLink";
+import { IntegrationCatalog, type CatalogItem } from "@/components/settings/IntegrationCatalog";
 import { recordLabel } from "@/engine/blockData";
 import type { Blueprint } from "@/schema/blueprint";
 
@@ -59,6 +60,36 @@ export default async function IntegrationsPage({ params }: { params: Promise<{ b
     await resetFeed(createAdminClient(), businessId, personId);
     revalidatePath(`${base}/settings/integrations`);
   }
+
+  async function requestIntegration(id: string) {
+    "use server";
+    if (!/^[a-z0-9_]{2,40}$/.test(id)) return;
+    const { supabase: db, userId } = await getBusinessContext(businessId);
+    await db.from("integration_requests").upsert({ business_id: businessId, integration: id, requested_by: userId ?? null }, { onConflict: "business_id,integration", ignoreDuplicates: true });
+  }
+  const { data: asked } = await supabase.from("integration_requests").select("integration").eq("business_id", businessId);
+  const wanted = new Set((asked ?? []).map((r) => r.integration as string));
+  const catalog: CatalogItem[] = [
+    { id: "stripe", name: "Stripe", category: "Payments", text: "Card payments for invoices, deposits and payment links.", href: `${base}/settings/payments` },
+    { id: "square", name: "Square", category: "Payments", text: "Take payments and bring in your Square bookings and clients." },
+    { id: "google_calendar", name: "Google Calendar", category: "Calendar", text: "Two-way: bookings in your calendar, your own events block booking times." },
+    { id: "outlook_calendar", name: "Outlook Calendar", category: "Calendar", text: "Two-way sync with Outlook and Microsoft 365." },
+    { id: "calendar_feed", name: "Apple / any calendar", category: "Calendar", text: "Subscribe to your bookings from any calendar app.", href: "#calendar" },
+    { id: "whatsapp", name: "WhatsApp", category: "Messages", text: "Reminders, confirmations and replies on your business number.", href: `${base}/settings/whatsapp` },
+    { id: "sms", name: "Text messages (SMS)", category: "Messages", text: "Texts from your business number.", href: `${base}/settings/whatsapp` },
+    { id: "email", name: "Email", category: "Messages", text: "Confirmations and reminders by email; replies come to you.", href: `${base}/settings/email` },
+    { id: "email_domain", name: "Your own email domain", category: "Messages", text: "Send as bookings@yourbusiness.com." },
+    { id: "quickbooks", name: "QuickBooks", category: "Accounting", text: "Invoices, payments and clients sent to QuickBooks Online." },
+    { id: "xero", name: "Xero", category: "Accounting", text: "Invoices, payments and clients sent to Xero." },
+    { id: "accounting_csv", name: "Spreadsheet export", category: "Accounting", text: "Sent invoices as a spreadsheet for your accountant.", ...(invoices ? { href: "#accounting" } : {}) },
+    { id: "google_business", name: "Google Business Profile", category: "Marketing", text: "A Book button on Google Maps and Search, and review requests." },
+    { id: "instagram", name: "Instagram & Facebook", category: "Marketing", text: "Book from your profile; messages in your inbox." },
+    { id: "mailchimp", name: "Mailchimp", category: "Marketing", text: "Keep your mailing list in step with your clients." },
+    { id: "zapier", name: "Zapier / Make", category: "Automation", text: "Connect thousands of other apps with no code." },
+    { id: "webhooks", name: "API & webhooks", category: "Automation", text: "Your own code and services, with API keys.", href: `${base}/settings/code` },
+    { id: "ai_apps", name: "Claude, ChatGPT…", category: "Automation", text: "Run your business from your AI app.", href: `${base}/settings/connections` },
+    { id: "google_drive", name: "Google Drive / Dropbox", category: "Files", text: "Save documents and photos to your own drive." },
+  ].map((c) => ({ ...c, requested: wanted.has(c.id) }));
 
   const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -125,7 +156,8 @@ export default async function IntegrationsPage({ params }: { params: Promise<{ b
         <Plug className="h-6 w-6 text-accent" />
         <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
       </div>
-      <p className="mb-6 text-sm text-muted">Everything your business is connected to, whether it’s working, and what uses it.</p>
+      <p className="mb-6 text-sm text-muted">Everything your business is connected to, whether it’s working, and what uses it — and everything you can connect.</p>
+      <h2 className="mb-3 text-lg font-semibold">Your connections</h2>
 
       <div className="grid gap-3">
         {cards.map((c) => (
@@ -143,7 +175,7 @@ export default async function IntegrationsPage({ params }: { params: Promise<{ b
           </div>
         ))}
 
-        <div className="card p-5">
+        <div id="calendar" className="card scroll-mt-24 p-5">
           <div className="flex items-start gap-4">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent-tint text-accent"><CalendarDays className="h-5 w-5" /></span>
             <div className="min-w-0 flex-1">
@@ -175,7 +207,7 @@ export default async function IntegrationsPage({ params }: { params: Promise<{ b
         </div>
 
         {invoices && (
-          <div className="card flex flex-wrap items-start gap-4 p-5">
+          <div id="accounting" className="card flex scroll-mt-24 flex-wrap items-start gap-4 p-5">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent-tint text-accent"><FileSpreadsheet className="h-5 w-5" /></span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -188,6 +220,10 @@ export default async function IntegrationsPage({ params }: { params: Promise<{ b
           </div>
         )}
       </div>
+
+      <h2 className="mb-1 mt-10 text-lg font-semibold">All integrations</h2>
+      <p className="mb-4 text-sm text-muted">Connect what’s ready. For the rest, tap “I want this” — we build the most-asked first.</p>
+      <IntegrationCatalog items={catalog} request={requestIntegration} />
     </div>
   );
 }

@@ -134,8 +134,7 @@ export const chairRental: Template = {
       ]),
       page("pg_chairs", "Chairs", "box", 1, [block("blk_chairs", "board", [0, 0, 12, 5], { table: "tbl_chairs", groupBy: "fld_status" }, { title: "Chairs" })]),
       page("pg_renters", "Renters", "users", 2, [
-        block("blk_renters", "table", [0, 0, 8, 6], { table: "tbl_renters", sort: [{ field: "fld_name", dir: "asc" }] }, { title: "Renters" }),
-        block("blk_new_renter", "form", [8, 0, 4, 7], { table: "tbl_renters" }, { title: "Add a renter" }),
+        block("blk_renters", "table", [0, 0, 12, 6], { table: "tbl_renters", sort: [{ field: "fld_name", dir: "asc" }] }, { title: "Renters" }),
       ]),
       page("pg_rent", "Rent", "payments", 3, [block("blk_rent", "table", [0, 0, 12, 7], { table: "tbl_rent", sort: [{ field: "fld_due", dir: "desc" }] }, { title: "Rent payments", quickSet: { field: "fld_paid_on", buttons: [{ value: "@today", label: "Paid today" }] } })]),
     ];

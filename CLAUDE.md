@@ -35,6 +35,13 @@ Read `docs/` before building a feature. Build order: `docs/roadmap.md`.
    read), values from other records are rollups, automations re-check the live record before every run and
    after every wait. Generated setups are checked against these rules. See `docs/data-rules.md`.
 
+## Standard UI rules (every app, every template, every AI-built screen)
+- **New items: a "+ New …" button at the top right that opens a modal.** Never an add form sitting on a
+  page or a separate add page. Lists and tables also have "+ Add" in their header (same modal).
+- **Search and filters above every table/list,** and app-wide search (⌘K) in the menu.
+- **Settings and other multi-part screens get a top tab menu** — owners never scroll to find a section.
+- Record pages for every record; status/choice values as coloured badges; the theme everywhere (light and dark).
+
 ## Stack
 - Next.js (App Router, TypeScript, server actions) on Vercel
 - Supabase: Postgres, Auth, RLS, Storage, Edge Functions / cron for automation jobs

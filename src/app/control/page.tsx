@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { listApps } from "@/server/control";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const when = (iso?: string) => (iso ? new Intl.DateTimeFormat("en-CA", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(iso)) : "—");
 
@@ -8,6 +9,9 @@ export default async function ControlApps() {
   const apps = await listApps();
   const byType = [...apps.reduce((m, a) => m.set(a.type, (m.get(a.type) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
   const changed = apps.filter((a) => a.ownerChanges + a.aiChanges > 0).length;
+  // Integrations owners asked for (Settings › Integrations › "I want this"), most asked first.
+  const { data: reqs } = await createAdminClient().from("integration_requests").select("integration");
+  const wanted = [...(reqs ?? []).reduce((m, r) => m.set(r.integration as string, (m.get(r.integration as string) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
   return (
     <main className="mx-auto w-full max-w-[1400px] flex-1 space-y-6 px-4 py-8 md:px-8">
       <div>
@@ -34,6 +38,16 @@ export default async function ControlApps() {
           </span>
         ))}
       </div>
+      {wanted.length > 0 && (
+        <div className="card px-5 py-4">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Integrations owners asked for</p>
+          <div className="flex flex-wrap gap-2">
+            {wanted.map(([id, n]) => (
+              <span key={id} className="rounded-full bg-ground px-3 py-1 text-sm">{id.replace(/_/g, " ")} <b>{n}</b></span>
+            ))}
+          </div>
+        </div>
+      )}
       <section className="card overflow-x-auto">
         <table className="w-full min-w-max text-sm">
           <thead>
