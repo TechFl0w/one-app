@@ -76,6 +76,12 @@ export interface CalendarEvent {
   end: string;
 }
 
+/** Google's own words for an error ("Calendar usage limits exceeded", "Insufficient permission"). */
+async function googleMessage(r: Response): Promise<string> {
+  const j = (await r.json().catch(() => null)) as { error?: { message?: string } } | null;
+  return `${r.status} ${j?.error?.message ?? r.statusText}`.trim();
+}
+
 async function api(token: string, path: string, init: RequestInit = {}, fetcher: typeof fetch = fetch) {
   const r = await fetcher(`https://www.googleapis.com/calendar/v3${path}`, { ...init, headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(init.headers ?? {}) } });
   if (r.status === 401) throw new GoogleError("Google access expired", true);
@@ -85,19 +91,19 @@ async function api(token: string, path: string, init: RequestInit = {}, fetcher:
 /** Writes (or rewrites) the booking's event. */
 export async function upsertEvent(token: string, calendarId: string, recordId: string, e: CalendarEvent, fetcher?: typeof fetch): Promise<void> {
   const id = eventIdFor(recordId);
-  const body = JSON.stringify({ id, summary: e.summary, description: e.description, location: e.location, start: { dateTime: e.start }, end: { dateTime: e.end }, status: "confirmed", source: { title: "One App", url: e.description?.match(/https?:\/\/\S+/)?.[0] ?? "https://oneapp" } });
+  const body = JSON.stringify({ id, summary: e.summary, description: e.description, location: e.location, start: { dateTime: e.start }, end: { dateTime: e.end }, status: "confirmed" });
   const cal = encodeURIComponent(calendarId);
   const put = await api(token, `/calendars/${cal}/events/${id}`, { method: "PUT", body }, fetcher);
   if (put.ok) return;
-  if (put.status !== 404) throw new GoogleError(`Couldn’t update the event (${put.status})`);
+  if (put.status !== 404) throw new GoogleError(`Couldn’t update the event: ${await googleMessage(put)}`);
   const post = await api(token, `/calendars/${cal}/events`, { method: "POST", body }, fetcher);
   // 409: it exists (it was deleted, so it's cancelled) — bring it back with an update.
   if (post.status === 409) {
     const again = await api(token, `/calendars/${cal}/events/${id}`, { method: "PUT", body }, fetcher);
     if (again.ok) return;
-    throw new GoogleError(`Couldn’t restore the event (${again.status})`);
+    throw new GoogleError(`Couldn’t restore the event: ${await googleMessage(again)}`);
   }
-  if (!post.ok) throw new GoogleError(`Couldn’t add the event (${post.status})`);
+  if (!post.ok) throw new GoogleError(`Couldn’t add the event: ${await googleMessage(post)}`);
 }
 
 /** Removes the booking's event (cancelled or deleted booking). Gone already is fine. */
