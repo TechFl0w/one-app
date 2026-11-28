@@ -11,7 +11,7 @@ import { documentFor, invoiceWork } from "@/engine/documents";
 import { searchEverything } from "@/engine/search";
 import { supabaseStore } from "@/server/store";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { availableSlots, bookSlot } from "@/booking/service";
+import { availableSlots, bookSlot, type ExternalBusy } from "@/booking/service";
 import { localLabel } from "@/engine/dates";
 import type { Blueprint } from "@/schema/blueprint";
 import { supabaseOwnerBackend } from "@/server/ownerBackend";
@@ -120,10 +120,10 @@ export async function sandboxInvoiceWork(businessId: string, table: string, clie
 }
 
 /** Free times and booking for screens (useFreeTimes / bookTime in the kit). */
-async function freeTimesWith(bp: Blueprint, backend: Parameters<typeof availableSlots>[1], service: string, date: string, practitioner?: string, days = 1) {
+async function freeTimesWith(bp: Blueprint, backend: Parameters<typeof availableSlots>[1] & { externalBusy?: ExternalBusy }, service: string, date: string, practitioner?: string, days = 1) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("invalid: date must look like 2026-11-27");
   const [y, m, d] = date.split("-").map(Number);
-  const slots = await availableSlots(bp, backend, { serviceId: service, practitionerId: practitioner, from: { year: y, month: m, day: d }, days: Math.min(Math.max(days, 1), 7) });
+  const slots = await availableSlots(bp, backend, { serviceId: service, practitionerId: practitioner, from: { year: y, month: m, day: d }, days: Math.min(Math.max(days, 1), 7), externalBusy: backend.externalBusy });
   const tz = bp.business.timezone;
   return { timezone: tz, slots: slots.slice(0, 200).map((s) => ({ start: s.start, end: s.end, practitionerId: s.practitionerId, local: localLabel(s.start, tz) })) };
 }
@@ -136,7 +136,7 @@ export async function sandboxFreeTimes(businessId: string, service: string, date
 export async function sandboxBookTime(businessId: string, service: string, start: string, client: { name: string; email?: string; phone?: string }, practitioner?: string) {
   return bridged(async () => {
     const supabase = await createClient();
-    const r = await bookSlot(await getCurrentBlueprint(supabase, businessId), supabaseOwnerBackend(supabase, businessId), { serviceId: service, start, client, practitionerId: practitioner });
+    const r = await bookSlot(await getCurrentBlueprint(supabase, businessId), supabaseOwnerBackend(supabase, businessId), { serviceId: service, start, client, practitionerId: practitioner }, new Date(), { externalBusy: supabaseOwnerBackend(supabase, businessId).externalBusy });
     return { bookingId: r.bookingId, state: r.state };
   });
 }

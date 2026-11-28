@@ -152,11 +152,15 @@ function toInterval(start: unknown, end: unknown): Interval | null {
 
 const singularOf = (s: string) => s.replace(/ies$/i, "y").replace(/(?<!s)s$/i, "").toLowerCase();
 
+export type ExternalBusy = (practitionerIds: string[], from: string, to: string) => Promise<Map<string, Interval[]>>;
+
 export interface SlotQuery {
   serviceId: string;
   practitionerId?: string;
   /** The kind (a dog's size, option id of for.kind): picks the service's variant. */
   kind?: string;
+  /** Busy times from people's own calendars (Google), by practitioner id. */
+  externalBusy?: ExternalBusy;
   from?: LocalDate;
   days?: number;
 }
@@ -218,6 +222,11 @@ export async function availableSlots(bp: Blueprint, b: Backend, q: SlotQuery, no
   }
 
   const pRows = await all(b, sc.practitioners.table);
+  // Their own calendars (Google): a dentist appointment blocks the slot. A failed read blocks nothing.
+  if (q.externalBusy) {
+    const outside = await q.externalBusy(pRows.map((r) => r.id), windowStart, windowEnd).catch(() => new Map<string, Interval[]>());
+    for (const [who, list] of outside) for (const i of list) add(busyByPractitioner, who, i);
+  }
   const practitioners: FinderPractitioner[] = pRows
     .filter((r) => !sc.practitioners.online || r.data[sc.practitioners.online] === true)
     .map((r) => ({
@@ -332,7 +341,7 @@ export async function bookSlot(
   b: Backend,
   req: BookingRequest,
   now = new Date(),
-  opts: { holdUntil?: Date } = {},
+  opts: { holdUntil?: Date; externalBusy?: ExternalBusy } = {},
 ): Promise<{ bookingId: string; slot: Slot; state: string; price: number | null }> {
   const sc = schedulingOf(bp);
   const name = req.client.name.trim();
@@ -341,7 +350,7 @@ export async function bookSlot(
   await expireHolds(bp, b, now);
 
   const day = localToday(new Date(req.start), bp.business.timezone);
-  const slot = (await availableSlots(bp, b, { serviceId: req.serviceId, practitionerId: req.practitionerId, kind: req.kind, from: day, days: 1 }, now)).find(
+  const slot = (await availableSlots(bp, b, { serviceId: req.serviceId, practitionerId: req.practitionerId, kind: req.kind, from: day, days: 1, externalBusy: opts.externalBusy }, now)).find(
     (s) => s.start === new Date(req.start).toISOString(),
   );
   if (!slot) throw new RecordError("invalid", "Sorry, that time is no longer available. Please pick another.");

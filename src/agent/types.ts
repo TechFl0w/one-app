@@ -1,3 +1,4 @@
+import type { ExternalBusy } from "@/booking/service";
 import type { Blueprint } from "@/schema/blueprint";
 import type { ChangeSet } from "@/schema/changeSet";
 import type { RecordQuery, RecordRow } from "@/schema/records";
@@ -11,6 +12,8 @@ import type { OpPreview } from "@/engine/changeSet";
  */
 export interface OwnerBackend {
   blueprint(): Promise<Blueprint>;
+  /** Busy times from staff members' own calendars (Google), for finding free times. */
+  externalBusy?: ExternalBusy;
   /** What other businesses of this type changed after setup (approved in the control center). */
   learnings?(): Promise<string>;
   /** The public booking page (full URL, on/off); null when bookings aren't set up or the caller can't see it. */

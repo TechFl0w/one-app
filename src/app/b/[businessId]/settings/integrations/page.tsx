@@ -7,7 +7,9 @@ import { getAccount, stripeConfigured } from "@/server/payments";
 import { getLine, whatsappConfigured } from "@/server/whatsapp";
 import { resendClient } from "@/server/email";
 import { ensureFeed, feedUrl, resetFeed } from "@/server/calendarFeeds";
-import { ShareBookingLink } from "@/components/booking/ShareBookingLink";
+import { listConnections, removeConnection } from "@/server/googleCalendar";
+import { googleConfigured } from "@/integrations/googleCalendar";
+import { CalendarFeedRow } from "@/components/settings/CalendarFeedRow";
 import { IntegrationCatalog, type CatalogItem } from "@/components/settings/IntegrationCatalog";
 import { recordLabel } from "@/engine/blockData";
 import type { Blueprint } from "@/schema/blueprint";
@@ -29,8 +31,9 @@ function usedBy(bp: Blueprint, channel: "email" | "whatsapp" | "sms"): string[] 
  * Every outside service the business is connected to, how it's doing, and what uses it — in
  * one place. Each card links to its own settings; the calendar feed lives here.
  */
-export default async function IntegrationsPage({ params }: { params: Promise<{ businessId: string }> }) {
+export default async function IntegrationsPage({ params, searchParams }: { params: Promise<{ businessId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { businessId } = await params;
+  const googleMsg = (await searchParams).google;
   const { supabase, blueprint: bp } = await getBusinessContext(businessId);
   const base = `/b/${businessId}`;
   const admin = createAdminClient();
@@ -50,6 +53,20 @@ export default async function IntegrationsPage({ params }: { params: Promise<{ b
     : [];
   const invoices = bp.documents?.some((d) => d.kind === "invoice");
   const deposits = !!sc?.deposit;
+  const google = googleConfigured();
+  const googleConns = google ? await listConnections(admin, businessId) : [];
+  const googleFor = (personId: string | null) => googleConns.find((c) => c.personId === personId);
+  const connectHref = (personId: string | null) => `/api/integrations/google/start?business=${businessId}${personId ? `&person=${personId}` : ""}`;
+
+  async function disconnectGoogle(personId: string | null) {
+    "use server";
+    const { supabase: db } = await getBusinessContext(businessId);
+    const { data: claims } = await db.auth.getClaims();
+    const { data: m } = await db.from("memberships").select("role").eq("business_id", businessId).eq("user_id", (claims?.claims.sub as string) ?? "").maybeSingle();
+    if (!m || !["owner", "admin"].includes(m.role)) return;
+    await removeConnection(createAdminClient(), businessId, personId);
+    revalidatePath(`${base}/settings/integrations`);
+  }
 
   async function reset(personId: string | null) {
     "use server";
@@ -72,7 +89,7 @@ export default async function IntegrationsPage({ params }: { params: Promise<{ b
   const catalog: CatalogItem[] = [
     { id: "stripe", name: "Stripe", category: "Payments", text: "Card payments for invoices, deposits and payment links.", href: `${base}/settings/payments` },
     { id: "square", name: "Square", category: "Payments", text: "Take payments and bring in your Square bookings and clients." },
-    { id: "google_calendar", name: "Google Calendar", category: "Calendar", text: "Two-way: bookings in your calendar, your own events block booking times." },
+    { id: "google_calendar", name: "Google Calendar", category: "Calendar", text: "Two-way: bookings in your calendar, your own events block booking times.", ...(google ? { href: "#calendar" } : {}) },
     { id: "outlook_calendar", name: "Outlook Calendar", category: "Calendar", text: "Two-way sync with Outlook and Microsoft 365." },
     { id: "calendar_feed", name: "Apple / any calendar", category: "Calendar", text: "Subscribe to your bookings from any calendar app.", href: "#calendar" },
     { id: "whatsapp", name: "WhatsApp", category: "Messages", text: "Reminders, confirmations and replies on your business number.", href: `${base}/settings/whatsapp` },
@@ -186,22 +203,39 @@ export default async function IntegrationsPage({ params }: { params: Promise<{ b
               <p className="mt-0.5 text-sm text-muted">Subscribe once and bookings show up in your own calendar, kept up to date. Each person can have their own.</p>
             </div>
           </div>
+          {google && sc && (
+            <div className="mt-4 rounded-2xl bg-ground p-4">
+              <p className="text-sm font-semibold">Google Calendar — two-way</p>
+              <p className="mb-3 text-xs text-muted">Bookings appear in Google Calendar, and anything already in someone’s calendar blocks those times on the booking page.</p>
+              {googleMsg === "connected" && <p className="mb-3 rounded-xl bg-accent-tint px-3 py-2 text-sm text-accent">Connected. New and changed bookings will show up in Google Calendar within a few minutes.</p>}
+              {typeof googleMsg === "string" && googleMsg !== "connected" && <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">{googleMsg === "cancelled" ? "Google wasn’t connected — you can try again any time." : googleMsg === "not_allowed" ? "Only owners and admins can connect calendars." : "Google couldn’t be connected. Try again, and make sure you tick the calendar boxes on Google’s screen."}</p>}
+              <ul className="divide-y divide-line">
+                {[{ id: null as string | null, name: "Business calendar (every booking)" }, ...feeds.filter((f) => f.id).map((f) => ({ id: f.id, name: f.name }))].map((p) => {
+                  const c = googleFor(p.id);
+                  return (
+                    <li key={p.id ?? "biz"} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+                      <span className="min-w-0 flex-1">
+                        <span className="font-medium">{p.name}</span>
+                        {c && <span className={`block text-xs ${c.ok ? "text-muted" : "text-red-700"}`}>{c.ok ? `Connected${c.email ? ` as ${c.email}` : ""}` : c.error ?? "Needs connecting again"}</span>}
+                      </span>
+                      {!c || !c.ok ? (
+                        <a className="btn-primary px-3 py-1.5 text-xs" href={connectHref(p.id)}>{c ? "Connect again" : "Connect Google"}</a>
+                      ) : (
+                        <form action={disconnectGoogle.bind(null, p.id)}><button className="btn-ghost px-3 py-1.5 text-xs">Disconnect</button></form>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
           {feeds.length > 0 && (
-            <ul className="mt-4 space-y-4">
-              {feeds.map((f) => (
-                <li key={f.id ?? "all"}>
-                  <p className="mb-1 text-sm font-semibold">{f.name}</p>
-                  <ShareBookingLink url={f.url} />
-                  <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                    <a className="btn-ghost px-3 py-1.5" href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(f.url.replace(/^https?:/, "webcal:"))}`} target="_blank" rel="noopener noreferrer">Add to Google</a>
-                    <a className="btn-ghost px-3 py-1.5" href={f.url.replace(/^https?:/, "webcal:")}>Add to Apple / Outlook</a>
-                    <form action={reset.bind(null, f.id)}>
-                      <button className="px-3 py-1.5 text-muted hover:text-ink hover:underline">New link</button>
-                    </form>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <>
+              <p className="mb-1 mt-4 text-sm font-semibold">Subscribe from any calendar — one-way, read only</p>
+              <ul className="divide-y divide-line">
+                {feeds.map((f) => <CalendarFeedRow key={f.id ?? "all"} name={f.name} url={f.url} reset={reset.bind(null, f.id)} />)}
+              </ul>
+            </>
           )}
           <p className="mt-3 text-xs text-muted">Keep these links private — anyone with one can see those bookings. “New link” stops the old one.</p>
         </div>

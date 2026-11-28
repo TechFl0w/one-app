@@ -116,3 +116,16 @@ describe("scheduling schema", () => {
     expect(Blueprint.safeParse(noCancel).success).toBe(false);
   });
 });
+
+describe("busy times from people's own calendars", () => {
+  it("an appointment in Mai's Google calendar blocks her slots", async () => {
+    const { backend } = setup();
+    const busy = async () => new Map([[MAI, [{ start: Date.parse(local("09:00")), end: Date.parse(local("12:00")) }]]]);
+    const slots = await availableSlots(demoBlueprint, backend, { serviceId: GEL, practitionerId: MAI, from: WED, days: 1, externalBusy: busy }, now);
+    expect(slots.map((s) => s.start)).not.toContain(local("10:00"));
+    expect(slots.map((s) => s.start)).toContain(local("12:00"));
+    // A calendar that can't be read blocks nothing.
+    const broken = await availableSlots(demoBlueprint, backend, { serviceId: GEL, practitionerId: MAI, from: WED, days: 1, externalBusy: async () => { throw new Error("down"); } }, now);
+    expect(broken.map((s) => s.start)).toContain(local("10:00"));
+  });
+});
