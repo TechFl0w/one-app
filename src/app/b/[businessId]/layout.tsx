@@ -45,7 +45,7 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
   // Things a new business still needs (shown as "Finish setting up" until done).
   const takesMoney = blueprint.documents?.some((d) => d.kind === "invoice") || !!blueprint.scheduling?.deposit;
   const account = takesMoney ? await getAccount(supabase, businessId).catch(() => null) : null;
-  const todo = [takesMoney && !account?.chargesEnabled, !blueprint.site].filter(Boolean).length;
+  const todo = [takesMoney && !account?.chargesEnabled, !blueprint.site && !blueprint.scheduling].filter(Boolean).length;
   const { transcript } = userId ? await loadConversation(supabase, businessId, userId).catch(() => ({ transcript: [] })) : { transcript: [] };
   return (
     <AppShell
@@ -85,7 +85,7 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
             </Link>
           )}
           {todo > 0 && (
-            <Link href={`/b/${businessId}/settings/integrations`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
+            <Link href={`/b/${businessId}/welcome`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
               <Plug className="h-4 w-4" /> Finish setting up
               <span className="ml-auto rounded-full bg-amber-100 px-2 text-xs font-semibold text-amber-900">{todo}</span>
             </Link>

@@ -41,5 +41,6 @@ export async function buildBusiness(input: { templateId: string; name: string; t
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Something went wrong" };
   }
-  redirect(`/b/${id}`);
+  // First stop: getting paid online and sharing the booking page / website.
+  redirect(`/b/${id}/welcome`);
 }
