@@ -9,6 +9,7 @@
  * Or a fresh test business per plan (docs/testing-api.md), made and removed by the test API:
  *   ONE_APP_URL=https://<app> TEST_API_TOKEN=… npm run ai-explore -- docs/test-plans/quotes-invoices.md
  *   A plan picks its template with a line "Template: contractor" (default: appointments); KEEP=1 keeps it.
+ *   Behind Vercel deployment protection, add VERCEL_BYPASS=<Protection Bypass for Automation secret>.
  *
  * Needs an Anthropic API key (ANTHROPIC_API_KEY or `ant auth login`). Use a TEST business: the
  * plans add records and change screens. Costs API tokens per run.
@@ -26,14 +27,16 @@ if (!plans.length || (!(fixedUrl && fixedToken) && !(appUrl && testToken))) {
   process.exit(2);
 }
 
+const bypass = process.env.VERCEL_BYPASS ? { "x-vercel-protection-bypass": process.env.VERCEL_BYPASS } : {};
+
 /** A fresh test business for one plan (its template from a "Template: …" line). */
 async function testBusiness(plan) {
   const template = /^template:\s*([a-z_]+)/im.exec(plan)?.[1] ?? "appointments";
-  const r = await fetch(`${appUrl}/api/test/businesses`, { method: "POST", headers: { authorization: `Bearer ${testToken}`, "content-type": "application/json" }, body: JSON.stringify({ template, name: `AI test ${template}` }) });
+  const r = await fetch(`${appUrl}/api/test/businesses`, { method: "POST", headers: { authorization: `Bearer ${testToken}`, "content-type": "application/json", ...bypass }, body: JSON.stringify({ template, name: `AI test ${template}` }) });
   if (!r.ok) throw new Error(`Could not make a test business: ${r.status} ${await r.text()}`);
   return r.json();
 }
-const removeBusiness = (id) => fetch(`${appUrl}/api/test/businesses/${id}`, { method: "DELETE", headers: { authorization: `Bearer ${testToken}` } });
+const removeBusiness = (id) => fetch(`${appUrl}/api/test/businesses/${id}`, { method: "DELETE", headers: { authorization: `Bearer ${testToken}`, ...bypass } });
 
 const client = new Anthropic();
 const SYSTEM = `You are a meticulous QA tester for One App, a platform where small businesses run their whole business in an app an AI built for them.

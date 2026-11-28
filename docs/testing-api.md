@@ -13,3 +13,7 @@ environment; without it the routes answer 404. Every call sends `Authorization: 
 
 Test businesses belong to one tester account (`TEST_OWNER_EMAIL`, default `ai-tester@one-app.invalid`) and are
 marked `businesses.is_test`. Payments use whatever Stripe keys the server has — use test keys on a preview deployment.
+
+A preview deployment only has `TEST_API_TOKEN` if it was built after the variable was added: the
+branch address (`one-app-git-<branch>-…`) follows new commits, not redeploys. Behind Vercel
+deployment protection, send `x-vercel-protection-bypass: <secret>` too (ai-explore: `VERCEL_BYPASS`).
