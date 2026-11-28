@@ -234,3 +234,26 @@ export async function approvedTemplate(admin: SupabaseClient, businessId: string
   const { data } = await admin.from("whatsapp_templates").select("content_sid").eq("business_id", businessId).eq("template_key", key).eq("status", "approved").maybeSingle();
   return data?.content_sid ?? null;
 }
+
+/**
+ * A text message (SMS) from the business's number (the same Twilio number as its WhatsApp line).
+ * With a `key`, sent at most once (automations retry).
+ */
+export async function sendSms(admin: SupabaseClient, businessId: string, to: string, body: string, opts: { key?: string } = {}): Promise<{ sid: string }> {
+  const line = await getLine(admin, businessId);
+  if (!line?.phone) throw new Error("This business has no phone number for texts yet");
+  if (opts.key) {
+    const ins = await admin
+      .from("outbound_messages")
+      .upsert({ business_id: businessId, key: opts.key, channel: "sms", to_address: to, body_text: body.slice(0, 2000) }, { onConflict: "business_id,key", ignoreDuplicates: true })
+      .select("id");
+    if (ins.error) throw new Error(ins.error.message);
+    if (!ins.data?.length) {
+      const prev = await admin.from("outbound_messages").select("status, provider_id").eq("business_id", businessId).eq("key", opts.key).single();
+      if (prev.data?.status === "sent") return { sid: prev.data.provider_id };
+    }
+  }
+  const msg = await twilioClient().messages.create({ from: line.phone, to, body: body.slice(0, 1500) });
+  if (opts.key) await admin.from("outbound_messages").update({ status: "sent", provider_id: msg.sid, sent_at: new Date().toISOString() }).eq("business_id", businessId).eq("key", opts.key);
+  return { sid: msg.sid };
+}

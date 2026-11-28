@@ -21,6 +21,7 @@ export default async function SettingsPage({ params }: PageProps<"/b/[businessId
   const base = `/b/${businessId}`;
   const links = [
     { href: `${base}/settings/booking`, icon: CalendarCheck, label: "Online booking", hint: "Your booking page, hours and rules", show: !!blueprint.scheduling },
+    { href: `${base}/settings/integrations`, icon: Plug, label: "Integrations", hint: "Stripe, email, WhatsApp, your calendar, accounting — status in one place", show: true },
     { href: `${base}/settings/website`, icon: Globe, label: "Website", hint: "A website made from your app, with booking and a contact form", show: true },
     { href: `${base}/settings/payments`, icon: CreditCard, label: "Payments", hint: "Stripe, deposits, payment links", show: true },
     { href: `${base}/settings/email`, icon: Mail, label: "Email", hint: "Sender name, replies, inbound address", show: true },

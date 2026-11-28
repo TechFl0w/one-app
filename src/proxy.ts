@@ -16,7 +16,7 @@ export async function proxy(request: NextRequest) {
   }
   if (path === "/demo" || path.startsWith("/demo/") || path === "/start" || path.startsWith("/book/") || path.startsWith("/s/") || path.startsWith("/d/") || path === "/paid") return NextResponse.next();
   // Cron routes (CRON_SECRET) and webhooks (signatures) authenticate themselves, not with a session.
-  if (path.startsWith("/api/cron/") || path.startsWith("/api/webhooks/") || path.startsWith("/api/hooks/") || path === "/api/fn/kit") return NextResponse.next(); // signed or token, no session
+  if (path.startsWith("/api/cron/") || path.startsWith("/api/webhooks/") || path.startsWith("/api/hooks/") || path.startsWith("/api/cal/") || path === "/api/fn/kit") return NextResponse.next(); // signed or token, no session
   // Sandbox runtime files for generated components (static, public).
   if (path.startsWith("/sandbox/")) return NextResponse.next();
   // The MCP server checks its own bearer tokens; discovery documents are public.

@@ -13,7 +13,7 @@ import { expireHolds, hasUpcomingBooking } from "@/booking/service";
 import { runRecurring } from "@/engine/recurring";
 import { ensureEmailSettings, sendEmail } from "./email";
 import { renderTemplate, resolveRecipient } from "@/email/compose";
-import { approvedTemplate, getLine, sendWhatsApp, whatsappConfigured } from "./whatsapp";
+import { approvedTemplate, getLine, sendSms, sendWhatsApp, whatsappConfigured } from "./whatsapp";
 import { resolvePhone } from "@/whatsapp/recipient";
 import { templateVariables } from "@/whatsapp/core";
 import { formatDateTime } from "@/components/blocks/format";
@@ -152,6 +152,23 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
         if (!why) return { sent: true };
         if (step.channel === "whatsapp") return { sent: false, reason: why };
         // "auto" falls back to email below.
+      }
+      if (step.channel === "sms") {
+        if (!whatsappConfigured()) return { sent: false, reason: "Texts aren’t set up on this server" };
+        const to = await resolvePhone(bp, record.tableId, record.data, step.toField, getRecord);
+        if (!to) return { sent: false, reason: "No phone number for this record" };
+        const tracking = bp.tables.find((t) => t.id === record.tableId)?.fields.find((f) => /track/i.test(f.label) && typeof record.data[f.id] === "string");
+        const msg = renderTemplate(step.template, step.message, {
+          business: bp.business.name,
+          name: to.name?.split(" ")[0],
+          when: whenOf(),
+          tracking: tracking ? String(record.data[tracking.id]) : undefined,
+          reviewLink: bp.business.reviewUrl,
+          ...(await links(bp, b, record, `${step.template ?? ""} ${step.message ?? ""}`, db)),
+          data: record.data,
+        });
+        await sendSms(db, b, to.phone, msg.text.trim(), { key });
+        return { sent: true };
       }
       if (step.channel !== "email" && step.channel !== "auto") return { sent: false, reason: `${step.channel} isn’t supported` };
       const to = await resolveRecipient(bp, record.tableId, record.data, step.toField, getRecord);

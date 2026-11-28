@@ -70,7 +70,7 @@ export function automationIssues(bp: Blueprint, a: Automation): string[] {
     }
     const text = (k: string) => (typeof s[k] === "string" ? (s[k] as string) : undefined);
     if (step.type === "send_message") {
-      if (s.channel !== undefined && !["auto", "email", "whatsapp"].includes(String(s.channel))) issues.push(`${at}: channel must be auto, email or whatsapp`);
+      if (s.channel !== undefined && !["auto", "email", "whatsapp", "sms"].includes(String(s.channel))) issues.push(`${at}: channel must be auto, email, whatsapp or sms`);
       if (typeof s.to !== "string") {
         // Without "to", the message goes to the record's own email/phone or its linked person.
         const someone = table?.fields.some((f) => f.type === "email" || f.type === "phone" || (f.type === "link" && bp.tables.find((t) => t.id === f.to)?.fields.some((x) => x.type === "email" || x.type === "phone")));
