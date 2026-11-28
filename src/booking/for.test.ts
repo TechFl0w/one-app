@@ -29,6 +29,7 @@ const bp = Blueprint.parse({
         { id: "fld_size", label: "Size", type: "choice", options: SIZES },
         { id: "fld_breed", label: "Breed", type: "text" },
         { id: "fld_vaccines", label: "Vaccines valid until", type: "date" },
+        { id: "fld_record", label: "Vaccination record", type: "file" },
       ],
     },
     {
@@ -47,7 +48,7 @@ const bp = Blueprint.parse({
     ...demoBlueprint.scheduling!,
     for: { table: "tbl_pets", booking: "fld_pet", client: "fld_pet_owner", name: "fld_pet_name", kind: "fld_size", ask: ["fld_breed"] },
     variants: { table: "tbl_variants", service: "fld_v_service", kind: "fld_v_size", duration: "fld_v_minutes", price: "fld_v_price" },
-    requirements: [{ on: "for", field: "fld_vaccines", rule: "valid_on_date", label: "Vaccines valid on the day" }],
+    requirements: [{ on: "for", field: "fld_vaccines", rule: "valid_on_date", label: "Vaccines valid on the day" }, { on: "for", field: "fld_record", rule: "filled", label: "Vaccination record" }],
   },
 });
 
@@ -93,5 +94,17 @@ describe("booking for a pet", () => {
     // Next time: same client and pet by name (any case); vaccines are on file already.
     await bookSlot(bp, backend, { ...base, start: local("13:00"), for: { name: "biscuit" } }, now);
     expect(state.records.filter((x) => x.tableId === "tbl_pets")).toHaveLength(1);
+  });
+});
+
+describe("uploaded documents", () => {
+  it("keeps a file from the business's own folder, drops anyone else's", async () => {
+    const { backend, state } = setup();
+    const BIZ = "11111111-1111-4111-8111-111111111111";
+    const base = { serviceId: GEL, practitionerId: MAI, client: { name: "Lisa", email: "lisa@example.com" }, kind: "opt_small", filesIn: BIZ };
+    await bookSlot(bp, backend, { ...base, start: local("09:00"), for: { name: "Biscuit", values: { fld_vaccines: "2027-01-01", fld_record: JSON.stringify({ path: `${BIZ}/tbl_pets/abc/record.pdf`, name: "record.pdf" }) } } }, now);
+    expect(state.records.find((r) => r.tableId === "tbl_pets")!.data.fld_record).toEqual({ path: `${BIZ}/tbl_pets/abc/record.pdf`, name: "record.pdf" });
+    await bookSlot(bp, backend, { ...base, start: local("13:00"), client: { name: "Tom", email: "tom@example.com" }, for: { name: "Rex", values: { fld_vaccines: "2027-01-01", fld_record: JSON.stringify({ path: "other-biz/tbl_pets/x/a.pdf", name: "a.pdf" }) } } }, now);
+    expect(state.records.find((r) => r.tableId === "tbl_pets" && r.data.fld_pet_name === "Rex")!.data.fld_record).toBeUndefined();
   });
 });

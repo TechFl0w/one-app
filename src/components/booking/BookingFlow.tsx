@@ -4,7 +4,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { ArrowLeft, CalendarCheck, CalendarPlus, Check, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, Phone, User } from "lucide-react";
 import type { Catalog, CatalogField, CatalogService } from "@/booking/service";
 import type { WeeklyHours } from "@/schema/blueprint";
-import { loadAvailability, submitBooking } from "@/app/book/[slug]/actions";
+import { loadAvailability, requirementUploadTarget, submitBooking } from "@/app/book/[slug]/actions";
 import { fmt, googleCalendarLink, icsLink, iconFor, initials, moneyFmt } from "./parts";
 
 type Slot = { start: string; end: string; practitionerId: string };
@@ -284,7 +284,7 @@ export function BookingFlow({ slug, catalog, shop, currency = "CAD", returned }:
                   <p className="text-sm font-semibold">Before your visit</p>
                   {catalog.requirements!.map((r) =>
                     r.field.type === "file" ? (
-                      <p key={r.field.id} className="text-sm text-muted">Please bring: {r.label}</p>
+                      <DocUpload key={r.field.id} slug={slug} field={r.field.id} name={`${r.on}:${r.field.id}`} label={r.label} />
                     ) : (
                       <Question key={r.field.id} field={r.field} label={r.label} name={`${r.on}:${r.field.id}`} hint={r.rule === "valid_on_date" ? `Must be on or after ${f.day(f.dayOf(slot.start), "short")}` : undefined} />
                     ),
@@ -526,6 +526,41 @@ function WeekStrip({ available, selected, onPick }: { available: Map<string, unk
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** A document the booking needs (vaccination record, waiver): upload it now, or bring it along. */
+function DocUpload({ slug, field, name, label }: { slug: string; field: string; name: string; label: string }) {
+  const [file, setFile] = useState<{ path: string; name: string } | null>(null);
+  const [state, setState] = useState<"idle" | "busy" | "error">("idle");
+  const [msg, setMsg] = useState<string | null>(null);
+  const pick = async (f: File) => {
+    setState("busy");
+    setMsg(null);
+    const t = await requirementUploadTarget(slug, field, f.name, f.size, f.type);
+    if ("error" in t) {
+      setState("error");
+      return setMsg(t.error ?? "Couldn’t upload it");
+    }
+    const r = await fetch(t.url, { method: "PUT", body: f, headers: { "content-type": f.type || "application/octet-stream" } }).catch(() => null);
+    if (!r?.ok) {
+      setState("error");
+      return setMsg("Couldn’t upload it — you can bring it along instead.");
+    }
+    setFile({ path: t.path, name: t.name });
+    setState("idle");
+  };
+  return (
+    <div className="sm:col-span-2">
+      <p className="label">{label}</p>
+      {file && <input type="hidden" name={name} value={JSON.stringify(file)} />}
+      <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-line bg-card px-4 py-3 text-sm hover:border-accent">
+        <input type="file" className="sr-only" accept="image/*,application/pdf" onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
+        <span className="font-semibold text-accent">{state === "busy" ? "Uploading…" : file ? "Replace" : "Upload"}</span>
+        <span className="truncate text-muted">{file ? file.name : "A photo or PDF — or bring it along on the day"}</span>
+      </label>
+      {msg && <p className="mt-1 text-xs text-red-700">{msg}</p>}
     </div>
   );
 }

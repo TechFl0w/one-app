@@ -272,10 +272,12 @@ export interface BookingRequest {
   for?: { name: string; values?: Record<string, unknown> };
   /** Answers about the client (requirements on the client, e.g. a waiver). */
   clientValues?: Record<string, unknown>;
+  /** Uploaded documents are accepted only from this business's own storage folder. */
+  filesIn?: string;
 }
 
 /** Keeps only values for fields the booking page asked about, in a type each field accepts. */
-function asked(values: Record<string, unknown> | undefined, allowed: CatalogField[]): Record<string, unknown> {
+function asked(values: Record<string, unknown> | undefined, allowed: CatalogField[], filesIn?: string): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const f of allowed) {
     const v = values?.[f.id];
@@ -284,7 +286,12 @@ function asked(values: Record<string, unknown> | undefined, allowed: CatalogFiel
     else if (f.type === "number") { const n = Number(v); if (Number.isFinite(n)) out[f.id] = n; }
     else if (f.type === "date") { if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) out[f.id] = v; }
     else if (f.type === "choice" || f.type === "status") { if (f.options?.some((o) => o.id === v)) out[f.id] = v; }
-    else if (f.type !== "file") out[f.id] = String(v).slice(0, 1000);
+    else if (f.type === "file") {
+      // An uploaded document: a path in this business's folder (businessId/table/id/name).
+      const file = typeof v === "string" ? (() => { try { return JSON.parse(v) as unknown; } catch { return null; } })() : v;
+      const p = file && typeof file === "object" ? (file as { path?: unknown; name?: unknown }) : null;
+      if (filesIn && p && typeof p.path === "string" && p.path.split("/")[0] === filesIn && p.path.split("/").length === 4 && !p.path.includes("..")) out[f.id] = { path: p.path, name: String(p.name ?? "document").slice(0, 255) };
+    } else out[f.id] = String(v).slice(0, 1000);
   }
   return out;
 }
@@ -292,6 +299,7 @@ function asked(values: Record<string, unknown> | undefined, allowed: CatalogFiel
 /** What's still missing for a booking on `day` (YYYY-MM-DD); files are brought along, not checked. */
 export function missingRequirements(reqs: NonNullable<Catalog["requirements"]>, forData: Record<string, unknown>, clientData: Record<string, unknown>, day: string): string[] {
   return reqs
+    // Documents can also be brought on the day: only typed answers block a booking.
     .filter((r) => r.field.type !== "file")
     .filter((r) => {
       const v = (r.on === "for" ? forData : clientData)[r.field.id];
@@ -362,8 +370,8 @@ export async function bookSlot(
     if (!forName) throw new RecordError("invalid", `Please give your ${cat?.for?.label ?? "pet"}’s name`);
     if (clientId) forRow = (await all(b, sc.for.table, [{ field: sc.for.client, op: "eq", value: clientId }])).find((r) => String(r.data[sc.for!.name] ?? "").trim().toLowerCase() === forName.toLowerCase());
   }
-  const forValues = { ...asked(req.for?.values, forFields), ...(sc.for?.kind && req.kind && cat?.for?.kinds?.some((k) => k.id === req.kind) ? { [sc.for.kind]: req.kind } : {}) };
-  const clientValues = asked(req.clientValues, clientFields);
+  const forValues = { ...asked(req.for?.values, forFields, req.filesIn), ...(sc.for?.kind && req.kind && cat?.for?.kinds?.some((k) => k.id === req.kind) ? { [sc.for.kind]: req.kind } : {}) };
+  const clientValues = asked(req.clientValues, clientFields, req.filesIn);
   const missing = missingRequirements(reqs, { ...(forRow?.data ?? {}), ...forValues }, { ...(clientRow?.data ?? {}), ...clientValues }, isoDate(day));
   if (missing.length) throw new RecordError("invalid", `Before we can book: ${missing.join("; ")}.`);
 
