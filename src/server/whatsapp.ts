@@ -1,4 +1,5 @@
 import "server-only";
+import { isTestBusiness } from "./testMode";
 import twilio from "twilio";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { lineStatusFromSender, STARTER_TEMPLATES, waAddress, type InboundWhatsApp, type LineStatus } from "@/whatsapp/core";
@@ -240,6 +241,10 @@ export async function approvedTemplate(admin: SupabaseClient, businessId: string
  * With a `key`, sent at most once (automations retry).
  */
 export async function sendSms(admin: SupabaseClient, businessId: string, to: string, body: string, opts: { key?: string } = {}): Promise<{ sid: string }> {
+  if (await isTestBusiness(admin, businessId)) {
+    await admin.from("outbound_messages").upsert({ business_id: businessId, key: opts.key ?? `sms:${Date.now()}`, channel: "sms", to_address: to, body_text: body.slice(0, 2000), status: "captured" }, { onConflict: "business_id,key", ignoreDuplicates: true });
+    return { sid: "captured" };
+  }
   const line = await getLine(admin, businessId);
   if (!line?.phone) throw new Error("This business has no phone number for texts yet");
   if (opts.key) {

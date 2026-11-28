@@ -47,7 +47,8 @@ const must = <T>(r: { data: T; error: { message: string } | null }, what: string
   return r.data;
 };
 
-export function supabaseQueue(db: SupabaseClient): JobQueue {
+/** The job queue; with `onlyBusiness`, it claims that business's jobs only (a test business's moved clock). */
+export function supabaseQueue(db: SupabaseClient, onlyBusiness?: string): JobQueue {
   return {
     async enqueue(j) {
       const rows = must(
@@ -63,7 +64,10 @@ export function supabaseQueue(db: SupabaseClient): JobQueue {
       return (rows ?? []).length > 0;
     },
     async claimDue(now, limit) {
-      return (must(await db.rpc("claim_automation_jobs", { p_now: now.toISOString(), p_limit: limit }), "claim") as JobRow[]).map(toJob);
+      const rows = onlyBusiness
+        ? await db.rpc("claim_automation_jobs_for", { p_business_id: onlyBusiness, p_now: now.toISOString(), p_limit: limit })
+        : await db.rpc("claim_automation_jobs", { p_now: now.toISOString(), p_limit: limit });
+      return (must(rows, "claim") as JobRow[]).map(toJob);
     },
     async finish(id, u) {
       const patch =

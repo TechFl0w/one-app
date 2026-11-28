@@ -1,4 +1,5 @@
 import "server-only";
+import { isTestBusiness } from "./testMode";
 import { createHash, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
@@ -71,6 +72,11 @@ export async function sendEmail(
     if (prev.data?.status === "sent" || prev.data?.status === "skipped") return prev.data.status === "sent" ? { sent: true } : { sent: false, reason: "Already handled" };
   }
   const mark = (patch: Record<string, unknown>) => admin.from("outbound_messages").update(patch).eq("business_id", settings.businessId).eq("key", msg.key);
+  // Test businesses: kept for the tester to read, never delivered.
+  if (await isTestBusiness(admin, settings.businessId)) {
+    await mark({ status: "captured", sent_at: new Date().toISOString() });
+    return { sent: true };
+  }
 
   const resend = resendClient();
   if (!resend) {
