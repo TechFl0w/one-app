@@ -9,7 +9,7 @@ import { resendClient } from "@/server/email";
 import { ensureFeed, feedUrl, resetFeed } from "@/server/calendarFeeds";
 import { listConnections, removeConnection } from "@/server/googleCalendar";
 import { googleConfigured } from "@/integrations/googleCalendar";
-import { ShareBookingLink } from "@/components/booking/ShareBookingLink";
+import { CalendarFeedRow } from "@/components/settings/CalendarFeedRow";
 import { IntegrationCatalog, type CatalogItem } from "@/components/settings/IntegrationCatalog";
 import { recordLabel } from "@/engine/blockData";
 import type { Blueprint } from "@/schema/blueprint";
@@ -230,21 +230,12 @@ export default async function IntegrationsPage({ params, searchParams }: { param
             </div>
           )}
           {feeds.length > 0 && (
-            <ul className="mt-4 space-y-4">
-              {feeds.map((f) => (
-                <li key={f.id ?? "all"}>
-                  <p className="mb-1 text-sm font-semibold">{f.name}</p>
-                  <ShareBookingLink url={f.url} />
-                  <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                    <a className="btn-ghost px-3 py-1.5" href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(f.url.replace(/^https?:/, "webcal:"))}`} target="_blank" rel="noopener noreferrer">Add to Google</a>
-                    <a className="btn-ghost px-3 py-1.5" href={f.url.replace(/^https?:/, "webcal:")}>Add to Apple / Outlook</a>
-                    <form action={reset.bind(null, f.id)}>
-                      <button className="px-3 py-1.5 text-muted hover:text-ink hover:underline">New link</button>
-                    </form>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <>
+              <p className="mb-1 mt-4 text-sm font-semibold">Subscribe from any calendar — one-way, read only</p>
+              <ul className="divide-y divide-line">
+                {feeds.map((f) => <CalendarFeedRow key={f.id ?? "all"} name={f.name} url={f.url} reset={reset.bind(null, f.id)} />)}
+              </ul>
+            </>
           )}
           <p className="mt-3 text-xs text-muted">Keep these links private — anyone with one can see those bookings. “New link” stops the old one.</p>
         </div>
