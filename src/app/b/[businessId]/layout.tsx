@@ -11,7 +11,7 @@ import { supabaseStore } from "@/server/store";
 import { withComputed } from "@/engine/computed";
 import { menuCounts } from "@/engine/menuCounts";
 import { loadConversation } from "@/server/ownerChat";
-import { sandboxComponent, sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxInvoiceWork, sandboxFreeTimes, sandboxBookTime, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "./sandbox-actions";
+import { sandboxComponent, sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxInvoiceWork, sandboxSearch, sandboxFreeTimes, sandboxBookTime, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "./sandbox-actions";
 
 // The assistant's server actions run here: rebuilding pages from a design can take a few minutes.
 export const maxDuration = 300;
@@ -61,6 +61,7 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
         documentLink: sandboxDocumentLink.bind(null, businessId),
         invoiceFromQuote: sandboxInvoiceFromQuote.bind(null, businessId),
             invoiceWork: sandboxInvoiceWork.bind(null, businessId),
+        search: sandboxSearch.bind(null, businessId),
         freeTimes: sandboxFreeTimes.bind(null, businessId),
         bookTime: sandboxBookTime.bind(null, businessId),
         loadComponent: sandboxComponent.bind(null, businessId),

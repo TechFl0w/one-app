@@ -268,7 +268,7 @@ export async function queryWithComputed(
     const r = await runStored(query);
     return { ...r, records: await addComputed(bp, query.table, r.records, loadTable, now) };
   }
-  const stored = { table: query.table, filters: filters.filter((f) => !late.includes(f)) };
+  const stored = { table: query.table, filters: filters.filter((f) => !late.includes(f)), ...(query.search ? { search: query.search } : {}) };
   const rows: RecordRow[] = [];
   while (rows.length < MAX_ROWS) {
     const page = await runStored({ ...stored, limit: 500, offset: rows.length });

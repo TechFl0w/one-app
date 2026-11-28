@@ -6,7 +6,7 @@ import { memoryStore } from "@/engine/store";
 import { submitDemoForm } from "../../../actions";
 import { demoSandboxCreate, demoSandboxGet, demoSandboxList, demoSandboxRemove, demoSandboxUpdate, demoFreeTimes, demoBookTime } from "../../../sandbox-actions";
 
-export default async function DemoRecordPage({ params }: PageProps<"/demo/r/[tableId]/[recordId]">) {
+export default async function DemoRecordPage({ params, searchParams }: PageProps<"/demo/r/[tableId]/[recordId]">) {
   const { tableId, recordId } = await params;
   const demo = await currentDemo();
   return (
@@ -15,6 +15,7 @@ export default async function DemoRecordPage({ params }: PageProps<"/demo/r/[tab
       recordId={recordId}
       device={await getDevice()}
       env={{
+        params: await searchParams,
         blueprint: demo.blueprint,
         store: withComputed(memoryStore(demo.records), demo.blueprint),
         formAction: (t, fields) => submitDemoForm.bind(null, t, fields),

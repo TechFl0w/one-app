@@ -3,6 +3,7 @@ import { EditProvider, type EditMode } from "@/components/edit/EditProvider";
 import { Sidebar } from "./Sidebar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import type { ChatItem } from "@/agent/transcript";
+import { GlobalSearch } from "./GlobalSearch";
 import { SandboxProvider } from "@/components/sandbox/SandboxProvider";
 import { RecordOpenerProvider } from "@/components/blocks/RecordOpener";
 import { ThemeStyle } from "@/theme/ThemeStyle";
@@ -45,6 +46,7 @@ export function AppShell({
     <ThemeStyle />
     <RecordOpenerProvider>
     <ShellFrame>
+      <GlobalSearch />
       <Sidebar basePath={basePath} businesses={businesses} footer={footer} counts={counts} />
       <div className="flex min-w-0 flex-1 flex-col">
         {banner}

@@ -236,9 +236,18 @@ const OPS_BY_KIND: Record<FieldKind, FilterOp[]> = {
   array: ["contains", "empty", "not_empty"],
 };
 
+/** Words to find in any of a record's values, or a link to one of `links` (records found by name). */
+export interface SearchFilter {
+  field: "_search";
+  op: "contains";
+  value: string;
+  kind: "search";
+  links?: string[];
+}
+
 export interface QueryRecordsParams {
   p_table_id: string;
-  p_filters: { field: string; op: FilterOp; value?: string; kind: FieldKind }[];
+  p_filters: ({ field: string; op: FilterOp; value?: string; kind: FieldKind } | SearchFilter)[];
   p_sort: { field: string; dir: "asc" | "desc"; kind?: FieldKind }[];
   p_limit: number;
   p_offset: number;
@@ -310,7 +319,9 @@ export function buildRecordQuery(blueprint: Blueprint, query: RecordQuery, conte
   });
 
   if (errors.length) throw new RecordError("invalid", errors.map((e) => e.message).join("; "), errors);
-  return { p_table_id: table.id, p_filters, p_sort, p_limit: q.limit, p_offset: q.offset };
+  const term = q.search?.q.trim();
+  const search: SearchFilter[] = term ? [{ field: "_search", op: "contains", value: term.slice(0, 100), kind: "search", ...(q.search?.links?.length ? { links: q.search.links.slice(0, 200) } : {}) }] : [];
+  return { p_table_id: table.id, p_filters: [...p_filters, ...search], p_sort, p_limit: q.limit, p_offset: q.offset };
 }
 
 export interface AggregateParams {

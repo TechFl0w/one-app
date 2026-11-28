@@ -8,6 +8,8 @@ import { bridged } from "@/sandbox/result";
 import { getCurrentBlueprint } from "@/server/blueprints";
 import { createInvoiceFromQuote, documentUrl, ensureDocumentLink, sendDocument } from "@/server/documents";
 import { documentFor, invoiceWork } from "@/engine/documents";
+import { searchEverything } from "@/engine/search";
+import { supabaseStore } from "@/server/store";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { availableSlots, bookSlot } from "@/booking/service";
 import { localLabel } from "@/engine/dates";
@@ -136,5 +138,14 @@ export async function sandboxBookTime(businessId: string, service: string, start
     const supabase = await createClient();
     const r = await bookSlot(await getCurrentBlueprint(supabase, businessId), supabaseOwnerBackend(supabase, businessId), { serviceId: service, start, client, practitionerId: practitioner });
     return { bookingId: r.bookingId, state: r.state };
+  });
+}
+
+/** App-wide search (⌘K): a few matches from every table, as the signed-in member sees them. */
+export async function sandboxSearch(businessId: string, q: string) {
+  return bridged(async () => {
+    const supabase = await createClient();
+    const bp = await getCurrentBlueprint(supabase, businessId);
+    return searchEverything(bp, supabaseStore(supabase, businessId), String(q ?? ""));
   });
 }

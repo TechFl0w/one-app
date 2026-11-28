@@ -63,6 +63,8 @@ export interface SandboxBridge {
   sendDocument?(table: string, id: string): Promise<BridgeResult<{ link: string; emailed: boolean; reason?: string }>>;
   documentLink?(table: string, id: string): Promise<BridgeResult<string>>;
   invoiceFromQuote?(table: string, id: string, depositPercent?: number): Promise<BridgeResult<{ table: string; id: string }>>;
+  /** App-wide search: a few matches from every table. */
+  search?(q: string): Promise<BridgeResult<{ table: string; tableLabel: string; id: string; title: string }[]>>;
   /** Invoice a client's finished, unbilled work between two dates (document.bill). */
   invoiceWork?(table: string, client: string, from: string, to: string): Promise<BridgeResult<{ table?: string; id?: string; count: number }>>;
 }

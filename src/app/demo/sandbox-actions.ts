@@ -8,6 +8,8 @@ import { bridged } from "@/sandbox/result";
 import { availableSlots, bookSlot } from "@/booking/service";
 import { localLabel } from "@/engine/dates";
 import type { Blueprint } from "@/schema/blueprint";
+import { searchEverything } from "@/engine/search";
+import { memoryStore } from "@/engine/store";
 
 /** Demo data for generated components: reads the sample salon, validates writes, saves nothing. */
 const view = (r: { id: string; data: Record<string, unknown>; createdAt: string; updatedAt: string }): SandboxRecord => ({ id: r.id, data: r.data, createdAt: r.createdAt, updatedAt: r.updatedAt });
@@ -62,5 +64,12 @@ export async function demoBookTime(service: string, start: string, client: { nam
     const { blueprint, records } = await currentDemo();
     const r = await bookSlot(blueprint, memoryBackend({ blueprint, records }).backend, { serviceId: service, start, client, practitionerId: practitioner });
     return { bookingId: r.bookingId, state: r.state }; // the demo doesn't keep it
+  });
+}
+
+export async function demoSearch(q: string) {
+  return bridged(async () => {
+    const { blueprint, records } = await currentDemo();
+    return searchEverything(blueprint, memoryStore(records), String(q ?? ""));
   });
 }

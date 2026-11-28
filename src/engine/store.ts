@@ -35,6 +35,11 @@ function cast(v: unknown, kind: Filter["kind"]): number | string | boolean | nul
 }
 
 function matches(data: Record<string, unknown>, f: Filter): boolean {
+  if (f.kind === "search") {
+    const q = f.value.toLowerCase();
+    const links = new Set(f.links ?? []);
+    return Object.values(data).some((v) => JSON.stringify(v ?? "").toLowerCase().includes(q) || (Array.isArray(v) ? v.some((x) => links.has(String(x))) : links.has(String(v))));
+  }
   const raw = data[f.field];
   if (f.op === "empty") return isEmpty(raw);
   if (f.op === "not_empty") return !isEmpty(raw);

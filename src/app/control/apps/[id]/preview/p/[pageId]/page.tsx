@@ -6,7 +6,7 @@ import { previewApp } from "@/server/preview";
 import { PageView } from "@/components/page/PageView";
 import { previewCreate, previewGet, previewList, previewRemove, previewUpdate } from "../../../../../preview-actions";
 
-export default async function PreviewPage({ params }: PageProps<"/control/apps/[id]/preview/p/[pageId]">) {
+export default async function PreviewPage({ params, searchParams }: PageProps<"/control/apps/[id]/preview/p/[pageId]">) {
   const { id, pageId } = await params;
   const { blueprint, records } = await previewApp(id);
   const page = blueprint.pages.find((p) => p.id === pageId);
@@ -16,6 +16,7 @@ export default async function PreviewPage({ params }: PageProps<"/control/apps/[
       page={page}
       device={await getDevice()}
       env={{
+        params: await searchParams,
         blueprint,
         store: withComputed(memoryStore(records), blueprint),
         formAction: () => async () => ({ ok: false, error: "This is a preview — nothing is saved." }),

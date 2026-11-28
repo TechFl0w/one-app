@@ -159,7 +159,7 @@ export async function loadBlockData(
   original: Block,
   blueprint: Blueprint,
   store: RecordStore,
-  ctx: QueryContext & { recordId?: string } = {},
+  ctx: QueryContext & { recordId?: string; extra?: { filters: RecordFilter[]; search?: { q: string; links?: string[] } } } = {},
 ): Promise<BlockData> {
   if (original.type === "notes") return { kind: "static" };
   if (original.type === "header") return { kind: "header", stats: await headerStats(blueprint, store, original.options?.stats, ctx) };
@@ -259,7 +259,7 @@ export async function loadBlockData(
         }
         const gf = groupField(table, block);
         if (block.type === "board" && !gf) return { kind: "error", message: `Pick a status or choice field to group ${table.label} by.` };
-        const { records, total } = await queryBlock(blueprint, store, { table: table.id, filters, sort: block.source.sort ?? [], limit: DEFAULT_LIMITS[block.type] }, ctx);
+        const { records, total } = await queryBlock(blueprint, store, { table: table.id, filters: [...filters, ...(ctx.extra?.filters ?? [])], ...(ctx.extra?.search ? { search: ctx.extra.search } : {}), sort: block.source.sort ?? [], limit: DEFAULT_LIMITS[block.type] }, ctx);
         const labels = await linkLabels(blueprint, table, records, store);
         const groups = gf ? await groupsFor(blueprint, gf, store, ctx) : undefined;
         return { kind: "records", table, records, total, labels, groups };
@@ -269,7 +269,7 @@ export async function loadBlockData(
       case "gallery":
       case "list": {
         const limit = Math.min(opt(block.options?.limit, isNum) ?? DEFAULT_LIMITS[block.type], 500);
-        const { records, total } = await queryBlock(blueprint, store, { table: table.id, filters: block.source.filters ?? [], sort: block.source.sort ?? [], limit }, ctx);
+        const { records, total } = await queryBlock(blueprint, store, { table: table.id, filters: [...(block.source.filters ?? []), ...(ctx.extra?.filters ?? [])], ...(ctx.extra?.search ? { search: ctx.extra.search } : {}), sort: block.source.sort ?? [], limit }, ctx);
         return { kind: "records", table, records, total, labels: await linkLabels(blueprint, table, records, store) };
       }
     }

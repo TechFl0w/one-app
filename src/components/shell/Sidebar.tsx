@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchButton } from "./GlobalSearch";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -82,6 +83,7 @@ export function Sidebar({ basePath, businesses = [], footer, counts = {} }: Side
           </ul>
         )}
       </div>
+      {!editing && <SearchButton onClick={() => setOpen(false)} />}
       <nav className="flex-1 space-y-0.5 overflow-y-auto" aria-label="Pages">
         {editing &&
           pages.map((p, i) => (

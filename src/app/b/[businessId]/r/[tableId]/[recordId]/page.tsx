@@ -7,7 +7,7 @@ import { submitRecordForm } from "../../../actions";
 import { sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxInvoiceWork, sandboxFreeTimes, sandboxBookTime, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "../../../sandbox-actions";
 
 /** A record's own page (docs: record pages). */
-export default async function RecordPage({ params }: PageProps<"/b/[businessId]/r/[tableId]/[recordId]">) {
+export default async function RecordPage({ params, searchParams }: PageProps<"/b/[businessId]/r/[tableId]/[recordId]">) {
   const { businessId, tableId, recordId } = await params;
   const [{ blueprint, userId, supabase }, device] = await Promise.all([getBusinessContext(businessId), getDevice()]);
   const hasInvoices = blueprint.documents?.some((d) => d.kind === "invoice" && d.table === tableId);
@@ -19,6 +19,7 @@ export default async function RecordPage({ params }: PageProps<"/b/[businessId]/
       device={device}
       userId={userId}
       env={{
+        params: await searchParams,
         blueprint,
         ...(hasInvoices ? { payments: { ready: !!account?.chargesEnabled, settingsHref: `/b/${businessId}/settings/payments` } } : {}),
         store: withComputed(supabaseStore(supabase, businessId), blueprint),

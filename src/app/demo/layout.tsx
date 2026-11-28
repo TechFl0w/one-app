@@ -5,7 +5,7 @@ import { currentDemo } from "@/demo/current";
 import { menuCounts } from "@/engine/menuCounts";
 import { withComputed } from "@/engine/computed";
 import { memoryStore } from "@/engine/store";
-import { demoSandboxCreate, demoSandboxGet, demoSandboxList, demoSandboxRemove, demoSandboxUpdate, demoFreeTimes, demoBookTime } from "./sandbox-actions";
+import { demoSandboxCreate, demoSandboxGet, demoSandboxList, demoSandboxRemove, demoSandboxUpdate, demoFreeTimes, demoSearch, demoBookTime } from "./sandbox-actions";
 
 /** Sample salon running on in-memory data — no account or Supabase needed. */
 // The assistant's server actions run here: rebuilding pages from a design can take a few minutes.
@@ -20,7 +20,7 @@ export default async function DemoLayout({ children }: LayoutProps<"/demo">) {
       mode={{ kind: "local" }}
       counts={counts}
       basePath="/demo"
-      sandbox={{ list: demoSandboxList, get: demoSandboxGet, create: demoSandboxCreate, update: demoSandboxUpdate, remove: demoSandboxRemove, freeTimes: demoFreeTimes, bookTime: demoBookTime }}
+      sandbox={{ list: demoSandboxList, get: demoSandboxGet, create: demoSandboxCreate, update: demoSandboxUpdate, remove: demoSandboxRemove, freeTimes: demoFreeTimes, bookTime: demoBookTime, search: demoSearch }}
       footer={
         <div className="space-y-1">
           <Link href="/demo/inbox" className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
