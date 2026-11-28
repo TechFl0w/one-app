@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { History, Inbox, Settings, ShieldCheck, Zap } from "lucide-react";
+import { History, Inbox, Plug, Settings, ShieldCheck, Zap } from "lucide-react";
+import { getAccount } from "@/server/payments";
 import QRCode from "qrcode";
 import { AppShell } from "@/components/shell/AppShell";
 import { ShareBooking } from "@/components/booking/ShareBooking";
@@ -41,6 +42,10 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
   const booking = blueprint.scheduling ? await ensureBookingPage(supabase, businessId, blueprint.business.name).catch(() => null) : null;
   const bookingUrl = booking?.enabled ? `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/book/${booking.slug}` : null;
   const qrSvg = bookingUrl ? await QRCode.toString(bookingUrl, { type: "svg", margin: 1, color: { dark: "#1f1b14", light: "#ffffff" } }) : "";
+  // Things a new business still needs (shown as "Finish setting up" until done).
+  const takesMoney = blueprint.documents?.some((d) => d.kind === "invoice") || !!blueprint.scheduling?.deposit;
+  const account = takesMoney ? await getAccount(supabase, businessId).catch(() => null) : null;
+  const todo = [takesMoney && !account?.chargesEnabled, !blueprint.site].filter(Boolean).length;
   const { transcript } = userId ? await loadConversation(supabase, businessId, userId).catch(() => ({ transcript: [] })) : { transcript: [] };
   return (
     <AppShell
@@ -76,6 +81,12 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
             <Link href={`/b/${businessId}/approvals`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
               <ShieldCheck className="h-4 w-4" /> Approvals
               <span className="ml-auto rounded-full bg-accent px-2 text-xs font-semibold text-white">{approvals}</span>
+            </Link>
+          )}
+          {todo > 0 && (
+            <Link href={`/b/${businessId}/settings/integrations`} className="flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted hover:bg-ground hover:text-ink">
+              <Plug className="h-4 w-4" /> Finish setting up
+              <span className="ml-auto rounded-full bg-amber-100 px-2 text-xs font-semibold text-amber-900">{todo}</span>
             </Link>
           )}
           {bookingUrl && <ShareBooking url={bookingUrl} qrSvg={qrSvg} business={blueprint.business.name} />}
