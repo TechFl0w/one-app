@@ -58,7 +58,7 @@ export async function createTestBusiness(admin: SupabaseClient, input: { templat
   }
   const token = await createToken(admin, id, uid, "AI tester");
   rememberTestFlag(id);
-  return { businessId: id, name, token, seeded, mcpUrl: `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/api/mcp` };
+  return { businessId: id, name, token, seeded, mcpUrl: `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/api/mcp/${id}` };
 }
 
 /** Removes a test business and everything in it. Refuses real businesses. */

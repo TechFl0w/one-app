@@ -6,19 +6,34 @@
  *   ONE_MCP_URL=https://<app>/api/mcp/<businessId> ONE_MCP_TOKEN=one_… npm run ai-explore -- docs/test-plans/screens.md
  *   (several plans at once: npm run ai-explore -- docs/test-plans/*.md)
  *
+ * Or a fresh test business per plan (docs/testing-api.md), made and removed by the test API:
+ *   ONE_APP_URL=https://<app> TEST_API_TOKEN=… npm run ai-explore -- docs/test-plans/quotes-invoices.md
+ *   A plan picks its template with a line "Template: contractor" (default: appointments); KEEP=1 keeps it.
+ *
  * Needs an Anthropic API key (ANTHROPIC_API_KEY or `ant auth login`). Use a TEST business: the
  * plans add records and change screens. Costs API tokens per run.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import Anthropic from "@anthropic-ai/sdk";
 
-const url = process.env.ONE_MCP_URL;
-const token = process.env.ONE_MCP_TOKEN;
+const fixedUrl = process.env.ONE_MCP_URL;
+const fixedToken = process.env.ONE_MCP_TOKEN;
+const appUrl = process.env.ONE_APP_URL?.replace(/\/$/, "");
+const testToken = process.env.TEST_API_TOKEN;
 const plans = process.argv.slice(2);
-if (!url || !token || !plans.length) {
-  console.error("Usage: ONE_MCP_URL=… ONE_MCP_TOKEN=… npm run ai-explore -- <plan.md> [more plans]");
+if (!plans.length || (!(fixedUrl && fixedToken) && !(appUrl && testToken))) {
+  console.error("Usage: ONE_MCP_URL=… ONE_MCP_TOKEN=… (or ONE_APP_URL=… TEST_API_TOKEN=…) npm run ai-explore -- <plan.md> [more plans]");
   process.exit(2);
 }
+
+/** A fresh test business for one plan (its template from a "Template: …" line). */
+async function testBusiness(plan) {
+  const template = /^template:\s*([a-z_]+)/im.exec(plan)?.[1] ?? "appointments";
+  const r = await fetch(`${appUrl}/api/test/businesses`, { method: "POST", headers: { authorization: `Bearer ${testToken}`, "content-type": "application/json" }, body: JSON.stringify({ template, name: `AI test ${template}` }) });
+  if (!r.ok) throw new Error(`Could not make a test business: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+const removeBusiness = (id) => fetch(`${appUrl}/api/test/businesses/${id}`, { method: "DELETE", headers: { authorization: `Bearer ${testToken}` } });
 
 const client = new Anthropic();
 const SYSTEM = `You are a meticulous QA tester for One App, a platform where small businesses run their whole business in an app an AI built for them.
@@ -35,7 +50,19 @@ Finish with a report in Markdown:
 
 async function explore(planPath) {
   const plan = readFileSync(planPath, "utf8");
-  const messages = [{ role: "user", content: `Test plan (${planPath}):\n\n${plan}` }];
+  const biz = fixedUrl ? null : await testBusiness(plan);
+  const url = biz?.mcpUrl ?? fixedUrl;
+  const token = biz?.token ?? fixedToken;
+  try {
+    return await run(planPath, plan, url, token, biz);
+  } finally {
+    if (biz && !process.env.KEEP) await removeBusiness(biz.businessId);
+  }
+}
+
+async function run(planPath, plan, url, token, biz) {
+  const extra = biz ? `\n\nThis is a fresh test business (${biz.name}) with sample data. Its emails and texts are captured, not sent.` : "";
+  const messages = [{ role: "user", content: `Test plan (${planPath}):\n\n${plan}${extra}` }];
   let response;
   // The MCP connector runs the tool calls on Anthropic's side; a long turn may pause — continue it.
   for (let i = 0; i < 8; i++) {
