@@ -83,7 +83,7 @@ describe("runner", () => {
     expect(await enqueueForEvent(e, io, queue)).toBe(0); // idempotent
 
     await runDueJobs(io, queue, new Date("2026-11-24T10:00:00Z"));
-    expect(effects.map((x) => [x.kind, x.detail])).toEqual([["notify", `Booking ${BOOKING} done (48)`]]);
+    expect(effects.map((x) => [x.kind, x.detail])).toEqual([["notify", `Booking ${BOOKING} done ($48)`]]);
     expect(runs[0]).toMatchObject({ status: "waiting", steps: [{ outcome: "done" }, { outcome: "waiting" }] });
     expect(jobs[0]).toMatchObject({ status: "queued", step: 2, runAt: "2026-11-24T12:00:00.000Z" });
 
@@ -264,5 +264,26 @@ describe("plain words", () => {
     const a = { id: "aut_x", label: "X", enabled: true, trigger: { type: "date_reached", table: "tbl_p", field: "fld_due" }, conditions: [], actions: [{ type: "notify" }] } as unknown as Automation;
     expect(describeCondition(bp, a, { field: "fld_ls", op: "neq", value: "opt_ended" })).toBe("Lease status is not Ended");
     expect(describeCondition(bp, a, { field: "fld_due", op: "lte", value: "@today+30d" })).toBe("Due is on or before 30 days from today");
+  });
+});
+
+describe("changing a linked record", () => {
+  it("a booking's step can update its client (via the link)", async () => {
+    const CLIENT = "00000000-0000-4000-8000-00000000c001";
+    const bp = blueprint([{
+      id: "aut_vip", label: "Done bookings make the client VIP", enabled: true,
+      trigger: { type: "record_updated", table: "tbl_bookings", field: "fld_status" },
+      conditions: [{ field: "fld_status", op: "eq", value: "opt_done" }],
+      actions: [{ type: "update_record", via: "fld_client", values: { fld_vip: true } }],
+    }]);
+    const { io, effects } = memoryIO(bp, [
+      { id: CLIENT, tableId: "tbl_clients", data: { fld_name: "Ava" } },
+      { id: BOOKING, tableId: "tbl_bookings", data: { fld_status: "opt_done", fld_client: CLIENT } },
+    ]);
+    const { queue } = memoryQueue();
+    await enqueueForEvent(ev({ before: { fld_status: "opt_booked", fld_client: CLIENT }, after: { fld_status: "opt_done", fld_client: CLIENT } }), io, queue);
+    await runDueJobs(io, queue, new Date("2026-11-24T10:00:00Z"));
+    const upd = effects.find((x) => x.kind === "update_record");
+    expect(upd?.detail).toMatchObject({ id: CLIENT, values: { fld_vip: true } });
   });
 });

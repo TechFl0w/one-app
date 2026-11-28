@@ -4,6 +4,9 @@ import { createContext, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSandbox } from "@/components/sandbox/SandboxProvider";
 import { soft } from "./tone";
+import { Plus } from "lucide-react";
+import { useEditOptional } from "@/components/edit/editContext";
+import { ChoicesEditor } from "@/components/edit/ChoicesEditor";
 
 /**
  * For a card's "→ next stage" button: the stage after the column the card is in now, and a move
@@ -39,6 +42,9 @@ export function DragBoard({
   locked?: string;
 }) {
   const sandbox = useSandbox();
+  // Columns are the field's choices: add, rename, recolour and remove them right here.
+  const edit = useEditOptional();
+  const [editing, setEditing] = useState(false);
   const router = useRouter();
   const key = cards.map((c) => `${c.id}:${c.group}`).join("|");
   const [placed, setPlaced] = useState(() => ({ key, map: new Map(cards.map((c) => [c.id, c.group])) }));
@@ -152,7 +158,13 @@ export function DragBoard({
             </div>
           );
         })}
+        {edit && !locked && (
+          <button type="button" onClick={() => setEditing(true)} className="flex w-44 shrink-0 flex-col items-center justify-center gap-1 rounded-[20px] border-[1.5px] border-dashed border-line text-sm font-semibold text-muted hover:border-accent hover:text-accent">
+            <Plus className="h-5 w-5" /> Add or edit columns
+          </button>
+        )}
       </div>
+      {editing && <ChoicesEditor open onClose={() => { setEditing(false); router.refresh(); }} table={table} fieldId={field} />}
       {dragged && drag && (
         <div className="pointer-events-none fixed z-[100] rotate-2 shadow-lg" style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.w }}>
           {dragged.node}

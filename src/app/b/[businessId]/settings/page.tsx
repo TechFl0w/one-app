@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck, ChevronRight, Code2, CreditCard, FileSpreadsheet, LogOut, Mail, MessageCircle, Plug, Settings } from "lucide-react";
+import { ChevronRight, FileSpreadsheet, LogOut, Settings } from "lucide-react";
 import { getBusinessContext } from "@/server/context";
 import { usageThisMonth } from "@/server/ownerChat";
 import { AI_MODELS, aiModelInfo, resolveAiModel } from "@/agent/models";
@@ -19,15 +19,7 @@ export default async function SettingsPage({ params }: PageProps<"/b/[businessId
   const { data: biz } = manager ? await supabase.from("businesses").select("ai_model").eq("id", businessId).maybeSingle() : { data: null };
   const model = resolveAiModel(biz?.ai_model);
   const base = `/b/${businessId}`;
-  const links = [
-    { href: `${base}/settings/booking`, icon: CalendarCheck, label: "Online booking", hint: "Your booking page, hours and rules", show: !!blueprint.scheduling },
-    { href: `${base}/settings/payments`, icon: CreditCard, label: "Payments", hint: "Stripe, deposits, payment links", show: true },
-    { href: `${base}/settings/email`, icon: Mail, label: "Email", hint: "Sender name, replies, inbound address", show: true },
-    { href: `${base}/settings/whatsapp`, icon: MessageCircle, label: "WhatsApp", hint: "Your number and message templates", show: true },
-    { href: `${base}/settings/connections`, icon: Plug, label: "Connect AI apps", hint: "Use your business from Claude, ChatGPT…", show: true },
-    { href: `${base}/settings/code`, icon: Code2, label: "API keys & code", hint: "Keys for outside services, server code, runs", show: true },
-    { href: `${base}/import`, icon: FileSpreadsheet, label: "Import a spreadsheet", hint: "Bring in clients, products, anything", show: true },
-  ].filter((l) => l.show);
+
 
   return (
     <div className="mx-auto max-w-3xl space-y-10">
@@ -69,18 +61,12 @@ export default async function SettingsPage({ params }: PageProps<"/b/[businessId
       )}
 
       <section>
-        <h2 className="mb-4 text-lg font-semibold">Connections & tools</h2>
-        <ul className="card divide-y divide-line">
-          {links.map((l) => (
-            <li key={l.href}>
-              <Link href={l.href} className="flex items-center gap-4 px-6 py-4 hover:bg-ground">
-                <l.icon className="h-5 w-5 text-accent" />
-                <span className="flex-1"><span className="block font-medium">{l.label}</span><span className="block text-sm text-muted">{l.hint}</span></span>
-                <ChevronRight className="h-4 w-4 text-muted" />
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <h2 className="mb-4 text-lg font-semibold">Data</h2>
+        <Link href={`${base}/import`} className="card flex items-center gap-4 px-6 py-4 hover:bg-ground">
+          <FileSpreadsheet className="h-5 w-5 text-accent" />
+          <span className="flex-1"><span className="block font-medium">Import a spreadsheet</span><span className="block text-sm text-muted">Bring in clients, products, anything</span></span>
+          <ChevronRight className="h-4 w-4 text-muted" />
+        </Link>
       </section>
 
       <form action={signOut}>

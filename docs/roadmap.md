@@ -36,3 +36,16 @@ Work top to bottom. Each task should end with tests passing and a short PR.
 ## Phase 6 — Reach
 20. MCP server per business. 21. Import tool (CSV + Square API). 22. Calendar sync. 23. Integration service for long tail.
 24. Mechanic template (capacity mode, quotes, vehicles).
+
+## Owner-testing plan 3 (Nov 27) — status
+Built: trust bugs (theme-aware alert colours, stale approvals cleared, multi-link saves); hierarchy
+(pickers narrow by parent in pop-up and page forms, + New inline, parent shown, record breadcrumbs);
+booking for a pet/car (`scheduling.for`), size variants, requirements with uploads, redesigned
+phone-first booking page, manage/cancel link; recurring work (plans → visits, skips stay skipped);
+calendar overlaps, all-day row, multi-day spans; rate card (`field.fill`), crew charge/pay rates and
+margin, invoice a period (`document.bill`), only sent invoices owed, Stripe prompts; board column
+editing, grouped automations, private fields, starter icons; one-page website (`blueprint.site`,
+`/s/<slug>`); Integrations page, calendar feeds, accounting CSV, SMS; test API (docs/testing-api.md).
+
+Still to do: design studio; `<business>.oneapp.site` and custom domains (needs the domain);
+two-way Google/Outlook sync and QuickBooks/Xero sync (need OAuth apps); editing site text in place.

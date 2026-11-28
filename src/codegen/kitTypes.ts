@@ -99,6 +99,12 @@ declare module "@one/kit" {
   /** Shows photos and videos full screen in One App (swipe through, videos play). FileImage and Gallery do this on tap. */
   export function viewFiles(files: unknown, index?: number): void;
 
+  // ---- Online booking (businesses that take bookings) ----
+  /** Free times for a service on a date ("YYYY-MM-DD", business time zone), optionally with one staff member; same engine as the booking page. slots[].local is the business's wall clock, e.g. "2026-11-27 09:00 (UTC−07:00)". */
+  export function useFreeTimes(service: string | null | undefined, date: string | null | undefined, practitioner?: string | null, days?: number): { slots: { start: string; end: string; practitionerId: string; local: string }[]; loading: boolean; error: string | null; timezone?: string };
+  /** Books one of those times for a client (found by email/phone or added). Throws if the time was just taken. */
+  export function bookTime(service: string, start: string, client: { name: string; email?: string; phone?: string }, practitioner?: string): Promise<{ bookingId: string; state: string }>;
+
   // ---- UI parts (styled like One App; Tailwind classes also work everywhere) ----
   export function Card(props: { title?: ReactNode; actions?: ReactNode; className?: string; children?: ReactNode; padded?: boolean }): JSX.Element;
   export function Button(props: { variant?: "primary" | "ghost" | "danger" | "link"; size?: "sm" | "md"; type?: "button" | "submit"; disabled?: boolean; onClick?: () => void; className?: string; children?: ReactNode }): JSX.Element;

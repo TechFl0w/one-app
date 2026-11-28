@@ -1,7 +1,7 @@
 import type { Automation, Field, Page, Table } from "@/schema/blueprint";
 import { choice, list, multi, type Question, type Seed, type Template } from "./types";
 import { isoDate, localToday } from "@/engine/dates";
-import { automation, block, check, COLORS, date, email, file, finish, link, longText, money, optId, page, phone, status, text } from "./kit";
+import { automation, taxFrom, taxQuestion, block, check, COLORS, date, email, file, finish, link, longText, money, num, optId, page, phone, status, text } from "./kit";
 import { invoicingTables } from "./invoicing";
 
 /**
@@ -73,7 +73,7 @@ export const contractor: Template = {
   label: "Quote & invoice jobs",
   description: "Landscapers, electricians, plumbers, builders: clients and sites, jobs, quotes clients accept online, invoices they pay online.",
   businessType: "contractor",
-  questions: [trade, crew, extras, sample],
+  questions: [trade, taxQuestion, crew, extras, sample],
   build(business, answers) {
     const kind = choice(answers, trade);
     const want = new Set(multi(answers, extras));
@@ -82,6 +82,7 @@ export const contractor: Template = {
       links: [{ table: "tbl_jobs", label: "Job", id: "job" }, { table: "tbl_sites", label: "Site", id: "site" }],
       quoteTerms: "Valid for 30 days. A 50% deposit books the work; the balance is due on completion.",
       invoiceTerms: "Payment due within 14 days. Thank you for your business!",
+      rates: true,
     });
     const tables: Table[] = [
       {
@@ -95,7 +96,7 @@ export const contractor: Template = {
           longText("fld_c_address", "Billing address"),
           longText("fld_c_notes", "Notes"),
           rollup({ id: "fld_c_jobs", label: "Open jobs", from: "tbl_jobs", via: "fld_j_client", field: "fld_j_title", agg: "count", where: [OPEN, { field: "fld_j_stage", op: "neq", value: S("Done") }] }),
-          rollup({ id: "fld_c_owed", label: "Owes", from: "tbl_invoices", via: "fld_i_client", field: "fld_i_balance", agg: "sum", format: "money" }),
+          rollup({ id: "fld_c_owed", label: "Owes", from: "tbl_invoices", via: "fld_i_client", field: "fld_i_balance", agg: "sum", format: "money", where: [{ field: "fld_i_sent", op: "not_empty" }] }),
         ],
       },
       {
@@ -114,7 +115,25 @@ export const contractor: Template = {
         id: "tbl_crew",
         label: "Crew",
         primaryField: "fld_cr_name",
-        fields: [text("fld_cr_name", "Name", true), phone("fld_cr_phone"), money("fld_cr_rate", "Hourly rate"), check("fld_cr_active", "Active")],
+        // Two rates: what the business charges for them, and what they're paid. Margin follows.
+        fields: [text("fld_cr_name", "Name", true), phone("fld_cr_phone"), link("fld_cr_level", "Rate", "tbl_rates"), { ...money("fld_cr_rate", "Charge rate (per hour)"), fill: { from: "fld_cr_level", field: "fld_rt_price" } } as Field, money("fld_cr_pay", "Pay rate (per hour)"), check("fld_cr_active", "Active")],
+      },
+      {
+        id: "tbl_time",
+        label: "Hours worked",
+        primaryField: "fld_t_job",
+        openIn: "modal",
+        fields: [
+          link("fld_t_job", "Job", "tbl_jobs", { required: true }),
+          link("fld_t_crew", "Who", "tbl_crew", { required: true }),
+          date("fld_t_day", "Day"),
+          { ...num("fld_t_hours", "Hours"), required: true, min: 0 } as Field,
+          // Copied from the person when chosen, so later raises don't rewrite old jobs.
+          { ...money("fld_t_charge_rate", "Charge rate"), fill: { from: "fld_t_crew", field: "fld_cr_rate" } } as Field,
+          { ...money("fld_t_pay_rate", "Pay rate"), fill: { from: "fld_t_crew", field: "fld_cr_pay" } } as Field,
+          { id: "fld_t_charged", label: "Charged", type: "formula", expression: "round(fld_t_hours * fld_t_charge_rate, 2)", format: "money" } as Field,
+          { id: "fld_t_cost", label: "Cost", type: "formula", expression: "round(fld_t_hours * fld_t_pay_rate, 2)", format: "money" } as Field,
+        ],
       },
       {
         id: "tbl_jobs",
@@ -133,7 +152,11 @@ export const contractor: Template = {
           rollup({ id: "fld_j_quoted", label: "Quoted", from: "tbl_quotes", via: "fld_q_job", field: "fld_q_total", agg: "sum", where: [{ field: "fld_q_status", op: "neq", value: S("Declined") }], format: "money" }),
           rollup({ id: "fld_j_won", label: "Accepted", from: "tbl_quotes", via: "fld_q_job", field: "fld_q_total", agg: "sum", where: [{ field: "fld_q_status", op: "eq", value: S("Accepted") }], format: "money" }),
           rollup({ id: "fld_j_invoiced", label: "Invoiced", from: "tbl_invoices", via: "fld_i_job", field: "fld_i_total", agg: "sum", format: "money" }),
-          rollup({ id: "fld_j_owed", label: "Owed", from: "tbl_invoices", via: "fld_i_job", field: "fld_i_balance", agg: "sum", format: "money" }),
+          rollup({ id: "fld_j_owed", label: "Owed", from: "tbl_invoices", via: "fld_i_job", field: "fld_i_balance", agg: "sum", format: "money", where: [{ field: "fld_i_sent", op: "not_empty" }] }),
+          rollup({ id: "fld_j_hours", label: "Hours", from: "tbl_time", via: "fld_t_job", field: "fld_t_hours", agg: "sum" }),
+          rollup({ id: "fld_j_labour", label: "Labour charged", from: "tbl_time", via: "fld_t_job", field: "fld_t_charged", agg: "sum", format: "money" }),
+          rollup({ id: "fld_j_cost", label: "Labour cost", from: "tbl_time", via: "fld_t_job", field: "fld_t_cost", agg: "sum", format: "money" }),
+          { id: "fld_j_margin", label: "Labour margin", type: "formula", expression: "fld_j_labour - fld_j_cost", format: "money" } as Field,
         ],
       },
       ...inv.tables,
@@ -179,15 +202,19 @@ export const contractor: Template = {
       page("pg_sites", "Sites", "home", 6, [
         block("blk_s_gallery", "gallery", [0, 0, 12, 6], { table: "tbl_sites", sort: [{ field: "fld_s_address", dir: "asc" }] }, { title: "Sites", fields: ["fld_s_client", "fld_s_jobs"] }),
       ]),
-      page("pg_crew", "Crew", "team", 7, [block("blk_crew", "table", [0, 0, 12, 5], { table: "tbl_crew", sort: [{ field: "fld_cr_name", dir: "asc" }] }, { title: "Crew" })]),
+      page("pg_crew", "Crew & rates", "team", 7, [
+        block("blk_crew", "table", [0, 0, 8, 5], { table: "tbl_crew", sort: [{ field: "fld_cr_name", dir: "asc" }] }, { title: "Crew", columns: ["fld_cr_name", "fld_cr_phone", "fld_cr_level", "fld_cr_rate", "fld_cr_pay"] }),
+        block("blk_rates", "table", [8, 0, 4, 5], { table: "tbl_rates", sort: [{ field: "fld_rt_price", dir: "asc" }] }, { title: "Rates", columns: ["fld_rt_name", "fld_rt_price"] }),
+      ]),
 
       recordPage("pg_r_job", "Job", "tbl_jobs", [
         block("blk_rj_hero", "details", [0, 0, 12, 3], { table: "tbl_jobs" }, { part: "hero" }),
         block("blk_rj_quotes", "table", [0, 3, 8, 3], { table: "tbl_quotes", filters: [{ field: "fld_q_job", op: "eq", value: "@record" }] }, { title: "Quotes", columns: ["fld_q_number", "fld_q_title", "fld_q_status", "fld_q_total"] }),
         block("blk_rj_facts", "details", [8, 3, 4, 6], { table: "tbl_jobs" }, { part: "facts" }),
         block("blk_rj_invoices", "table", [0, 6, 8, 3], { table: "tbl_invoices", filters: [{ field: "fld_i_job", op: "eq", value: "@record" }] }, { title: "Invoices", columns: ["fld_i_number", "fld_i_title", "fld_i_status", "fld_i_total", "fld_i_balance"] }),
-        block("blk_rj_photos", "details", [0, 9, 8, 3], { table: "tbl_jobs" }, { part: "photos" }),
-        block("blk_rj_activity", "activity", [8, 9, 4, 3], { table: "tbl_jobs" }),
+        block("blk_rj_time", "table", [0, 9, 8, 3], { table: "tbl_time", filters: [{ field: "fld_t_job", op: "eq", value: "@record" }], sort: [{ field: "fld_t_day", dir: "desc" }] }, { title: "Hours worked", columns: ["fld_t_day", "fld_t_crew", "fld_t_hours", "fld_t_charged", "fld_t_cost"] }),
+        block("blk_rj_photos", "details", [0, 12, 8, 3], { table: "tbl_jobs" }, { part: "photos" }),
+        block("blk_rj_activity", "activity", [8, 9, 4, 6], { table: "tbl_jobs" }),
       ]),
       recordPage("pg_r_quote", "Quote", "tbl_quotes", [
         block("blk_rq_doc", "document", [0, 0, 8, 9], { table: "tbl_quotes" }),
@@ -242,6 +269,16 @@ export const contractor: Template = {
           actions: [{ type: "send_message", channel: "auto", to: "fld_i_client", message: "A friendly reminder: invoice {{fld_i_number}} ({{fld_i_title}}) was due yesterday. Thank you!" }],
         }),
       );
+    // An accepted quote wins the job: the board moves by itself (only from the stages before Won).
+    automations.push(
+      automation({
+        id: "aut_quote_won",
+        label: "Move the job to Won when its quote is accepted",
+        trigger: { type: "record_updated", table: "tbl_quotes", field: "fld_q_accepted" },
+        conditions: [{ field: "fld_q_accepted", op: "not_empty" }, { field: "fld_q_job", op: "not_empty" }],
+        actions: [{ type: "update_record", via: "fld_q_job", values: { fld_j_stage: S("Won") } }],
+      }),
+    );
     automations.push(
       automation({
         id: "aut_quote_accepted",
@@ -252,13 +289,19 @@ export const contractor: Template = {
       }),
     );
 
-    const seed: Seed[] = list(answers, crew).map((name, i) => ({ table: "tbl_crew", ref: `crew${i}`, data: { fld_cr_name: name, fld_cr_active: true } }));
+    const seed: Seed[] = [
+      { table: "tbl_rates", ref: "rate_app", data: { fld_rt_name: "Apprentice", fld_rt_price: 65 } },
+      { table: "tbl_rates", ref: "rate_std", data: { fld_rt_name: "Standard", fld_rt_price: 95 } },
+      { table: "tbl_rates", ref: "rate_snr", data: { fld_rt_name: "Senior", fld_rt_price: 120 } },
+      { table: "tbl_rates", ref: "rate_ah", data: { fld_rt_name: "After hours", fld_rt_price: 150 } },
+      ...list(answers, crew).map((name, i): Seed => ({ table: "tbl_crew", ref: `crew${i}`, data: { fld_cr_name: name, fld_cr_active: true, fld_cr_level: i === 0 ? "@ref:rate_snr" : "@ref:rate_std", fld_cr_rate: i === 0 ? 120 : 95, fld_cr_pay: i === 0 ? 55 : 38 } })),
+    ];
     if (choice(answers, sample) === "yes") seed.push(...sampleData(isoDate(localToday(new Date(), business.timezone)), kind, seed.length > 0));
 
     return {
       blueprint: finish({
         version: 1,
-        business: { ...business, type: "contractor" },
+        business: { ...business, type: "contractor", ...taxFrom(choice(answers, taxQuestion)) },
         tables,
         pages,
         automations,

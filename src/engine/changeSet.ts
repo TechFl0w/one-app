@@ -1,6 +1,8 @@
+import { automationIssues } from "@/automations/check";
+import { describeStep, planStep } from "@/automations/engine";
 import { brokenByChange, describeId } from "@/codegen/references";
 import type { z } from "zod";
-import { Blueprint, type Block, type LayoutKey, type Page } from "@/schema/blueprint";
+import { Blueprint, isComputedField, type Automation, type Block, type Field, type LayoutKey, type Page } from "@/schema/blueprint";
 import { ChangeSet, OP_RISK, type Operation } from "@/schema/changeSet";
 import { layoutName } from "./layout";
 
@@ -51,6 +53,36 @@ export interface ApplyOptions {
    * Ops are applied by id against the current blueprint; anything that no longer fits fails.
    */
   allowRebase?: boolean;
+  /** For the setup window check (tests). */
+  now?: Date;
+}
+
+/** Deleting what holds data always asks, even while setting up. */
+const ALWAYS_ASK = new Set<Operation["op"]>(["removeTable", "removeField", "removeDocument"]);
+
+/**
+ * How risky one operation is on this setup. Beyond OP_RISK: changing how a computed value is
+ * worked out, renaming a field or adding choices deletes nothing, so it's safe; and while a new
+ * business is being set up, setup changes are safe except deleting tables and fields.
+ */
+export function opRisk(bp: Blueprint, op: Operation, settingUp = false): "safe" | "risky" {
+  const base = OP_RISK[op.op];
+  if (base === "safe") return "safe";
+  if (settingUp && !ALWAYS_ASK.has(op.op)) return "safe";
+  if (op.op === "updateField") {
+    const before = bp.tables.find((t) => t.id === op.tableId)?.fields.find((f) => f.id === op.field.id);
+    if (!before) return base;
+    if (isComputedField(before) && isComputedField(op.field)) return "safe";
+    if (before.type !== op.field.type) return "risky";
+    // Same kind of field: risky only if choices disappear or it becomes required.
+    const opts = (f: Field) => ("options" in f && Array.isArray(f.options) ? (f.options as { id: string; label: string }[]) : null);
+    const was = opts(before);
+    const now = opts(op.field);
+    const lost = was && now ? was.some((o) => !now.some((n) => n.id === o.id)) : false;
+    const nowRequired = "required" in op.field && op.field.required && !("required" in before && before.required);
+    return lost || nowRequired ? "risky" : "safe";
+  }
+  return base;
 }
 
 /** Dry-run: what would happen, without throwing. Use this to render the preview. */
@@ -108,9 +140,10 @@ function run(blueprint: Blueprint, input: unknown, opts: ApplyOptions): ChangeSe
   const inverseOps: Operation[][] = [];
   const previews: OpPreview[] = [];
 
+  const settingUp = !!blueprint.business.setupUntil && Date.parse(blueprint.business.setupUntil) > (opts.now ?? new Date()).getTime();
   cs.ops.forEach((op, i) => {
     try {
-      previews.push({ op: op.op, risk: OP_RISK[op.op], description: describe(draft, op) });
+      previews.push({ op: op.op, risk: opRisk(draft, op, settingUp), description: describe(draft, op) });
       inverseOps.push(applyOp(draft, op));
     } catch (e) {
       if (e instanceof ChangeSetError) throw new ChangeSetError(e.code, `Step ${i + 1}: ${e.message}`, i);
@@ -122,6 +155,13 @@ function run(blueprint: Blueprint, input: unknown, opts: ApplyOptions): ChangeSe
   const checked = Blueprint.safeParse(draft);
   if (!checked.success) {
     throw new ChangeSetError("invalid", explainIssue(draft, checked.error.issues[0]), undefined, checked.error.issues);
+  }
+  // An automation is checked when it's added or changed, so it can't silently do nothing later.
+  for (const op of cs.source === "undo" ? [] : cs.ops) {
+    if (op.op !== "addAutomation" && op.op !== "updateAutomation") continue;
+    const a = checked.data.automations.find((x) => x.id === op.automation.id);
+    const issues = a ? automationIssues(checked.data, a) : [];
+    if (issues.length) throw new ChangeSetError("invalid", `The automation “${a!.label}” won't work: ${issues.join("; ")}.`);
   }
   // Never break a live screen: removing something a screen's code uses is refused (rename is fine).
   const broken = brokenByChange(blueprint, checked.data);
@@ -250,14 +290,14 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
     }
 
     case "updateBusiness": {
-      const old: Partial<Blueprint["business"]> = {};
-      for (const key of Object.keys(op.business) as (keyof Blueprint["business"])[]) {
-        const value = op.business[key];
+      const old: Record<string, unknown> = {};
+      const biz = bp.business as Record<string, unknown>;
+      for (const [key, value] of Object.entries(op.business)) {
         if (value === undefined) continue;
-        old[key] = bp.business[key];
-        bp.business[key] = value;
+        old[key] = biz[key];
+        biz[key] = value;
       }
-      return [{ op: "updateBusiness", business: old }];
+      return [{ op: "updateBusiness", business: old as Partial<Blueprint["business"]> }];
     }
 
     case "addTable": {
@@ -329,6 +369,22 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
       const [old] = docs.splice(i, 1);
       if (!docs.length) delete bp.documents;
       return [{ op: "setDocument", document: old }];
+    }
+    case "setRecurring": {
+      const list = (bp.recurring ??= []);
+      const i = list.findIndex((r) => r.id === op.recurring.id);
+      const old = i >= 0 ? structuredClone(list[i]) : null;
+      if (i >= 0) list[i] = op.recurring;
+      else list.push(op.recurring);
+      return [old ? { op: "setRecurring", recurring: old } : { op: "removeRecurring", recurringId: op.recurring.id }];
+    }
+    case "removeRecurring": {
+      const list = bp.recurring ?? [];
+      const i = list.findIndex((r) => r.id === op.recurringId);
+      if (i < 0) throw new ChangeSetError("not_found", `Recurring charge ${op.recurringId} not found`);
+      const [old] = list.splice(i, 1);
+      if (!list.length) delete bp.recurring;
+      return [{ op: "setRecurring", recurring: old }];
     }
     case "setPageBadge": {
       const page = pageOf(bp, op.pageId);
@@ -445,6 +501,12 @@ function applyOp(bp: Blueprint, op: Operation): Operation[] {
       if (!bp.components!.length) delete bp.components;
       return [{ op: "putComponent", component }];
     }
+    case "setSite": {
+      const old = bp.site ?? null;
+      if (op.site) bp.site = structuredClone(op.site);
+      else delete bp.site;
+      return [{ op: "setSite", site: old }];
+    }
     case "setTheme": {
       const old = bp.theme ?? null;
       if (op.theme) bp.theme = structuredClone(op.theme);
@@ -513,13 +575,24 @@ function describe(bp: Blueprint, op: Operation): string {
     case "addTable":
       return `Add table ${q(op.table.label)}`;
     case "removeTable":
-      return `Remove table ${table(op.tableId)}`;
+      return `Remove ${table(op.tableId)} and everything in it (you can undo this; adding a table with that name later starts it empty)`;
     case "addField":
       return `Add field ${q(op.field.label)} to ${table(op.tableId)}`;
     case "removeField":
-      return `Remove field ${labelOrId(bp.tables.find((t) => t.id === op.tableId)?.fields ?? [], op.fieldId)} from ${table(op.tableId)}`;
-    case "updateField":
-      return `Change field ${q(op.field.label)} on ${table(op.tableId)}`;
+      return `Delete ${labelOrId(bp.tables.find((t) => t.id === op.tableId)?.fields ?? [], op.fieldId)} from ${table(op.tableId)} (what's filled in there is lost)`;
+    case "updateField": {
+      const before = bp.tables.find((t) => t.id === op.tableId)?.fields.find((f) => f.id === op.field.id);
+      if (before && isComputedField(before)) return `Change how ${q(op.field.label)} is worked out on ${table(op.tableId)}`;
+      const was = before && "options" in before && Array.isArray(before.options) ? (before.options as { id: string; label: string }[]) : null;
+      const now = "options" in op.field && Array.isArray(op.field.options) ? (op.field.options as { id: string; label: string }[]) : null;
+      if (was && now) {
+        const added = now.filter((o) => !was.some((b) => b.id === o.id)).map((o) => q(o.label));
+        const gone = was.filter((o) => !now.some((n) => n.id === o.id)).map((o) => q(o.label));
+        if (added.length || gone.length) return [added.length ? `Add ${added.join(", ")}` : "", gone.length ? `remove ${gone.join(", ")}` : ""].filter(Boolean).join(" and ") + ` as choices for ${q(op.field.label)} on ${table(op.tableId)}`;
+      }
+      if (before && before.label !== op.field.label && before.type === op.field.type) return `Rename ${q(before.label)} to ${q(op.field.label)} on ${table(op.tableId)}`;
+      return `Change ${q(op.field.label)} on ${table(op.tableId)}${before && before.type !== op.field.type ? ` (from ${before.type} to ${op.field.type})` : ""}`;
+    }
     case "addPage":
       return `Add page ${q(op.page.label)}`;
     case "removePage":
@@ -532,6 +605,13 @@ function describe(bp: Blueprint, op: Operation): string {
       return `Set up ${q(op.document.label)} (${op.document.kind}) on ${table(op.document.table)}`;
     case "removeDocument":
       return `Remove document ${op.documentId}`;
+    case "setRecurring": {
+      const r = op.recurring;
+      const every = r.every === "week" ? "every week" : r.every === "2weeks" ? "every 2 weeks" : r.every === "month" ? "every month" : "weekly or monthly as set on each";
+      return `Charge ${q(r.label)} ${every} from the start date until the end date (into ${table(r.charges.table)})`;
+    }
+    case "removeRecurring":
+      return `Stop the recurring charge ${labelOrId(bp.recurring ?? [], op.recurringId)}`;
     case "setPageBadge":
       return `${op.badge ? "Show a count" : "Remove the count"} next to page ${page(op.pageId)}`;
     case "reorderPages":
@@ -554,20 +634,26 @@ function describe(bp: Blueprint, op: Operation): string {
       return op.blocks
         ? `Set up a separate ${layoutName(op.layout)} layout for ${page(op.pageId)}`
         : `Remove the ${layoutName(op.layout)} layout of ${page(op.pageId)}`;
-    case "setScheduling":
-      return op.scheduling ? "Change booking settings (hours, rules, deposits)" : "Turn off online booking setup";
+    case "setScheduling": {
+      if (!op.scheduling) return "Turn off online booking";
+      const sc = op.scheduling;
+      const deposit = sc.deposit ? (sc.deposit.kind === "percent" ? `a ${sc.deposit.value}% deposit holds the slot` : `a ${sc.deposit.value} ${bp.business.currency ?? ""} deposit holds the slot`.replace("  ", " ")) : "no deposit";
+      return `Online booking: open ${hoursInWords(sc.hours)}; ${deposit}${sc.rules.cancelWindowHours ? `; free cancelling up to ${sc.rules.cancelWindowHours} hours before` : ""}`;
+    }
     case "addAutomation":
-      return `Add automation ${q(op.automation.label)}`;
+      return `New automatic step ${q(op.automation.label)}: ${automationInWords(bp, op.automation)}`;
     case "removeAutomation":
       return `Remove automation ${auto(op.automationId)}`;
     case "updateAutomation":
-      return `Change automation ${q(op.automation.label)}`;
+      return `Change the automatic step ${q(op.automation.label)}: ${automationInWords(bp, op.automation)}`;
     case "toggleAutomation":
       return `${op.enabled ? "Turn on" : "Turn off"} automation ${auto(op.automationId)}`;
     case "putComponent":
       return (bp.components ?? []).some((c) => c.id === op.component.id) ? `Update screen ${q(op.component.label)}` : `Add screen ${q(op.component.label)}`;
     case "removeComponent":
       return `Remove screen ${labelOrId(bp.components ?? [], op.componentId)}`;
+    case "setSite":
+      return op.site ? (op.site.enabled ? "Update the website" : "Update the website (not published)") : "Remove the website";
     case "setTheme":
       return op.theme ? "Change the look (colours, fonts, shape)" : "Go back to the standard look";
     case "putFunction": {
@@ -577,4 +663,35 @@ function describe(bp: Blueprint, op: Operation): string {
     case "removeFunction":
       return `Remove background task ${labelOrId(bp.functions ?? [], op.functionId)}`;
   }
+}
+
+const DAY_NAMES: Record<string, string> = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
+/** { mon: [["09:00","17:00"]], … } → "Mon–Fri 09:00–17:00, Sat 10:00–14:00". */
+function hoursInWords(h: Record<string, [string, string][] | undefined>): string {
+  const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+  const key = (d: string) => (h[d] ?? []).map(([a, b]) => `${a}–${b}`).join(", ");
+  const groups: { from: string; to: string; ranges: string }[] = [];
+  for (const d of days) {
+    const r = key(d);
+    if (!r) continue;
+    const last = groups.at(-1);
+    if (last && last.ranges === r && days.indexOf(d) === days.indexOf(last.to) + 1) last.to = d;
+    else groups.push({ from: d, to: d, ranges: r });
+  }
+  return groups.length ? groups.map((g) => `${DAY_NAMES[g.from]}${g.to !== g.from ? `–${DAY_NAMES[g.to]}` : ""} ${g.ranges}`).join(", ") : "no days yet";
+}
+
+/** "1 day before Start: send the appointment reminder by WhatsApp or email". */
+function automationInWords(bp: Blueprint, a: Automation): string {
+  const t = bp.tables.find((x) => x.id === a.trigger.table);
+  const field = t?.fields.find((f) => f.id === a.trigger.field)?.label;
+  const offset = typeof (a.trigger as { offset?: unknown }).offset === "string" ? String((a.trigger as { offset?: string }).offset) : "";
+  const thing = t ? t.label.replace(/s$/, "").toLowerCase() : "record";
+  const when =
+    a.trigger.type === "record_created" ? `when a ${thing} is added` :
+    a.trigger.type === "status_changed" ? `when a ${thing}'s ${field ?? "status"} changes` :
+    a.trigger.type === "date_reached" ? `${offset ? `${offset.replace(/^-/, "").replace(/d$/, " day(s)").replace(/h$/, " hour(s)")} ${offset.startsWith("-") ? "before" : "after"}` : "on"} the ${field ?? "date"}` :
+    a.trigger.type === "record_updated" ? `when a ${thing} changes` : a.trigger.type.replace(/_/g, " ");
+  const steps = a.actions.map((x) => describeStep(bp, planStep(x, { tableId: t?.id ?? "", recordId: "", data: {}, automation: a })).replace(/^./, (c) => c.toLowerCase()));
+  return `${when}, ${steps.join(", then ")}`;
 }

@@ -2,6 +2,7 @@ import type { Field } from "@/schema/blueprint";
 import type { LinkLabels } from "@/engine/blockData";
 import { Check } from "lucide-react";
 import { FileCell } from "@/components/media/Media";
+import { Secret } from "@/components/ui/Secret";
 
 export interface FormatCtx {
   timezone: string;
@@ -94,6 +95,7 @@ export function FieldValue({ field, value, labels, ctx }: { field: Field; value:
   if (value === undefined || value === null || value === "" || (Array.isArray(value) && !value.length)) {
     return <span className="text-muted/50">—</span>;
   }
+  if (field.sensitive) return <Secret text={valueText(field, value, labels, ctx)} />;
   switch (field.type) {
     case "status":
     case "choice": {

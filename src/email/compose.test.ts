@@ -65,3 +65,15 @@ describe("resolveRecipient", () => {
     expect(await resolveRecipient(demoBlueprint, "tbl_clients", { fld_name: "Zoe", fld_email: "zoe@x.com" }, undefined, get)).toMatchObject({ email: "zoe@x.com" });
   });
 });
+
+describe("link placeholders", () => {
+  it("fills booking and document links, and drops their line when there's none", () => {
+    const a = renderTemplate("tpl_rebook", undefined, { business: "Mila", name: "Ana", bookingLink: "https://x/book/mila", data: {} });
+    expect(a.text).toContain("Book online: https://x/book/mila");
+    const b = renderTemplate("tpl_rebook", undefined, { business: "Mila", name: "Ana", data: {} });
+    expect(b.text).not.toContain("Book online");
+    expect(b.text).not.toMatch(/\n{3}/);
+    const c = renderTemplate(undefined, "Your quote: {{document_link}} — {{business_name}}", { business: "Mila", documentLink: "https://x/d/abc", data: {} });
+    expect(c.text).toBe("Your quote: https://x/d/abc — Mila");
+  });
+});

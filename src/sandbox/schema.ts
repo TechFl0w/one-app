@@ -16,9 +16,11 @@ export function sandboxSchema(bp: Blueprint): SandboxSchema {
         type: f.type,
         ...("required" in f && f.required ? { required: true } : {}),
         ...(isComputedField(f) ? { computed: true } : {}),
-        ...(f.type === "file" && "multiple" in f && f.multiple ? { multiple: true } : {}),
+        ...("multiple" in f && f.multiple ? { multiple: true } : {}),
+        ...(f.fill ? { fill: f.fill } : {}),
+        ...(f.sensitive ? { sensitive: true } : {}),
         ...("options" in f ? { options: f.options.map((o) => ({ id: o.id, label: o.label, ...(o.color ? { color: o.color } : {}) })) } : {}),
-        ...(f.type === "link" ? { to: f.to } : {}),
+        ...(f.type === "link" ? { to: f.to, ...(f.narrowBy !== undefined ? { narrowBy: f.narrowBy } : {}) } : {}),
       })),
     })),
   };

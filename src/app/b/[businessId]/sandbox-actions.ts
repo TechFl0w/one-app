@@ -7,8 +7,14 @@ import type { SandboxRecord } from "@/sandbox/protocol";
 import { bridged } from "@/sandbox/result";
 import { getCurrentBlueprint } from "@/server/blueprints";
 import { createInvoiceFromQuote, documentUrl, ensureDocumentLink, sendDocument } from "@/server/documents";
-import { documentFor } from "@/engine/documents";
+import { documentFor, invoiceWork } from "@/engine/documents";
+import { searchEverything } from "@/engine/search";
+import { supabaseStore } from "@/server/store";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { availableSlots, bookSlot } from "@/booking/service";
+import { localLabel } from "@/engine/dates";
+import type { Blueprint } from "@/schema/blueprint";
+import { supabaseOwnerBackend } from "@/server/ownerBackend";
 import { FILES_BUCKET, filePathFor, isBusinessFilePath, maxBytesFor, sizeLabel } from "@/lib/files";
 
 /**
@@ -100,6 +106,46 @@ export async function sandboxDocumentLink(businessId: string, table: string, id:
     return documentUrl(await ensureDocumentLink(createAdminClient(), businessId, def.id, id));
   });
 }
-export async function sandboxInvoiceFromQuote(businessId: string, table: string, id: string) {
-  return bridged(async () => createInvoiceFromQuote(await createClient(), businessId, table, id));
+export async function sandboxInvoiceFromQuote(businessId: string, table: string, id: string, depositPercent?: number) {
+  return bridged(async () => createInvoiceFromQuote(await createClient(), businessId, table, id, { depositPercent: typeof depositPercent === "number" ? depositPercent : undefined }));
+}
+
+export async function sandboxInvoiceWork(businessId: string, table: string, client: string, from: string, to: string) {
+  return bridged(async () => {
+    if (![from, to].every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error("invalid: dates must look like 2026-11-01");
+    const supabase = await createClient();
+    const bp = await getCurrentBlueprint(supabase, businessId);
+    return invoiceWork(bp, supabaseOwnerBackend(supabase, businessId), table, client, { from, to });
+  });
+}
+
+/** Free times and booking for screens (useFreeTimes / bookTime in the kit). */
+async function freeTimesWith(bp: Blueprint, backend: Parameters<typeof availableSlots>[1], service: string, date: string, practitioner?: string, days = 1) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("invalid: date must look like 2026-11-27");
+  const [y, m, d] = date.split("-").map(Number);
+  const slots = await availableSlots(bp, backend, { serviceId: service, practitionerId: practitioner, from: { year: y, month: m, day: d }, days: Math.min(Math.max(days, 1), 7) });
+  const tz = bp.business.timezone;
+  return { timezone: tz, slots: slots.slice(0, 200).map((s) => ({ start: s.start, end: s.end, practitionerId: s.practitionerId, local: localLabel(s.start, tz) })) };
+}
+export async function sandboxFreeTimes(businessId: string, service: string, date: string, practitioner?: string, days?: number) {
+  return bridged(async () => {
+    const supabase = await createClient();
+    return freeTimesWith(await getCurrentBlueprint(supabase, businessId), supabaseOwnerBackend(supabase, businessId), service, date, practitioner, days);
+  });
+}
+export async function sandboxBookTime(businessId: string, service: string, start: string, client: { name: string; email?: string; phone?: string }, practitioner?: string) {
+  return bridged(async () => {
+    const supabase = await createClient();
+    const r = await bookSlot(await getCurrentBlueprint(supabase, businessId), supabaseOwnerBackend(supabase, businessId), { serviceId: service, start, client, practitionerId: practitioner });
+    return { bookingId: r.bookingId, state: r.state };
+  });
+}
+
+/** App-wide search (⌘K): a few matches from every table, as the signed-in member sees them. */
+export async function sandboxSearch(businessId: string, q: string) {
+  return bridged(async () => {
+    const supabase = await createClient();
+    const bp = await getCurrentBlueprint(supabase, businessId);
+    return searchEverything(bp, supabaseStore(supabase, businessId), String(q ?? ""));
+  });
 }

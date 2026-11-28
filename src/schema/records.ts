@@ -29,6 +29,8 @@ export const RecordQuery = z.strictObject({
   sort: z.array(RecordSort).max(5).default([]),
   limit: z.int().min(1).max(500).default(50),
   offset: z.int().min(0).default(0),
+  /** Search box: words in any value; `links` are records whose name matched (their jobs match too). */
+  search: z.strictObject({ q: z.string().max(100), links: z.array(z.string().max(64)).max(200).optional() }).optional(),
 });
 export type RecordQuery = z.input<typeof RecordQuery>;
 

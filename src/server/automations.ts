@@ -10,12 +10,32 @@ import { getRecord } from "./records";
 import { getCurrentBlueprint } from "./blueprints";
 import { supabaseOwnerBackend } from "./ownerBackend";
 import { expireHolds, hasUpcomingBooking } from "@/booking/service";
+import { runRecurring } from "@/engine/recurring";
 import { ensureEmailSettings, sendEmail } from "./email";
 import { renderTemplate, resolveRecipient } from "@/email/compose";
-import { approvedTemplate, getLine, sendWhatsApp, whatsappConfigured } from "./whatsapp";
+import { approvedTemplate, getLine, sendSms, sendWhatsApp, whatsappConfigured } from "./whatsapp";
 import { resolvePhone } from "@/whatsapp/recipient";
 import { templateVariables } from "@/whatsapp/core";
 import { formatDateTime } from "@/components/blocks/format";
+import { bookingPageUrl } from "./bookingPage";
+import { ensureBookingLink, manageUrl } from "./bookingLinks";
+import { documentUrl, ensureDocumentLink } from "./documents";
+import { documentFor } from "@/engine/documents";
+
+/** {{booking_link}} and {{document_link}}: only looked up when the message uses them. */
+async function links(bp: Blueprint, businessId: string, record: { tableId: string; recordId: string }, text: string, db: SupabaseClient) {
+  const out: { bookingLink?: string; documentLink?: string; manageLink?: string } = {};
+  if (/booking_link|manage_link|tpl_rebook|tpl_reminder/.test(text)) {
+    const { data } = await db.from("booking_pages").select("slug, enabled").eq("business_id", businessId).maybeSingle();
+    if (data?.enabled) {
+      out.bookingLink = bookingPageUrl(data.slug as string);
+      if (/manage_link|tpl_reminder/.test(text) && record.tableId === bp.scheduling?.bookings.table) out.manageLink = manageUrl(data.slug as string, await ensureBookingLink(db, businessId, record.recordId));
+    }
+  }
+  const def = /document_link/.test(text) ? documentFor(bp, record.tableId) : undefined;
+  if (def) out.documentLink = documentUrl(await ensureDocumentLink(db, businessId, def.id, record.recordId));
+  return out;
+}
 
 /** Supabase implementations of the automation queue and side effects (service role). */
 
@@ -27,7 +47,8 @@ const must = <T>(r: { data: T; error: { message: string } | null }, what: string
   return r.data;
 };
 
-export function supabaseQueue(db: SupabaseClient): JobQueue {
+/** The job queue; with `onlyBusiness`, it claims that business's jobs only (a test business's moved clock). */
+export function supabaseQueue(db: SupabaseClient, onlyBusiness?: string): JobQueue {
   return {
     async enqueue(j) {
       const rows = must(
@@ -43,7 +64,10 @@ export function supabaseQueue(db: SupabaseClient): JobQueue {
       return (rows ?? []).length > 0;
     },
     async claimDue(now, limit) {
-      return (must(await db.rpc("claim_automation_jobs", { p_now: now.toISOString(), p_limit: limit }), "claim") as JobRow[]).map(toJob);
+      const rows = onlyBusiness
+        ? await db.rpc("claim_automation_jobs_for", { p_business_id: onlyBusiness, p_now: now.toISOString(), p_limit: limit })
+        : await db.rpc("claim_automation_jobs", { p_now: now.toISOString(), p_limit: limit });
+      return (must(rows, "claim") as JobRow[]).map(toJob);
     },
     async finish(id, u) {
       const patch =
@@ -133,6 +157,23 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
         if (step.channel === "whatsapp") return { sent: false, reason: why };
         // "auto" falls back to email below.
       }
+      if (step.channel === "sms") {
+        if (!whatsappConfigured()) return { sent: false, reason: "Texts aren’t set up on this server" };
+        const to = await resolvePhone(bp, record.tableId, record.data, step.toField, getRecord);
+        if (!to) return { sent: false, reason: "No phone number for this record" };
+        const tracking = bp.tables.find((t) => t.id === record.tableId)?.fields.find((f) => /track/i.test(f.label) && typeof record.data[f.id] === "string");
+        const msg = renderTemplate(step.template, step.message, {
+          business: bp.business.name,
+          name: to.name?.split(" ")[0],
+          when: whenOf(),
+          tracking: tracking ? String(record.data[tracking.id]) : undefined,
+          reviewLink: bp.business.reviewUrl,
+          ...(await links(bp, b, record, `${step.template ?? ""} ${step.message ?? ""}`, db)),
+          data: record.data,
+        });
+        await sendSms(db, b, to.phone, msg.text.trim(), { key });
+        return { sent: true };
+      }
       if (step.channel !== "email" && step.channel !== "auto") return { sent: false, reason: `${step.channel} isn’t supported` };
       const to = await resolveRecipient(bp, record.tableId, record.data, step.toField, getRecord);
       if (!to) return { sent: false, reason: "No email address for this record" };
@@ -147,6 +188,7 @@ export function supabaseAutomationIO(db: SupabaseClient): AutomationIO {
         when: typeof whenValue === "string" ? formatDateTime(whenValue.length === 10 ? `${whenValue}T12:00:00Z` : whenValue, { timezone: bp.business.timezone }) : undefined,
         tracking: tracking ? String(record.data[tracking.id]) : undefined,
         reviewLink: bp.business.reviewUrl,
+        ...(await links(bp, b, record, `${step.template ?? ""} ${step.message ?? ""}`, db)),
         data: record.data,
       });
       if (step.template === "tpl_review" && !bp.business.reviewUrl) return { sent: false, reason: "Add your review link in Online booking settings" };
@@ -184,6 +226,15 @@ export async function automationTick(db: SupabaseClient, now = new Date()) {
     const bp = Blueprint.safeParse(c.json);
     if (bp.success && bp.data.automations.some((a) => a.enabled && a.trigger.type === "date_reached")) {
       queued += await enqueueDueDates(c.business_id, io, queue, now);
+    }
+  }
+
+  // Recurring charges coming due (rent, memberships): created once per due date.
+  for (const c of current) {
+    const bp = Blueprint.safeParse(c.json);
+    if (bp.success && bp.data.recurring?.length) {
+      const backend = supabaseOwnerBackend(db, c.business_id);
+      await runRecurring(bp.data, { query: (q) => backend.query(q), createRecord: (t, v) => backend.createRecord(t, v), updateRecord: (t, id, v) => backend.updateRecord(t, id, v, { confirmed: true }), deleteRecord: (t, id) => backend.deleteRecord(t, id) }, now).catch((e) => console.error("recurring failed", c.business_id, e));
     }
   }
 

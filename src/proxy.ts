@@ -7,6 +7,19 @@ const PUBLIC_PATHS = ["/login", "/auth"];
 /** Refreshes the Supabase session cookie on every request and sends signed-out users to /login. */
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  // Business websites on their own address: <slug>.<SITE_DOMAIN> (e.g. mila.oneapp.site) shows
+  // /s/<slug>; its booking page stays at /book/<slug> on the same host.
+  const siteDomain = process.env.SITE_DOMAIN?.toLowerCase();
+  const host = (request.headers.get("host") ?? "").toLowerCase().split(":")[0];
+  if (siteDomain && host.endsWith(`.${siteDomain}`)) {
+    const slug = host.slice(0, -siteDomain.length - 1);
+    if (/^[a-z0-9][a-z0-9-]{2,39}$/.test(slug) && !path.startsWith("/book/") && !path.startsWith("/_next/") && !path.startsWith("/api/")) {
+      const to = request.nextUrl.clone();
+      to.pathname = path === "/" ? `/s/${slug}` : `/s/${slug}${path}`;
+      return NextResponse.rewrite(to);
+    }
+    return NextResponse.next();
+  }
   // The demo and the onboarding preview run without a session or database.
   // /demo?type=mechanic picks which business type the demo shows (remembered in a cookie).
   if (path === "/demo" && request.nextUrl.searchParams.has("type")) {
@@ -14,9 +27,9 @@ export async function proxy(request: NextRequest) {
     res.cookies.set("demo_type", request.nextUrl.searchParams.get("type")!.replace(/[^a-z_]/g, "").slice(0, 30), { path: "/demo", sameSite: "lax" });
     return res;
   }
-  if (path === "/demo" || path.startsWith("/demo/") || path === "/start" || path.startsWith("/book/") || path.startsWith("/d/") || path === "/paid") return NextResponse.next();
+  if (path === "/demo" || path.startsWith("/demo/") || path === "/start" || path.startsWith("/book/") || path.startsWith("/s/") || path.startsWith("/d/") || path === "/paid") return NextResponse.next();
   // Cron routes (CRON_SECRET) and webhooks (signatures) authenticate themselves, not with a session.
-  if (path.startsWith("/api/cron/") || path.startsWith("/api/webhooks/") || path.startsWith("/api/hooks/") || path === "/api/fn/kit") return NextResponse.next(); // signed or token, no session
+  if (path.startsWith("/api/cron/") || path.startsWith("/api/webhooks/") || path.startsWith("/api/hooks/") || path.startsWith("/api/cal/") || path.startsWith("/api/test/") || path === "/api/fn/kit") return NextResponse.next(); // signed or token, no session
   // Sandbox runtime files for generated components (static, public).
   if (path.startsWith("/sandbox/")) return NextResponse.next();
   // The MCP server checks its own bearer tokens; discovery documents are public.

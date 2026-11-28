@@ -75,11 +75,16 @@ export function startOfWeek(d: LocalDate): LocalDate {
   return addDays(d, -((dow + 6) % 7));
 }
 
-export type DateToken = "@today" | "@tomorrow" | "@yesterday" | "@this_week" | "@this_month" | "@now";
+export type DateToken = "@today" | "@tomorrow" | "@yesterday" | "@this_week" | "@this_month" | "@now" | `@today${"+" | "-"}${number}d`;
 
 /** A token as a half-open local-date range [start, end). `@now` has no range. */
 export function tokenRange(token: Exclude<DateToken, "@now">, now: Date, tz: string): { start: LocalDate; end: LocalDate } {
   const today = localToday(now, tz);
+  const shifted = /^@today([+-])(\d{1,4})d$/.exec(token);
+  if (shifted) {
+    const d = addDays(today, (shifted[1] === "-" ? -1 : 1) * Number(shifted[2]));
+    return { start: d, end: addDays(d, 1) };
+  }
   switch (token) {
     case "@today":
       return { start: today, end: addDays(today, 1) };
@@ -97,10 +102,11 @@ export function tokenRange(token: Exclude<DateToken, "@now">, now: Date, tz: str
       return { start, end: next };
     }
   }
+  return { start: today, end: addDays(today, 1) };
 }
 
 export const isDateToken = (v: unknown): v is DateToken =>
-  typeof v === "string" && ["@today", "@tomorrow", "@yesterday", "@this_week", "@this_month", "@now"].includes(v);
+  typeof v === "string" && (["@today", "@tomorrow", "@yesterday", "@this_week", "@this_month", "@now"].includes(v) || /^@today[+-]\d{1,4}d$/.test(v));
 
 /** "2026-12-01T09:30" (wall clock in `tz`, from <input type="datetime-local">) → ISO instant. */
 export function localDateTimeToIso(value: string, tz: string): string | null {
@@ -115,4 +121,18 @@ export function localDateTimeToIso(value: string, tz: string): string | null {
     .reduce((acc, p) => (p.type === "hour" ? acc + Number(p.value) * 60 : p.type === "minute" ? acc + Number(p.value) : acc), 0);
   const drift = local - (h * 60 + mi);
   return new Date(guess.getTime() - (((drift % 1440) + 1440 + 720) % 1440 - 720) * 60_000).toISOString();
+}
+
+/**
+ * An instant as the business's wall clock, with its UTC offset: "2026-11-27 09:00 (UTC−07:00)".
+ * Tools return this next to ISO times so nobody (person or AI) converts with a guessed offset.
+ */
+export function localLabel(iso: string, tz: string): string {
+  const d = new Date(iso);
+  const p = zonedParts(d, tz);
+  const off = Math.round((Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - Math.floor(d.getTime() / 60_000) * 60_000) / 60_000);
+  const sign = off < 0 ? "−" : "+";
+  const abs = Math.abs(off);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.year}-${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)} (UTC${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)})`;
 }

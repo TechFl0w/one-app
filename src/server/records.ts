@@ -16,6 +16,7 @@ import { getCurrentBlueprint } from "./blueprints";
 import { addComputed, loadAllVia, queryWithComputed } from "@/engine/computed";
 import { supabaseStore } from "./store";
 import { recordUpdateIsRisky } from "@/engine/risk";
+import { fillInput } from "@/engine/fill";
 
 /**
  * Records CRUD that respects the blueprint. Every call takes a Supabase client acting as the
@@ -36,6 +37,13 @@ const toView = (bp: Blueprint, tableId: string, r: Row): RecordRow => ({
 function checkId(id: string) {
   if (!RecordId.safeParse(id).success) throw new RecordError("not_found", "Record not found");
 }
+
+/** A linked record's stored values (for fields filled from links). */
+const loader = (supabase: SupabaseClient, businessId: string) => async (tableId: string, id: string) => {
+  if (!RecordId.safeParse(id).success) return null;
+  const { data } = await supabase.from("records").select("data").eq("business_id", businessId).eq("table_id", tableId).eq("id", id).maybeSingle();
+  return (data?.data as Record<string, unknown>) ?? null;
+};
 
 export async function listRecords(
   supabase: SupabaseClient,
@@ -86,7 +94,7 @@ export async function createRecord(
   const bp = await getCurrentBlueprint(supabase, businessId);
   const table = tableOrThrow(bp, tableId);
   // Quotes and invoices get the next number when they're created without one.
-  const data = await assignNumber(bp, tableId, validateRecordInput(table, input, "create"), async (docId) => {
+  const data = await assignNumber(bp, tableId, validateRecordInput(table, await fillInput(table, input, loader(supabase, businessId)), "create"), async (docId) => {
     const { data: n, error } = await supabase.rpc("next_document_number", { p_business_id: businessId, p_document_id: docId });
     if (error) throw new Error(`Could not number the document: ${error.message}`);
     return Number(n);
@@ -116,7 +124,7 @@ export async function updateRecord(
   checkId(recordId);
   const bp = await getCurrentBlueprint(supabase, businessId);
   const table = tableOrThrow(bp, tableId);
-  const patch = validateRecordInput(table, input, "update");
+  const patch = validateRecordInput(table, await fillInput(table, input, loader(supabase, businessId)), "update");
   if (recordUpdateIsRisky(table, patch) && !opts.confirmed) {
     throw new RecordError("needs_confirmation", "Changing a price or amount needs confirmation");
   }

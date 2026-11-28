@@ -24,9 +24,19 @@ export interface InvoicingOptions {
   /** Small print on quotes and on invoices. */
   quoteTerms?: string;
   invoiceTerms?: string;
+  /** A rate card (Senior, Apprentice, After hours…): lines pick a rate and its price fills in. */
+  rates?: boolean;
 }
 
-function lineTable(id: string, label: string, parent: string, p: string, parentLabel: string): Table {
+/** The business's hourly rates, set once; labour lines pick one instead of typing a price. */
+export const RATES: Table = {
+  id: "tbl_rates",
+  label: "Rates",
+  primaryField: "fld_rt_name",
+  fields: [text("fld_rt_name", "Rate", true), { ...money("fld_rt_price", "Per hour"), required: true } as Field, longText("fld_rt_notes", "Notes")],
+};
+
+function lineTable(id: string, label: string, parent: string, p: string, parentLabel: string, rates = false): Table {
   return {
     id,
     label,
@@ -38,7 +48,9 @@ function lineTable(id: string, label: string, parent: string, p: string, parentL
       status(`fld_${p}_kind`, "Kind", LINE_KINDS, "choice"),
       { ...num(`fld_${p}_qty`, "Qty"), required: true, min: 0 } as Field,
       status(`fld_${p}_unit`, "Unit", UNITS, "choice"),
-      { ...money(`fld_${p}_price`, "Unit price"), required: true } as Field,
+      ...(rates ? [link(`fld_${p}_rate`, "Rate", "tbl_rates")] : []),
+      // Negative for credits ("Less deposit already invoiced"). Filled from the rate when one is picked.
+      { ...money(`fld_${p}_price`, "Unit price"), required: true, allowNegative: true, ...(rates ? { fill: { from: `fld_${p}_rate`, field: "fld_rt_price" } } : {}) } as Field,
       formula(`fld_${p}_total`, "Amount", `round(fld_${p}_qty * fld_${p}_price, 2)`),
     ],
   };
@@ -126,6 +138,7 @@ export function invoicingTables(o: InvoicingOptions): { tables: Table[]; documen
       table: "tbl_quotes",
       number: "fld_q_number",
       prefix: "Q-",
+      taxRate: "fld_q_tax_rate",
       customer: "fld_q_client",
       title: "fld_q_title",
       intro: "fld_q_scope",
@@ -144,6 +157,7 @@ export function invoicingTables(o: InvoicingOptions): { tables: Table[]; documen
       table: "tbl_invoices",
       number: "fld_i_number",
       prefix: "INV-",
+      taxRate: "fld_i_tax_rate",
       customer: "fld_i_client",
       title: "fld_i_title",
       intro: "fld_i_notes",
@@ -158,7 +172,7 @@ export function invoicingTables(o: InvoicingOptions): { tables: Table[]; documen
     },
   ];
   return {
-    tables: [quotes, lineTable("tbl_quote_lines", "Quote lines", "tbl_quotes", "ql", "Quote"), invoices, lineTable("tbl_invoice_lines", "Invoice lines", "tbl_invoices", "il", "Invoice"), payments],
+    tables: [...(o.rates ? [RATES] : []), quotes, lineTable("tbl_quote_lines", "Quote lines", "tbl_quotes", "ql", "Quote", o.rates), invoices, lineTable("tbl_invoice_lines", "Invoice lines", "tbl_invoices", "il", "Invoice", o.rates), payments],
     documents,
   };
 }

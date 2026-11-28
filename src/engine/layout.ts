@@ -80,3 +80,33 @@ export function stackForPhone(blocks: Block[]): Block[] {
 export function layoutName(key: string): string {
   return key.startsWith("user:") ? "personal" : key.replace(/^device:/, "");
 }
+
+/**
+ * Pages add records with a "+ New …" button at the top right and a pop-up form, never with a
+ * form sitting on the page. Older pages that still have an add form show without it: the block
+ * beside it takes its space.
+ */
+export function withoutAddForms<T extends { id: string; type: string; x: number; y: number; w: number; h: number }>(blocks: T[]): T[] {
+  const forms = blocks.filter((b) => b.type === "form");
+  if (!forms.length) return blocks;
+  const rows = (a: T, b: T) => a.y < b.y + b.h && b.y < a.y + a.h;
+  return blocks
+    .filter((b) => b.type !== "form")
+    .map((b) => {
+      let { x, w } = b;
+      for (const f of forms) {
+        if (!rows(b, f)) continue;
+        if (f.x === x + w) w += f.w; // the form was on its right
+        else if (f.x + f.w === x) { x = f.x; w += f.w; } // on its left
+      }
+      return x === b.x && w === b.w ? b : { ...b, x, w };
+    });
+}
+
+/** The table a page adds to with its "+ New …" button: its add form's, else its main list's. */
+export function pageAddTable(blocks: { type: string; source?: { table: string; filters?: { value?: unknown }[] } }[]): string | undefined {
+  const form = blocks.find((b) => b.type === "form" && b.source);
+  if (form) return form.source!.table;
+  const list = blocks.find((b) => ["table", "list", "gallery", "board", "calendar"].includes(b.type) && b.source && !(b.source.filters ?? []).some((f) => f.value === "@record"));
+  return list?.source?.table;
+}

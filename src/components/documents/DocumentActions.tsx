@@ -76,31 +76,38 @@ export function DocumentActions({ table, recordId, kind, label, sent, canInvoice
             })
           }
         >
-          <ExternalLink className="h-4 w-4" /> Customer view
+          <ExternalLink className="h-4 w-4" /> See it as the client does
         </button>
       )}
-      {invoice ? (
+      {invoice && (
         <a href={recordPath(sandbox.basePath, invoice.table, invoice.id)} className="btn-ghost">
           <FileText className="h-4 w-4" /> Open the invoice
         </a>
-      ) : (
-        canInvoice && (
-          <button
-            type="button"
-            className="btn-ghost"
-            disabled={pending}
-            onClick={() =>
-              run(async () => {
-                if (!b.invoiceFromQuote) return setMsg({ text: "In your own app this makes an invoice with the quote’s lines." });
-                const r = await b.invoiceFromQuote(table, recordId);
-                if (!r.ok) return fail(r);
-                router.push(recordPath(sandbox.basePath, r.value.table, r.value.id));
-              })
-            }
-          >
-            <FileText className="h-4 w-4" /> Create invoice
-          </button>
-        )
+      )}
+      {canInvoice && (
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          {[
+            [undefined, invoice ? "Invoice the rest" : "Invoice full amount"],
+            ...(invoice ? [] : [[50, "Invoice 50% deposit"], [25, "25% deposit"]]),
+          ].map(([pct, text]) => (
+            <button
+              key={String(text)}
+              type="button"
+              className="btn-ghost"
+              disabled={pending}
+              onClick={() =>
+                run(async () => {
+                  if (!b.invoiceFromQuote) return setMsg({ text: "In your own app this makes an invoice with the quote’s lines (or a deposit invoice)." });
+                  const r = await b.invoiceFromQuote(table, recordId, pct as number | undefined);
+                  if (!r.ok) return fail(r);
+                  router.push(recordPath(sandbox.basePath, r.value.table, r.value.id));
+                })
+              }
+            >
+              <FileText className="h-4 w-4" /> {text}
+            </button>
+          ))}
+        </span>
       )}
       {msg && (
         <p role="status" className={`w-full text-sm ${msg.bad ? "text-red-700" : "text-muted"}`}>

@@ -3,7 +3,7 @@ import { contractor } from "@/templates/contractor";
 import { resolveSeed } from "@/templates/types";
 import { memoryStore } from "./store";
 import { withComputed } from "./computed";
-import { acceptPatch, assignNumber, documentById, formatNumber, invoiceFromQuote, loadDocument, paymentRecord } from "./documents";
+import { acceptPatch, assignNumber, documentById, formatNumber, invoiceFromQuote, loadDocument, makeInvoiceFromQuote, paymentRecord } from "./documents";
 import { validateRecordInput, tableOrThrow } from "./records";
 
 const TODAY = "2026-11-26";
@@ -79,5 +79,31 @@ describe("documents", () => {
     expect(made.invoice).toMatchObject({ fld_i_client: q.data.fld_q_client, fld_i_title: q.data.fld_q_title, fld_i_quote: q.id, fld_i_job: q.data.fld_q_job, fld_i_site: q.data.fld_q_site });
     expect(made.lines).toHaveLength(lines.length);
     for (const l of made.lines) expect(() => validateRecordInput(tableOrThrow(bp, "tbl_invoice_lines"), { ...l, fld_il_parent: q.id }, "create")).not.toThrow();
+  });
+});
+
+describe("deposit, then the rest", () => {
+  it("a 50% deposit invoice, then a final invoice that takes it off", async () => {
+    const { memoryBackend } = await import("@/agent/memoryBackend");
+    const { backend } = memoryBackend({ blueprint: bp, records: rows.map((r) => ({ ...r, data: { ...r.data } })) });
+    const q = ids.get("q1")!;
+    await backend.updateRecord("tbl_quotes", q, { fld_q_accepted: TODAY, fld_q_accepted_by: "Priya Shah" });
+    const quote = await backend.getRecord("tbl_quotes", q);
+    const sub = Number(quote.data.fld_q_subtotal);
+    const dep = await makeInvoiceFromQuote(bp, backend, "tbl_quotes", q, { depositPercent: 50 });
+    const depRec = await backend.getRecord("tbl_invoices", dep.id);
+    expect(depRec.data.fld_i_subtotal).toBeCloseTo(sub / 2, 2);
+    expect(String(depRec.data.fld_i_title)).toMatch(/deposit/);
+    const rest = await makeInvoiceFromQuote(bp, backend, "tbl_quotes", q);
+    const restRec = await backend.getRecord("tbl_invoices", rest.id);
+    expect(restRec.data.fld_i_subtotal).toBeCloseTo(sub / 2, 2);
+    expect(rest.id).not.toBe(dep.id);
+    // fully invoiced: asking again returns the last one
+    expect((await makeInvoiceFromQuote(bp, backend, "tbl_quotes", q)).id).toBe(rest.id);
+  });
+  it("a quote that isn't accepted can't be invoiced", async () => {
+    const { memoryBackend } = await import("@/agent/memoryBackend");
+    const { backend } = memoryBackend({ blueprint: bp, records: rows });
+    await expect(makeInvoiceFromQuote(bp, backend, "tbl_quotes", ids.get("q1")!)).rejects.toThrow(/accepted/);
   });
 });

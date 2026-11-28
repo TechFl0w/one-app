@@ -1,3 +1,6 @@
+import { readable } from "@/automations/check";
+import { singular } from "@/lib/words";
+import { localLabel } from "@/engine/dates";
 import { z } from "zod";
 import type Anthropic from "@anthropic-ai/sdk";
 import { FieldId, TableId, type Blueprint } from "@/schema/blueprint";
@@ -5,6 +8,7 @@ import { OP_RISK, Operation } from "@/schema/changeSet";
 import { RecordFilter, RecordId } from "@/schema/records";
 import { previewChangeSet, type OpPreview } from "@/engine/changeSet";
 import { recordLabel } from "@/engine/blockData";
+import { makeInvoiceFromQuote, invoiceWork } from "@/engine/documents";
 import type { UndoToken } from "@/engine/commit";
 import type { BuildPlan, OwnerBackend, PendingAction } from "./types";
 import { recordUpdateIsRisky } from "@/engine/risk";
@@ -45,6 +49,8 @@ export interface OwnerTool<I = unknown> {
   risk: Risk | ((input: I, bp: Blueprint) => Risk);
   /** Plain-language lines for a confirmation, for risky calls. */
   describe?: (input: I, bp: Blueprint) => string[];
+  /** Like describe, but may read records (to name the record instead of showing its id). */
+  describeWith?: (input: I, bp: Blueprint, backend: OwnerBackend) => Promise<string[]>;
   run: (backend: OwnerBackend, input: I, effects: ToolEffects, opts: { confirmed: boolean }) => Promise<unknown>;
   /** For risky calls that mix safe and risky parts: run `now` right away, confirm only `later`. Null when it can't be split. */
   split?: (input: I, bp: Blueprint) => { now: I; later: I } | null;
@@ -68,6 +74,11 @@ const Values = z.record(FieldId, z.unknown()).describe("Field values keyed by fi
 
 const tableLabel = (bp: Blueprint, id: string) => bp.tables.find((t) => t.id === id)?.label ?? id;
 
+/** Private fields of a table (field.sensitive): left out of what the assistant reads by default. */
+const sensitiveFields = (bp: Blueprint, table: string) => new Set(bp.tables.find((t) => t.id === table)?.fields.filter((f) => f.sensitive).map((f) => f.id) ?? []);
+const redact = (data: Record<string, unknown>, hidden: Set<string>) =>
+  hidden.size ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, hidden.has(k) && v != null && v !== "" ? "[private — get_record with reveal: true if needed]" : v])) : data;
+
 export const OWNER_TOOLS: OwnerTool[] = [
   tool({
     name: "query_records",
@@ -82,18 +93,20 @@ export const OWNER_TOOLS: OwnerTool[] = [
     risk: "read",
     run: async (b, i) => {
       const { records, total } = await b.query({ table: i.table, filters: i.filters ?? [], sort: i.sort ?? [], limit: i.limit ?? 25 });
-      return { total, records: records.map((r) => ({ id: r.id, ...r.data })) };
+      const hidden = sensitiveFields(await b.blueprint(), i.table);
+      return { total, records: records.map((r) => ({ id: r.id, ...redact(r.data, hidden) })) };
     },
   }),
 
   tool({
     name: "get_record",
-    description: "Get one record by id.",
-    input: z.strictObject({ table: TableId, id: RecordId }),
+    description: "Get one record by id. Private fields (alarm codes and the like) show as hidden unless you pass reveal: true — only when the task needs that value.",
+    input: z.strictObject({ table: TableId, id: RecordId, reveal: z.boolean().optional() }),
     risk: "read",
     run: async (b, i) => {
       const r = await b.getRecord(i.table, i.id);
-      return { id: r.id, ...r.data, _created_at: r.createdAt, _updated_at: r.updatedAt };
+      const data = i.reveal ? r.data : redact(r.data, sensitiveFields(await b.blueprint(), i.table));
+      return { id: r.id, ...data, _created_at: r.createdAt, _updated_at: r.updatedAt };
     },
   }),
 
@@ -122,6 +135,16 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const fields = Object.keys(i.values).map((k) => table?.fields.find((f) => f.id === k)?.label ?? k);
       return [`Change ${fields.join(", ")} on a ${tableLabel(bp, i.table).toLowerCase()} record to ${JSON.stringify(i.values)}`];
     },
+    describeWith: async (i, bp, b) => {
+      const table = bp.tables.find((t) => t.id === i.table)!;
+      const r = await b.getRecord(i.table, i.id);
+      const name = recordLabel(table, r);
+      const changes = Object.entries(i.values).map(([k, v]) => {
+        const f = table.fields.find((x) => x.id === k);
+        return `${f?.label ?? k}: ${readable(f, r.data[k], bp) || "—"} → ${readable(f, v, bp) || "—"}`;
+      });
+      return [`Change ${singular(table.label).toLowerCase()} “${name}”: ${changes.join("; ")}`];
+    },
     run: async (b, i, fx, { confirmed }) => {
       const r = await b.updateRecord(i.table, i.id, i.values, { confirmed });
       fx.changed = true;
@@ -135,6 +158,18 @@ export const OWNER_TOOLS: OwnerTool[] = [
     input: z.strictObject({ table: TableId, id: RecordId }),
     risk: "risky",
     describe: (i, bp) => [`Delete a record from ${tableLabel(bp, i.table)} (${i.id.slice(0, 8)})`],
+    describeWith: async (i, bp, b) => {
+      const table = bp.tables.find((t) => t.id === i.table)!;
+      const r = await b.getRecord(i.table, i.id);
+      // What points at it (a client's bookings) stays, but loses this link.
+      const linked: string[] = [];
+      for (const t of bp.tables) for (const f of t.fields) {
+        if (f.type !== "link" || f.to !== i.table) continue;
+        const { total } = await b.query({ table: t.id, filters: [{ field: f.id, op: f.multiple ? "contains" : "eq", value: i.id }], limit: 1 }).catch(() => ({ total: 0 }));
+        if (total) linked.push(`${total} ${total === 1 ? singular(t.label).toLowerCase() : t.label.toLowerCase()}`);
+      }
+      return [`Delete ${singular(table.label).toLowerCase()} “${recordLabel(table, r)}”${linked.length ? ` (linked to ${linked.join(", ")}, which stay)` : ""}`];
+    },
     run: async (b, i, fx) => {
       await b.deleteRecord(i.table, i.id);
       fx.changed = true;
@@ -351,6 +386,38 @@ export const OWNER_TOOLS: OwnerTool[] = [
   }),
 
   tool({
+    name: "create_invoice_from_quote",
+    description:
+      "Make an invoice for an accepted quote, copying its client, title and every line — for the full amount (earlier invoices for the quote, like a deposit, are taken off) or a deposit (deposit_percent, e.g. 50). Returns the invoice's id and number. Use this instead of typing lines again.",
+    input: z.strictObject({ quote: RecordId, deposit_percent: z.number().min(1).max(100).optional() }),
+    risk: "safe",
+    run: async (b, i, fx) => {
+      const bp = await b.blueprint();
+      const quote = bp.documents?.find((d) => d.kind === "quote");
+      if (!quote) throw new Error("This business has no quotes set up.");
+      const r = await makeInvoiceFromQuote(bp, b, quote.table, i.quote, { depositPercent: i.deposit_percent });
+      fx.changed = true;
+      return { invoice: r };
+    },
+  }),
+
+  tool({
+    name: "invoice_work",
+    description:
+      "Invoice a client's finished work for a period (\"invoice November for Hannah\"): every done visit or job in those dates that isn't on an invoice yet becomes a line, and is marked as invoiced. Needs an invoice with `bill` set up (documents). Returns the draft invoice; send it with the usual tools.",
+    input: z.strictObject({ client: RecordId, from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+    risk: "safe",
+    run: async (b, i, fx) => {
+      const bp = await b.blueprint();
+      const inv = bp.documents?.find((d) => d.kind === "invoice" && d.bill);
+      if (!inv) throw new Error("Invoicing work isn’t set up: add bill to the invoice document (change_setup setDocument).");
+      const r = await invoiceWork(bp, b, inv.table, i.client, { from: i.from, to: i.to });
+      if (r.count) fx.changed = true;
+      return r.count ? { invoice: r } : { message: "Nothing to invoice: no finished, unbilled work for that client in those dates." };
+    },
+  }),
+
+  tool({
     name: "find_free_times",
     description: "Free appointment times for a service (optionally with one practitioner), from a date (YYYY-MM-DD, business timezone) for up to 7 days. Needs online booking set up.",
     input: z.strictObject({
@@ -364,7 +431,9 @@ export const OWNER_TOOLS: OwnerTool[] = [
       const bp = await b.blueprint();
       const [y, m, d] = i.date.split("-").map(Number);
       const slots = await availableSlots(bp, b, { serviceId: i.service, practitionerId: i.practitioner, from: { year: y, month: m, day: d }, days: i.days ?? 1 });
-      return { timezone: bp.business.timezone, count: slots.length, slots: slots.slice(0, 40) };
+      // Each slot also in the business's own clock, so nobody converts with a guessed offset.
+      const tz = bp.business.timezone;
+      return { timezone: tz, count: slots.length, slots: slots.slice(0, 40).map((s) => ({ ...s, local: localLabel(s.start, tz) })) };
     },
   }),
 
@@ -510,7 +579,8 @@ export async function executeOwnerTool(name: string, rawInput: unknown, backend:
         const after = await backend.blueprint();
         return { kind: "pending", applied, action: { id: newId(), tool: t.name, input: parts.later, items: t.describe?.(parts.later, after) ?? [name] } };
       }
-      return { kind: "pending", action: { id: newId(), tool: t.name, input: parsed.data, items: t.describe?.(parsed.data, bp) ?? [name] } };
+      const items = t.describeWith ? await t.describeWith(parsed.data, bp, backend).catch(() => t.describe?.(parsed.data, bp) ?? [name]) : (t.describe?.(parsed.data, bp) ?? [name]);
+      return { kind: "pending", action: { id: newId(), tool: t.name, input: parsed.data, items } };
     }
     return { kind: "result", value: await t.run(backend, parsed.data, effects, { confirmed: false }) };
   } catch (e) {

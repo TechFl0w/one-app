@@ -112,8 +112,7 @@ export const demoBlueprint: Blueprint = Blueprint.parse({
       layout: {
         columns: 12,
         blocks: [
-          { id: "blk_clients", type: "table", source: { table: "tbl_clients", sort: [{ field: "fld_name", dir: "asc" }] }, x: 0, y: 0, w: 8, h: 6, options: { title: "All clients" } },
-          { id: "blk_new_client", type: "form", source: { table: "tbl_clients" }, x: 8, y: 0, w: 4, h: 5, options: { title: "Add a client" } },
+          { id: "blk_clients", type: "table", source: { table: "tbl_clients", sort: [{ field: "fld_name", dir: "asc" }] }, x: 0, y: 0, w: 12, h: 6, options: { title: "All clients" } },
         ],
       },
     },

@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { matchIcon } from "@/components/booking/parts";
+import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, ImagePlus, Paperclip, Play, X } from "lucide-react";
 import { isImageFile, isVideoFile } from "@/lib/files";
 import type { SandboxBridge, SandboxFile } from "@/sandbox/protocol";
@@ -368,11 +369,17 @@ export function CoverImage({ value, className = "h-28 w-full", label }: { value:
   const file = asFiles(value).find((f) => isImageFile(f) || isVideoFile(f));
   const video = !!file && isVideoFile(file);
   const url = useFileUrl(bridge, file ? (video ? file.poster : file.path) : undefined);
+  const starter = !url && label ? matchIcon(label) : undefined;
   return (
     <div className={`relative overflow-hidden bg-gradient-to-br from-[#ECE7DD] to-[#DDD5C7] text-[#9A9283] ${className}`} role="img" aria-label={label ? `Photo of ${label}` : "Photo"}>
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element -- short-lived signed link
         <img src={url} alt="" className="h-full w-full object-cover" />
+      ) : starter ? (
+        // No photo yet: a fitting starter icon (scissors for a cut, a paw for grooming).
+        <span className="flex h-full w-full items-center justify-center bg-accent-tint text-accent">
+          {createElement(starter, { className: "h-7 w-7", "aria-hidden": true })}
+        </span>
       ) : (
         <span className="flex h-full w-full items-center justify-center">
           <ImagePlus className="h-6 w-6 opacity-60" aria-hidden />

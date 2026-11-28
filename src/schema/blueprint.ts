@@ -60,6 +60,17 @@ const fieldBase = {
   label: Label,
   required: z.boolean().optional(),
   description: z.string().max(500).optional(),
+  /**
+   * Private (alarm codes, lockbox codes, health notes): shown only when tapped, left out of
+   * exports and of what the assistant reads unless it asks for that one record. Changes are in
+   * the activity log like any other.
+   */
+  sensitive: z.boolean().optional(),
+  /**
+   * Filled in from the record a link points to when that link is chosen (still editable): a
+   * labour line's price from the chosen rate, a job's address from its client.
+   */
+  fill: z.strictObject({ from: FieldId, field: FieldId }).optional(),
 };
 
 const SimpleField = z.strictObject({
@@ -131,6 +142,12 @@ const LinkField = z.strictObject({
   type: z.literal("link"),
   to: TableId,
   multiple: z.boolean().optional(),
+  /**
+   * Narrows this picker by another link on the same record: a pet picker narrowed by the chosen
+   * owner is { field: "fld_owner", via: "fld_pet_owner" } (the pet's own link to its owner).
+   * Worked out from the setup when left out (src/engine/hierarchy.ts); false turns it off.
+   */
+  narrowBy: z.union([z.literal(false), z.strictObject({ field: FieldId, via: FieldId })]).optional(),
 });
 
 /** How a computed number is shown. */
@@ -396,6 +413,20 @@ export const BusinessInfo = z.strictObject({
   reviewUrl: z.url({ protocol: /^https$/ }).max(500).optional(),
   /** ISO 4217 code used for prices without their own currency (e.g. CAD, USD, EUR). */
   currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  /**
+   * While the business is being set up (ISO time; set when it's created), setup changes apply
+   * without asking — only deleting tables or fields still waits for the owner.
+   */
+  setupUntil: z.iso.datetime().optional(),
+  /** Shown on the booking page and website: where to find the business and how to reach it. */
+  address: z.string().max(300).optional(),
+  phone: z.string().max(40).optional(),
+  /** Uploaded images (file paths in the business's storage) for the booking page and website. */
+  logo: z.strictObject({ path: z.string().min(1).max(500), name: z.string().max(255) }).optional(),
+  cover: z.strictObject({ path: z.string().min(1).max(500), name: z.string().max(255) }).optional(),
+  /** Sales tax the business charges (GST, HST, VAT), in percent; 0/absent = none. */
+  taxRate: z.number().min(0).max(30).optional(),
+  taxName: z.string().max(20).optional(),
 });
 
 // ---------- scheduling (bookings) ----------
@@ -440,8 +471,57 @@ export const Scheduling = z.strictObject({
     resourceType: FieldId.optional(),
     /** Checkbox: shown on the public booking page (missing field = all shown). */
     online: FieldId.optional(),
+    /** For the booking page: a choice to group services by, a photo, a short description. */
+    category: FieldId.optional(),
+    photo: FieldId.optional(),
+    description: FieldId.optional(),
   }),
-  practitioners: z.strictObject({ table: TableId, hours: FieldId.optional(), maxPerDay: FieldId.optional(), online: FieldId.optional() }),
+  practitioners: z.strictObject({ table: TableId, hours: FieldId.optional(), maxPerDay: FieldId.optional(), online: FieldId.optional(), photo: FieldId.optional() }),
+  /**
+   * Bookings made *for* something the client has — a pet, a car, a child. The booking page asks
+   * "Which pet?" (by name; new ones are added under the client), and the booking links to it.
+   */
+  for: z
+    .strictObject({
+      table: TableId,
+      /** The booking's link to it. */
+      booking: FieldId,
+      /** Its link to the client (a pet's owner). */
+      client: FieldId,
+      /** Its name. */
+      name: FieldId,
+      /** A choice (a dog's size) that picks the service variant. */
+      kind: FieldId.optional(),
+      /** Other fields to ask when it's new (breed, notes). */
+      ask: z.array(FieldId).max(6).optional(),
+      /** What one is called on the booking page ("pet", "vehicle"); default: the table's name. */
+      label: z.string().min(1).max(40).optional(),
+    })
+    .optional(),
+  /**
+   * Duration and price that depend on that kind (a small dog 90 min for $75, a giant one 150
+   * min for $120): one row per service and kind. Without a matching row the service's own apply.
+   */
+  variants: z
+    .strictObject({ table: TableId, service: FieldId, kind: FieldId, duration: FieldId, price: FieldId.optional() })
+    .optional(),
+  /**
+   * What must be true before an online booking ("vaccines valid on the appointment date",
+   * "waiver signed"). Checked on the "for" record or the client; the page asks for what's missing.
+   */
+  requirements: z
+    .array(
+      z.strictObject({
+        on: z.enum(["for", "client"]),
+        field: FieldId,
+        /** checked: a ticked checkbox; filled: any value (a file, a text); valid_on_date: a date on or after the appointment's day. */
+        rule: z.enum(["checked", "filled", "valid_on_date"]),
+        /** What the client reads when it's missing ("Rabies vaccine valid on the day"). */
+        label: z.string().min(1).max(160),
+      }),
+    )
+    .max(8)
+    .optional(),
   resources: z.strictObject({ table: TableId, type: FieldId.optional() }).optional(),
   timeOff: z.strictObject({ table: TableId, who: FieldId, start: FieldId, end: FieldId }).optional(),
   clients: z.strictObject({ table: TableId, name: FieldId, email: FieldId.optional(), phone: FieldId.optional() }),
@@ -538,6 +618,8 @@ export const DocumentDef = z.strictObject({
   /** "Quote", "Estimate", "Invoice". */
   label: Label,
   table: TableId,
+  /** Tax rate field (percent) filled with the business's tax rate on new documents. */
+  taxRate: FieldId.optional(),
   /** Text field that gets the next number ("Q-0007") when a record is created without one. */
   number: FieldId.optional(),
   prefix: z.string().max(10).optional(),
@@ -547,6 +629,8 @@ export const DocumentDef = z.strictObject({
   title: FieldId.optional(),
   intro: FieldId.optional(),
   terms: FieldId.optional(),
+  /** More of the record's fields shown on the document, under the dates (a timeline, a site). */
+  show: z.array(FieldId).max(12).optional(),
   /** Fixed small print when there's no terms field. */
   footer: z.string().max(2000).optional(),
   /** Dates: issued (defaults to the created date), due (invoices) / valid until (quotes). */
@@ -596,8 +680,89 @@ export const DocumentDef = z.strictObject({
     .optional(),
   /** Invoices made from an accepted quote: the quote document, and this table's link to it. */
   from: z.strictObject({ document: DocumentId, link: FieldId }).optional(),
+  /**
+   * Invoices for work done (visits, hours): "Invoice November for Hannah" adds every finished
+   * visit of that client in the period that isn't on an invoice yet, and links each to it.
+   */
+  bill: z
+    .strictObject({
+      table: TableId,
+      /** The work's link to the customer, its date, a line description and its amount. */
+      customer: FieldId,
+      date: FieldId,
+      description: FieldId.optional(),
+      amount: FieldId,
+      /** The work's link to the invoice it's on (empty = not invoiced yet). */
+      invoice: FieldId,
+      /** Which work counts as done (status eq Done); all of it when left out. */
+      done: z.array(RollupWhere).max(5).optional(),
+    })
+    .optional(),
 });
 export type DocumentDef = z.infer<typeof DocumentDef>;
+
+/**
+ * Work or charges that repeat while a plan runs: rent every week, a membership every month, a
+ * cleaning every 2 weeks on Tuesday at 9. One App creates each record ahead of time (leadDays),
+ * from the start until the end, only while `when` holds (signed, not cancelled) — never twice
+ * for one date, and a visit that was deleted (skipped) isn't made again. Future records follow
+ * edits to the plan (copied fields, amount) and are removed when the plan ends or stops.
+ */
+export const RecurringCharge = z.strictObject({
+  id: z.string().regex(/^rec_[a-z0-9_]{1,60}$/),
+  label: Label,
+  /** The plan (rental, membership, cleaning plan) and its fields. */
+  table: TableId,
+  amount: FieldId.optional(),
+  /** "week", "2weeks", "4weeks", "month", or a choice field whose chosen option says weekly / every 2 weeks / monthly. */
+  every: z.union([z.enum(["week", "2weeks", "4weeks", "month"]), FieldId]),
+  /** First date (a date-and-time keeps that time of day on every visit). */
+  start: FieldId,
+  end: FieldId.optional(),
+  when: z.array(RollupWhere).max(5).optional(),
+  /** Where the records go: their table, link back to the plan, amount and date fields. */
+  charges: z.strictObject({ table: TableId, via: FieldId, amount: FieldId.optional(), due: FieldId }),
+  /** Plan fields copied onto every record (client, address, crew, service). */
+  copy: z.array(z.strictObject({ from: FieldId, to: FieldId })).max(12).optional(),
+  /** Days ahead each record is created (default 3; visits usually 21 so the schedule shows them). */
+  leadDays: z.int().min(0).max(62).optional(),
+});
+export type RecurringCharge = z.infer<typeof RecurringCharge>;
+
+// ---------- public website ----------
+
+const SiteImage = z.strictObject({ path: z.string().min(1).max(500), name: z.string().max(255) });
+const sectionBase = { id: z.string().regex(/^sec_[a-z0-9_]{1,40}$/), title: z.string().max(120).optional() };
+/**
+ * One part of the business's public website, top to bottom. Live sections (services, team,
+ * hours, booking) read the business's own data, so a price changed in the app is changed on the
+ * site; the rest is the owner's words and photos.
+ */
+export const SiteSection = z.discriminatedUnion("type", [
+  z.strictObject({ ...sectionBase, type: z.literal("hero"), subtitle: z.string().max(300).optional(), image: SiteImage.optional(), cta: z.enum(["book", "contact", "call"]).optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("services"), intro: z.string().max(500).optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("team"), intro: z.string().max(500).optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("about"), text: z.string().max(3000), image: SiteImage.optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("gallery"), images: z.array(SiteImage).max(24) }),
+  z.strictObject({ ...sectionBase, type: z.literal("reviews"), quotes: z.array(z.strictObject({ text: z.string().max(600), name: z.string().max(80) })).max(12), link: z.boolean().optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("banner"), text: z.string().max(300), tone: z.enum(["accent", "amber", "neutral"]).optional() }),
+  z.strictObject({ ...sectionBase, type: z.literal("hours") }),
+  z.strictObject({ ...sectionBase, type: z.literal("contact"), intro: z.string().max(500).optional() }),
+]);
+export type SiteSection = z.infer<typeof SiteSection>;
+
+export const Site = z.strictObject({
+  enabled: z.boolean(),
+  /** For search engines and link previews. */
+  title: z.string().max(80).optional(),
+  description: z.string().max(200).optional(),
+  sections: z.array(SiteSection).max(24),
+  /** Where the contact form's messages go: a record in this table (a lead or client). */
+  contact: z
+    .strictObject({ table: TableId, name: FieldId, email: FieldId.optional(), phone: FieldId.optional(), message: FieldId.optional() })
+    .optional(),
+});
+export type Site = z.infer<typeof Site>;
 
 const BlueprintShape = z.strictObject({
   version: z.int().min(1),
@@ -612,6 +777,8 @@ const BlueprintShape = z.strictObject({
   functions: z.array(ServerFunction).max(100).optional(),
   theme: Theme.optional(),
   documents: z.array(DocumentDef).max(20).optional(),
+  recurring: z.array(RecurringCharge).max(20).optional(),
+  site: Site.optional(),
 });
 
 /** Full blueprint with referential-integrity checks. */
@@ -722,7 +889,8 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
     const own = fieldsOf(d.table);
     if (!tables.has(d.table)) return issue([...at, "table"], `unknown table ${d.table}`);
     const need = (path: (string | number)[], table: string, id: string | undefined) => id && !fieldsOf(table).has(id) && issue([...at, ...path], `unknown field ${id} on ${table}`);
-    for (const k of ["number", "customer", "title", "intro", "terms", "issued", "due", "sent"] as const) need([k], d.table, d[k]);
+    for (const k of ["number", "customer", "title", "intro", "terms", "issued", "due", "sent", "taxRate"] as const) need([k], d.table, d[k]);
+    for (const [si, f] of (d.show ?? []).entries()) need(["show", si], d.table, f);
     for (const [k, v] of Object.entries(d.totals)) need(["totals", k], d.table, v);
     for (const [k, v] of Object.entries(d.accept ?? {})) need(["accept", k], d.table, v);
     if (!tables.has(d.lines.table)) issue([...at, "lines", "table"], `unknown table ${d.lines.table}`);
@@ -737,7 +905,49 @@ export const Blueprint = BlueprintShape.superRefine((bp, ctx) => {
       if (!(bp.documents ?? []).some((x) => x.id === d.from!.document && x.kind === "quote")) issue([...at, "from", "document"], `unknown quote document ${d.from.document}`);
       if (!own.has(d.from.link)) issue([...at, "from", "link"], `unknown field ${d.from.link} on ${d.table}`);
     }
+    if (d.bill) {
+      if (d.kind !== "invoice") issue([...at, "bill"], "only invoices bill work");
+      if (!tables.has(d.bill.table)) issue([...at, "bill", "table"], `unknown table ${d.bill.table}`);
+      else {
+        for (const k of ["customer", "date", "description", "amount", "invoice"] as const) if (d.bill[k]) need(["bill", k], d.bill.table, d.bill[k]!);
+        for (const [wi, w] of (d.bill.done ?? []).entries()) need(["bill", "done", String(wi), "field"], d.bill.table, w.field);
+        const inv = tables.get(d.bill.table)?.fields.find((f) => f.id === d.bill!.invoice);
+        if (inv && (inv.type !== "link" || inv.to !== d.table)) issue([...at, "bill", "invoice"], `must link to ${d.table}`);
+      }
+    }
     if ((bp.documents ?? []).filter((x) => x.table === d.table).length > 1) issue([...at, "table"], `${d.table} already has a document`);
+  });
+
+  if (bp.site?.contact) {
+    const c = bp.site.contact;
+    if (!tables.has(c.table)) issue(["site", "contact", "table"], `unknown table ${c.table}`);
+    else for (const k of ["name", "email", "phone", "message"] as const) if (c[k] && !fieldsOf(c.table).has(c[k]!)) issue(["site", "contact", k], `unknown field ${c[k]} on ${c.table}`);
+  }
+  if (bp.site) {
+    const ids = new Set<string>();
+    bp.site.sections.forEach((sec, i) => {
+      if (ids.has(sec.id)) issue(["site", "sections", i, "id"], `duplicate section id ${sec.id}`);
+      ids.add(sec.id);
+    });
+  }
+
+  (bp.recurring ?? []).forEach((r, ri) => {
+    claim(r.id, ["recurring", ri, "id"]);
+    const at = ["recurring", ri];
+    if (!tables.has(r.table)) return issue([...at, "table"], `unknown table ${r.table}`);
+    const own = fieldsOf(r.table);
+    for (const k of ["amount", "start", "end"] as const) if (r[k] && !own.has(r[k]!)) issue([...at, k], `unknown field ${r[k]} on ${r.table}`);
+    if (r.every.startsWith("fld_") && !own.has(r.every)) issue([...at, "every"], `unknown field ${r.every} on ${r.table}`);
+    for (const [wi, w] of (r.when ?? []).entries()) if (!own.has(w.field)) issue([...at, "when", wi, "field"], `unknown field ${w.field} on ${r.table}`);
+    const ct = tables.get(r.charges.table);
+    if (!ct) return issue([...at, "charges", "table"], `unknown table ${r.charges.table}`);
+    for (const k of ["amount", "due", "via"] as const) if (r.charges[k] && !ct.fields.some((f) => f.id === r.charges[k])) issue([...at, "charges", k], `unknown field ${r.charges[k]} on ${ct.id}`);
+    for (const [ci, c] of (r.copy ?? []).entries()) {
+      if (!own.has(c.from)) issue([...at, "copy", ci, "from"], `unknown field ${c.from} on ${r.table}`);
+      if (!ct.fields.some((f) => f.id === c.to)) issue([...at, "copy", ci, "to"], `unknown field ${c.to} on ${ct.id}`);
+    }
+    const via = ct.fields.find((f) => f.id === r.charges.via);
+    if (via && (via.type !== "link" || via.to !== r.table)) issue([...at, "charges", "via"], `charges must link to ${r.table}`);
   });
 
   const recordPages = new Set<string>();
@@ -831,6 +1041,37 @@ function checkScheduling(
     role(["timeOff", "start"], sc.timeOff.table, sc.timeOff.start, ["datetime", "date"]);
     role(["timeOff", "end"], sc.timeOff.table, sc.timeOff.end, ["datetime", "date"]);
   }
+  role(["services", "category"], s.table, s.category, ["choice", "status"]);
+  role(["services", "photo"], s.table, s.photo, ["file"]);
+  role(["services", "description"], s.table, s.description, ["text", "long_text"]);
+  role(["practitioners", "photo"], sc.practitioners.table, sc.practitioners.photo, ["file"]);
+  if (sc.for) {
+    const f = sc.for;
+    if (!tables.has(f.table)) issue(["scheduling", "for", "table"], `unknown table ${f.table}`);
+    else {
+      role(["for", "booking"], b.table, f.booking, ["link"], f.table);
+      role(["for", "client"], f.table, f.client, ["link"], sc.clients.table);
+      role(["for", "name"], f.table, f.name, ["text"]);
+      role(["for", "kind"], f.table, f.kind, ["choice", "status"]);
+      (f.ask ?? []).forEach((a, i) => role(["for", "ask", String(i)], f.table, a, ["text", "long_text", "number", "date", "choice", "checkbox", "phone", "email"]));
+    }
+  }
+  if (sc.variants) {
+    const v = sc.variants;
+    if (!tables.has(v.table)) issue(["scheduling", "variants", "table"], `unknown table ${v.table}`);
+    else {
+      if (!sc.for?.kind) issue(["scheduling", "variants"], "variants need for.kind (the choice that picks one)");
+      role(["variants", "service"], v.table, v.service, ["link"], s.table);
+      role(["variants", "kind"], v.table, v.kind, ["choice", "status"]);
+      role(["variants", "duration"], v.table, v.duration, ["number"]);
+      role(["variants", "price"], v.table, v.price, ["money", "number"]);
+    }
+  }
+  (sc.requirements ?? []).forEach((r, i) => {
+    const t = r.on === "for" ? sc.for?.table : sc.clients.table;
+    if (!t) return issue(["scheduling", "requirements", i], "requirements on: for need the for section");
+    role(["requirements", String(i), "field"], t, r.field, r.rule === "checked" ? ["checkbox"] : r.rule === "valid_on_date" ? ["date", "datetime"] : ["text", "long_text", "file", "date", "datetime", "number", "choice", "checkbox"]);
+  });
   role(["clients", "name"], sc.clients.table, sc.clients.name, ["text"]);
   role(["clients", "email"], sc.clients.table, sc.clients.email, ["email"]);
   role(["clients", "phone"], sc.clients.table, sc.clients.phone, ["phone"]);

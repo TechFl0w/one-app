@@ -85,13 +85,11 @@ export const makerShop: Template = {
           : block("blk_recent", "list", [0, 1, 12, 5], { table: "tbl_orders", filters: openOrders, sort: [{ field: "_created_at", dir: "desc" }] }, { title: "Open orders" }),
       ]),
       page("pg_orders", "Orders", "orders", 1, [
-        block("blk_orders", "board", [0, 0, 12, 6], { table: "tbl_orders", groupBy: "fld_status" }, { title: "Orders" }),
-        block("blk_new_order", "form", [0, 6, 4, 6], { table: "tbl_orders" }, { title: "New order" }),
+        block("blk_orders", "board", [0, 0, 12, 8], { table: "tbl_orders", groupBy: "fld_status" }, { title: "Orders" }),
       ]),
       page("pg_products", "Products", "products", 2, [block("blk_products", "table", [0, 0, 12, 6], { table: "tbl_products", sort: [{ field: "fld_name", dir: "asc" }] }, { title: "Products" })]),
       page("pg_customers", "Customers", "users", 3, [
-        block("blk_customers", "table", [0, 0, 8, 6], { table: "tbl_customers", sort: [{ field: "fld_name", dir: "asc" }] }, { title: "Customers" }),
-        block("blk_new_customer", "form", [8, 0, 4, 6], { table: "tbl_customers" }, { title: "Add a customer" }),
+        block("blk_customers", "table", [0, 0, 12, 6], { table: "tbl_customers", sort: [{ field: "fld_name", dir: "asc" }] }, { title: "Customers" }),
       ]),
     ];
 

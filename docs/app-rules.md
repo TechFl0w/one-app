@@ -5,7 +5,8 @@ The owner can ask for something else; the rules are in the owner agent's prompt
 (`src/agent/ownerAgent.ts`, "App rules") — keep this file and that section in sync.
 
 - **Add and edit in a modal.** "Add …" opens `openRecordForm({ table, fields, defaults })`; edit
-  opens it with `recordId`. No permanent add forms on a page, no separate add pages — even when a
+  opens it with `recordId`. Standard pages get a "+ New …" button at the top right by themselves.
+  No permanent add forms on a page (no "form" block for adding), no separate add pages — even when a
   screenshot being recreated shows one. Inline `RecordForm` only when the design is the form.
 - **Sensible forms:** name/title first, required fields early, at most ~8 fields, prefilled from
   context (the client/room/date being viewed).

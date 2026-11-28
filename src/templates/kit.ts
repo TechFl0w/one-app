@@ -63,3 +63,21 @@ export const automation = (a: Omit<Automation, "enabled" | "conditions"> & Parti
 
 /** Final check: every template output must be a valid blueprint. */
 export const finish = (bp: unknown) => Blueprint.parse(bp);
+
+/** Sales tax, asked during setup by businesses that charge clients (quotes, invoices, rent). */
+export const taxQuestion = {
+  id: "tax",
+  kind: "choice" as const,
+  label: "Do you charge sales tax?",
+  options: [
+    { id: "none", label: "No", hint: "Not registered, or prices include it" },
+    { id: "gst5", label: "GST 5%", hint: "Canada, GST-registered" },
+    { id: "hst13", label: "HST 13%", hint: "Ontario" },
+    { id: "hst15", label: "HST 15%", hint: "Atlantic provinces" },
+    { id: "other", label: "Another rate", hint: "Set it later in Settings" },
+  ],
+  default: "none",
+};
+/** The rate and name from the tax answer (none → no tax). */
+export const taxFrom = (answer: string): { taxRate?: number; taxName?: string } =>
+  answer === "gst5" ? { taxRate: 5, taxName: "GST" } : answer === "hst13" ? { taxRate: 13, taxName: "HST" } : answer === "hst15" ? { taxRate: 15, taxName: "HST" } : {};

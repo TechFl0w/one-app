@@ -4,9 +4,9 @@ import { supabaseStore } from "@/server/store";
 import { PageView } from "@/components/page/PageView";
 import { EditablePage } from "@/components/page/EditablePage";
 import { submitRecordForm } from "../../actions";
-import { sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "../../sandbox-actions";
+import { sandboxCreate, sandboxGet, sandboxList, sandboxFileUrl, sandboxSendDocument, sandboxDocumentLink, sandboxInvoiceFromQuote, sandboxInvoiceWork, sandboxFreeTimes, sandboxBookTime, sandboxRemove, sandboxUpdate, sandboxUploadTarget } from "../../sandbox-actions";
 
-export default async function BusinessPage({ params }: PageProps<"/b/[businessId]/p/[pageId]">) {
+export default async function BusinessPage({ params, searchParams }: PageProps<"/b/[businessId]/p/[pageId]">) {
   const { businessId, pageId } = await params;
   const [{ blueprint, userId, supabase }, device] = await Promise.all([getBusinessContext(businessId), getDevice()]);
   const page = blueprint.pages.find((p) => p.id === pageId);
@@ -18,6 +18,7 @@ export default async function BusinessPage({ params }: PageProps<"/b/[businessId
       device={device}
       userId={userId}
       env={{
+        params: await searchParams,
         // Used on the server only (BlockView renders each screen with its own code).
         blueprint,
         store: withComputed(supabaseStore(supabase, businessId), blueprint),
@@ -35,6 +36,9 @@ export default async function BusinessPage({ params }: PageProps<"/b/[businessId
             sendDocument: sandboxSendDocument.bind(null, businessId),
             documentLink: sandboxDocumentLink.bind(null, businessId),
             invoiceFromQuote: sandboxInvoiceFromQuote.bind(null, businessId),
+            invoiceWork: sandboxInvoiceWork.bind(null, businessId),
+            freeTimes: sandboxFreeTimes.bind(null, businessId),
+            bookTime: sandboxBookTime.bind(null, businessId),
           },
         },
       }}

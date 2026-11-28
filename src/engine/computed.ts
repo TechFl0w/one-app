@@ -42,7 +42,7 @@ export async function addComputed(bp: Blueprint, tableId: string, records: Recor
   for (const f of rollups) {
     const source = f.from ?? table.fields.find((x): x is Extract<Field, { type: "link" }> => x.id === f.via && x.type === "link")?.to;
     if (!source) continue;
-    const rows = (await load(source)).filter((c) => (f.where ?? []).every((w) => matches(c, w, today, now)));
+    const rows = (await load(source)).filter((c) => (f.where ?? []).every((w) => matches(c, w, today, now, bp.business.timezone)));
     for (const r of out) {
       const linked = f.from
         ? rows.filter((c) => idsIn(c.data[f.via]).includes(r.id))
@@ -58,7 +58,7 @@ export async function addComputed(bp: Blueprint, tableId: string, records: Recor
       const node = compiledFormula(f.expression);
       r.data[f.id] = node instanceof FormulaError ? null : evaluateFormula(node, r.data);
     }
-    for (const f of derived) r.data[f.id] = deriveOption(f, r.data, today, now);
+    for (const f of derived) r.data[f.id] = deriveOption(f, r.data, today, now, bp.business.timezone);
   }
   return out;
 }
@@ -100,8 +100,8 @@ function formulaOrder(formulas: Formula[]): Formula[] {
 type Derived = Field & { derive: DeriveRules };
 
 /** The option a derived status shows for these values: the first rule that fully holds. */
-export function deriveOption(f: Derived, data: Record<string, unknown>, today: string, now: Date): string | null {
-  for (const rule of f.derive.rules) if (rule.when.every((w) => valueMatches(data[w.field], w, today, now))) return rule.option;
+export function deriveOption(f: Derived, data: Record<string, unknown>, today: string, now: Date, tz = "UTC"): string | null {
+  for (const rule of f.derive.rules) if (rule.when.every((w) => valueMatches(data[w.field], w, today, now, tz))) return rule.option;
   return f.derive.otherwise ?? null;
 }
 
@@ -119,14 +119,70 @@ export function resolveDateToken(value: unknown, today: string, now: Date): unkn
 const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : typeof v === "string" ? [v] : []);
 const empty = (v: unknown) => v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length);
 
-function matches(r: RecordRow, w: Where, today: string, now: Date): boolean {
-  return valueMatches(r.data[w.field], w, today, now);
+function matches(r: RecordRow, w: Where, today: string, now: Date, tz: string): boolean {
+  return valueMatches(r.data[w.field], w, today, now, tz);
 }
 
-/** One condition against one value (rollup filters, derived statuses). */
-export function valueMatches(v: unknown, w: Where, today: string, now: Date): boolean {
+/** The local days a date token covers, [start, end) as YYYY-MM-DD ("@this_week" → Monday to next Monday). */
+export function tokenDays(value: unknown, today: string): { start: string; end: string } | null {
+  if (typeof value !== "string" || !value.startsWith("@") || value === "@now") return null;
+  const shift = (d: string, n: number) => {
+    const t = new Date(`${d}T12:00:00Z`);
+    t.setUTCDate(t.getUTCDate() + n);
+    return t.toISOString().slice(0, 10);
+  };
+  const m = /^@today([+-])(\d{1,4})d$/.exec(value);
+  if (m) {
+    const d = shift(today, (m[1] === "-" ? -1 : 1) * Number(m[2]));
+    return { start: d, end: shift(d, 1) };
+  }
+  switch (value) {
+    case "@today":
+      return { start: today, end: shift(today, 1) };
+    case "@tomorrow":
+      return { start: shift(today, 1), end: shift(today, 2) };
+    case "@yesterday":
+      return { start: shift(today, -1), end: today };
+    case "@this_week": {
+      const dow = new Date(`${today}T12:00:00Z`).getUTCDay();
+      const start = shift(today, -((dow + 6) % 7));
+      return { start, end: shift(start, 7) };
+    }
+    case "@this_month": {
+      const start = `${today.slice(0, 7)}-01`;
+      const n = new Date(`${start}T12:00:00Z`);
+      n.setUTCMonth(n.getUTCMonth() + 1);
+      return { start, end: n.toISOString().slice(0, 10) };
+    }
+  }
+  return null;
+}
+
+/** A stored date or date-time as the business's local day ("2026-11-27T23:30:00Z" in Vancouver → "2026-11-27"). */
+const localDay = (v: unknown, tz: string): string | null => {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(v)) return null;
+  if (v.length <= 10) return v.slice(0, 10);
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? v.slice(0, 10) : isoDate(localToday(d, tz));
+};
+
+/**
+ * One condition against one value (rollup filters, derived statuses, automation conditions).
+ * Day tokens (@today, @tomorrow, @this_week…) match date-times by their local day in `tz`:
+ * "start eq @today" is any time today.
+ */
+export function valueMatches(v: unknown, w: Where, today: string, now: Date, tz = "UTC"): boolean {
   if (w.op === "empty") return empty(v);
   if (w.op === "not_empty") return !empty(v);
+  const days = tokenDays(w.value, today);
+  if (days) {
+    const have = (Array.isArray(v) ? v : [v]).map((x) => localDay(x, tz)).filter((x): x is string => !!x);
+    const inRange = have.some((d) => d >= days.start && d < days.end);
+    if (w.op === "eq") return inRange;
+    if (w.op === "neq") return !inRange;
+    if (!have.length) return false;
+    return have.some((d) => (w.op === "gt" ? d >= days.end : w.op === "gte" ? d >= days.start : w.op === "lt" ? d < days.start : d < days.end));
+  }
   const want = resolveDateToken(w.value, today, now);
   const have = Array.isArray(v) ? v : [v];
   if (w.op === "eq") return have.some((x) => x === want);
@@ -212,7 +268,7 @@ export async function queryWithComputed(
     const r = await runStored(query);
     return { ...r, records: await addComputed(bp, query.table, r.records, loadTable, now) };
   }
-  const stored = { table: query.table, filters: filters.filter((f) => !late.includes(f)) };
+  const stored = { table: query.table, filters: filters.filter((f) => !late.includes(f)), ...(query.search ? { search: query.search } : {}) };
   const rows: RecordRow[] = [];
   while (rows.length < MAX_ROWS) {
     const page = await runStored({ ...stored, limit: 500, offset: rows.length });
@@ -222,7 +278,7 @@ export async function queryWithComputed(
   const bpTable = bp.tables.find((t) => t.id === query.table);
   const today = isoDate(localToday(now, bp.business.timezone));
   let out = (await addComputed(bp, query.table, rows, loadTable, now)).filter((r) =>
-    late.every((f) => (f.op === "contains" ? String(r.data[f.field] ?? "").toLowerCase().includes(String(f.value ?? "").toLowerCase()) : valueMatches(r.data[f.field], { field: f.field, op: f.op, value: f.value }, today, now))),
+    late.every((f) => (f.op === "contains" ? String(r.data[f.field] ?? "").toLowerCase().includes(String(f.value ?? "").toLowerCase()) : valueMatches(r.data[f.field], { field: f.field, op: f.op, value: f.value }, today, now, bp.business.timezone))),
   );
   if (sort.length) {
     const val = (r: RecordRow, field: string) => (field === "_created_at" ? r.createdAt : field === "_updated_at" ? r.updatedAt : r.data[field]);

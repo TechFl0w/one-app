@@ -27,6 +27,7 @@ export function salonBlueprint(): Blueprint {
         fields: [
           { id: "fld_start", label: "Start", type: "datetime", required: true },
           { id: "fld_practitioner", label: "Practitioner", type: "link", to: "tbl_team" },
+          { id: "fld_client", label: "Client", type: "link", to: "tbl_clients" },
           {
             id: "fld_status",
             label: "Status",

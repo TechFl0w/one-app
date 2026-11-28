@@ -5,9 +5,9 @@ import { EditablePage } from "@/components/page/EditablePage";
 import { currentDemo } from "@/demo/current";
 import { memoryStore } from "@/engine/store";
 import { submitDemoForm } from "../../actions";
-import { demoSandboxCreate, demoSandboxGet, demoSandboxList, demoSandboxRemove, demoSandboxUpdate } from "../../sandbox-actions";
+import { demoSandboxCreate, demoSandboxGet, demoSandboxList, demoSandboxRemove, demoSandboxUpdate, demoFreeTimes, demoBookTime } from "../../sandbox-actions";
 
-export default async function DemoPage({ params }: PageProps<"/demo/p/[pageId]">) {
+export default async function DemoPage({ params, searchParams }: PageProps<"/demo/p/[pageId]">) {
   const { pageId } = await params;
   const demo = await currentDemo();
   const page = demo.blueprint.pages.find((p) => p.id === pageId);
@@ -17,10 +17,11 @@ export default async function DemoPage({ params }: PageProps<"/demo/p/[pageId]">
       page={page}
       device={await getDevice()}
       env={{
+        params: await searchParams,
         blueprint: demo.blueprint,
         store: withComputed(memoryStore(demo.records), demo.blueprint),
         formAction: (tableId, fields) => submitDemoForm.bind(null, tableId, fields),
-        sandbox: { basePath: "/demo", bridge: { list: demoSandboxList, get: demoSandboxGet, create: demoSandboxCreate, update: demoSandboxUpdate, remove: demoSandboxRemove } },
+        sandbox: { basePath: "/demo", bridge: { list: demoSandboxList, get: demoSandboxGet, create: demoSandboxCreate, update: demoSandboxUpdate, remove: demoSandboxRemove, freeTimes: demoFreeTimes, bookTime: demoBookTime } },
       }}
     />
   );

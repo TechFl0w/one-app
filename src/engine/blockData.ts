@@ -6,7 +6,8 @@ import { buildAggregate, buildRecordQuery, RecordError, type QueryContext } from
 import type { RecordStore } from "./store";
 import type { AuditRow } from "./auditText";
 import { documentFor, loadDocument, type DocView } from "./documents";
-import { isoDate, localToday } from "./dates";
+import { isoDate, localToday, startOfWeek } from "./dates";
+import { narrowings } from "./hierarchy";
 
 /** Loads what a block needs to render. Pure apart from the store, so the demo and tests can use it. */
 
@@ -16,7 +17,7 @@ export type LinkLabels = Record<string, string>;
 export type BlockData =
   | { kind: "records"; table: Table; records: RecordRow[]; total: number; labels: LinkLabels; groups?: Group[] }
   | { kind: "number"; table: Table; value: number | null; field?: Field }
-  | { kind: "form"; table: Table; fields: Field[]; choices: Record<string, { id: string; label: string }[]> }
+  | { kind: "form"; table: Table; fields: Field[]; choices: Record<string, { id: string; label: string; parent?: string }[]>; narrow?: Record<string, string> }
   | { kind: "details"; table: Table; record: RecordRow; labels: LinkLabels }
   | { kind: "header"; stats: { label: string; value: number | null; field?: Field; tone?: string }[] }
   | { kind: "activity"; rows: AuditRow[] }
@@ -158,7 +159,7 @@ export async function loadBlockData(
   original: Block,
   blueprint: Blueprint,
   store: RecordStore,
-  ctx: QueryContext & { recordId?: string } = {},
+  ctx: QueryContext & { recordId?: string; extra?: { filters: RecordFilter[]; search?: { q: string; links?: string[] } } } = {},
 ): Promise<BlockData> {
   if (original.type === "notes") return { kind: "static" };
   if (original.type === "header") return { kind: "header", stats: await headerStats(blueprint, store, original.options?.stats, ctx) };
@@ -216,11 +217,26 @@ export async function loadBlockData(
 
       case "form": {
         const fields = formFieldsFor(table, block.options?.fields);
-        const choices: Record<string, { id: string; label: string }[]> = {};
+        const choices: Record<string, { id: string; label: string; parent?: string }[]> = {};
         for (const f of fields) {
           if (f.type === "link") choices[f.id] = await groupsFor(blueprint, f, store, ctx).then((g) => g.map(({ id, label }) => ({ id: id!, label })));
         }
-        return { kind: "form", table, fields, choices };
+        // Pickers narrowed by another on the form (pets by owner): each option carries its parent.
+        const narrowed = narrowings(blueprint.tables, table.id, fields.map((f) => f.id));
+        const narrow: Record<string, string> = {};
+        for (const [childId, n] of Object.entries(narrowed)) {
+          const child = fields.find((f) => f.id === childId);
+          if (!child || child.type !== "link") continue;
+          const { records } = await store.query(buildRecordQuery(blueprint, { table: child.to, limit: 500 }, ctx));
+          const parentOf = new Map(records.map((r) => [r.id, Array.isArray(r.data[n.via]) ? String((r.data[n.via] as unknown[])[0] ?? "") : String(r.data[n.via] ?? "")]));
+          const parentLabels = new Map((choices[n.parent] ?? []).map((o) => [o.id, o.label]));
+          choices[childId] = (choices[childId] ?? []).map((o) => {
+            const p = parentOf.get(o.id);
+            return { ...o, ...(p ? { parent: p, label: parentLabels.has(p) ? `${o.label} · ${parentLabels.get(p)}` : o.label } : {}) };
+          });
+          narrow[childId] = n.parent;
+        }
+        return { kind: "form", table, fields, choices, ...(Object.keys(narrow).length ? { narrow } : {}) };
       }
 
       case "board":
@@ -229,12 +245,21 @@ export async function loadBlockData(
         if (block.type === "calendar") {
           const dateField = calendarField(table, block);
           if (!dateField) return { kind: "error", message: `${table.label} has no date field to show on a calendar.` };
-          const view = block.options?.view === "week" ? "@this_week" : "@today";
-          filters.push({ field: dateField.id, op: "eq", value: view });
+          const week = block.options?.view === "week";
+          const endField = table.fields.find((f) => f.id === block.options?.endField && (f.type === "date" || f.type === "datetime"));
+          if (endField) {
+            // Jobs that span days: anything that starts before the period ends and ends after it starts.
+            const tz = ctx.timezone ?? blueprint.business.timezone;
+            const today = localToday(ctx.now ?? new Date(), tz);
+            const from = week ? Math.round((Date.UTC(startOfWeek(today).year, startOfWeek(today).month - 1, startOfWeek(today).day) - Date.UTC(today.year, today.month - 1, today.day)) / 86_400_000) : 0;
+            const to = week ? from + 6 : 0;
+            const tok = (n: number) => (n === 0 ? "@today" : `@today${n > 0 ? "+" : "-"}${Math.abs(n)}d`);
+            filters.push({ field: dateField.id, op: "lt", value: tok(to + 1) }, { field: endField.id, op: "gte", value: tok(from) });
+          } else filters.push({ field: dateField.id, op: "eq", value: week ? "@this_week" : "@today" });
         }
         const gf = groupField(table, block);
         if (block.type === "board" && !gf) return { kind: "error", message: `Pick a status or choice field to group ${table.label} by.` };
-        const { records, total } = await queryBlock(blueprint, store, { table: table.id, filters, sort: block.source.sort ?? [], limit: DEFAULT_LIMITS[block.type] }, ctx);
+        const { records, total } = await queryBlock(blueprint, store, { table: table.id, filters: [...filters, ...(ctx.extra?.filters ?? [])], ...(ctx.extra?.search ? { search: ctx.extra.search } : {}), sort: block.source.sort ?? [], limit: DEFAULT_LIMITS[block.type] }, ctx);
         const labels = await linkLabels(blueprint, table, records, store);
         const groups = gf ? await groupsFor(blueprint, gf, store, ctx) : undefined;
         return { kind: "records", table, records, total, labels, groups };
@@ -244,7 +269,7 @@ export async function loadBlockData(
       case "gallery":
       case "list": {
         const limit = Math.min(opt(block.options?.limit, isNum) ?? DEFAULT_LIMITS[block.type], 500);
-        const { records, total } = await queryBlock(blueprint, store, { table: table.id, filters: block.source.filters ?? [], sort: block.source.sort ?? [], limit }, ctx);
+        const { records, total } = await queryBlock(blueprint, store, { table: table.id, filters: [...(block.source.filters ?? []), ...(ctx.extra?.filters ?? [])], ...(ctx.extra?.search ? { search: ctx.extra.search } : {}), sort: block.source.sort ?? [], limit }, ctx);
         return { kind: "records", table, records, total, labels: await linkLabels(blueprint, table, records, store) };
       }
     }

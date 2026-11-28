@@ -1,5 +1,5 @@
 import { isComputedField, type Automation, type Blueprint, type Field, type Table } from "@/schema/blueprint";
-import { resolveDateToken } from "@/engine/computed";
+import { resolveDateToken, tokenDays, valueMatches } from "@/engine/computed";
 import { isoDate, localToday } from "@/engine/dates";
 
 /**
@@ -64,6 +64,8 @@ export function conditionsHold(automation: Automation, table: Table, data: Recor
   return automation.conditions.every((cond) => {
     const field = table.fields.find((f) => f.id === cond.field);
     if (opts.skipComputed && field && isComputedField(field)) return true;
+    // Day tokens on dates and date-times ("start eq @today") match by the business's local day.
+    if (tokenDays(cond.value, today) && ["eq", "neq", "gt", "gte", "lt", "lte"].includes(cond.op)) return valueMatches(data[cond.field], cond as Parameters<typeof valueMatches>[1], today, now, opts.timezone ?? "UTC");
     const c = { ...cond, value: resolveDateToken(cond.value, today, now) as typeof cond.value };
     const v = data[c.field];
     switch (c.op) {
@@ -142,10 +144,13 @@ export const eventJobKey = (a: Automation, e: RecordEvent) => `${a.id}:event:${e
 
 // ---------- actions ----------
 
-/** Replaces {{fld_x}} with the record's value (and {{record.id}}). */
-export function fillTemplate(s: string, recordId: string, data: Record<string, unknown>): string {
-  return s.replace(/\{\{\s*(record\.id|fld_[a-z0-9_]+)\s*\}\}/g, (_, key: string) =>
-    key === "record.id" ? recordId : data[key] === undefined || data[key] === null ? "" : String(data[key]),
+/**
+ * Replaces {{fld_x}} (and {{fld_link.fld_y}}, {{record.id}}) in a message. `vars` holds the
+ * readable values (automations/check.ts messageVars); without them the raw value is used.
+ */
+export function fillTemplate(s: string, recordId: string, data: Record<string, unknown>, vars: Record<string, string> = {}): string {
+  return s.replace(/\{\{\s*(record\.id|fld_[a-z0-9_]+(?:\.fld_[a-z0-9_]+)?)\s*\}\}/g, (_, key: string) =>
+    key === "record.id" ? recordId : key in vars ? vars[key] : data[key] === undefined || data[key] === null ? "" : String(data[key]),
   );
 }
 
@@ -160,23 +165,31 @@ const fillValues = (values: unknown, recordId: string, data: Record<string, unkn
 /** One planned step: what an action will do, already resolved against the record. */
 export type Step =
   | { kind: "create_record"; table: string; values: Record<string, unknown> }
-  | { kind: "update_record"; table: string; recordId: string; values: Record<string, unknown> }
+  | { kind: "update_record"; table: string; recordId: string; values: Record<string, unknown>; via?: string }
   | { kind: "notify"; message: string }
   | { kind: "send_message"; channel: string; toField?: string; template?: string; message?: string }
   | { kind: "wait"; ms: number }
   | { kind: "run_function"; function: string }
   | { kind: "unsupported"; type: string; reason: string };
 
-export function planStep(action: Automation["actions"][number], ctx: { tableId: string; recordId: string; data: Record<string, unknown>; automation: Automation }): Step {
+export function planStep(action: Automation["actions"][number], ctx: { tableId: string; recordId: string; data: Record<string, unknown>; automation: Automation; vars?: Record<string, string> }): Step {
   const { tableId, recordId, data } = ctx;
+  const vars = ctx.vars ?? {};
   switch (action.type) {
     case "create_record":
       return { kind: "create_record", table: typeof action.table === "string" ? action.table : tableId, values: fillValues(action.values, recordId, data) };
     case "update_record":
     case "assign":
-      return { kind: "update_record", table: tableId, recordId, values: fillValues(action.values ?? (action.field ? { [String(action.field)]: action.value } : {}), recordId, data) };
+      // With "via" (a link field), the linked record changes instead: a quote's job, a booking's client.
+      return {
+        kind: "update_record",
+        table: tableId,
+        recordId,
+        values: fillValues(action.values ?? (action.field ? { [String(action.field)]: action.value } : {}), recordId, data),
+        ...(typeof action.via === "string" ? { via: action.via } : {}),
+      };
     case "notify":
-      return { kind: "notify", message: fillTemplate(typeof action.message === "string" ? action.message : ctx.automation.label, recordId, data) };
+      return { kind: "notify", message: fillTemplate(typeof action.message === "string" ? action.message : ctx.automation.label, recordId, data, vars) };
     case "send_message":
       return {
         kind: "send_message",
@@ -184,7 +197,7 @@ export function planStep(action: Automation["actions"][number], ctx: { tableId: 
         channel: typeof action.channel === "string" ? action.channel : "auto",
         toField: typeof action.to === "string" ? action.to : undefined,
         template: typeof action.template === "string" ? action.template : undefined,
-        message: typeof action.message === "string" ? fillTemplate(action.message, recordId, data) : undefined,
+        message: typeof action.message === "string" ? fillTemplate(action.message, recordId, data, vars) : undefined,
       };
     case "wait": {
       const ms = parseDuration(action.duration);
@@ -211,8 +224,14 @@ export function describeStep(bp: Blueprint, step: Step): string {
   switch (step.kind) {
     case "create_record":
       return `Add a ${table(step.table)?.label.replace(/s$/, "").toLowerCase() ?? "record"} (${fields(step.table, step.values)})`;
-    case "update_record":
+    case "update_record": {
+      if (step.via) {
+        const link = table(step.table)?.fields.find((f) => f.id === step.via);
+        const target = link?.type === "link" ? link.to : step.table;
+        return `Set ${fields(target, step.values)} on the linked ${link?.label.toLowerCase() ?? "record"}`;
+      }
       return `Set ${fields(step.table, step.values)}`;
+    }
     case "notify":
       return `Notify you: “${step.message}”`;
     case "send_message": {

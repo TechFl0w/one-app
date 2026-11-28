@@ -8,7 +8,7 @@ import { useSandbox } from "@/components/sandbox/SandboxProvider";
  * One-tap buttons on a row that set a field ("Approve" / "Decline" a quote line). Shown while
  * the row's value is none of the buttons' values; afterwards the row shows the value itself.
  */
-export function QuickSet({ table, recordId, field, buttons, current }: { table: string; recordId: string; field: string; buttons: { value: string; label: string; color?: string }[]; current: React.ReactNode }) {
+export function QuickSet({ table, recordId, field, buttons, current }: { table: string; recordId: string; field: string; buttons: { value: string; label: string; color?: string; also?: Record<string, unknown> }[]; current: React.ReactNode }) {
   const sandbox = useSandbox();
   const router = useRouter();
   const [saving, setSaving] = useState<string | null>(null);
@@ -27,7 +27,7 @@ export function QuickSet({ table, recordId, field, buttons, current }: { table: 
             e.preventDefault();
             setSaving(b.value);
             setError(null);
-            const r = await sandbox.bridge.update(table, recordId, { [field]: b.value });
+            const r = await sandbox.bridge.update(table, recordId, { ...(b.also ?? {}), [field]: b.value });
             setSaving(null);
             if (!r.ok) return setError(r.error);
             router.refresh();

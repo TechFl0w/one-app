@@ -1,6 +1,9 @@
-import type { Block, Blueprint } from "@/schema/blueprint";
+import type { Block, Blueprint, Table } from "@/schema/blueprint";
 import type { RecordStore } from "@/engine/store";
-import { loadBlockData } from "@/engine/blockData";
+import { loadBlockData, recordLabel } from "@/engine/blockData";
+import { blockQuery, DATE_FILTERS, filterableFields, matchingLinks, type Params } from "@/engine/search";
+import { buildRecordQuery } from "@/engine/records";
+import { BlockSearch, type FilterField } from "./BlockSearch";
 import { BlockFrame } from "./BlockFrame";
 import { BoardBlock, DetailsBlock, Empty, GalleryBlock, ListBlock, NotesBlock, NumberBlock, TableBlock } from "./RecordBlocks";
 import { displayTable } from "@/engine/blockData";
@@ -35,6 +38,31 @@ export interface BlockEnv {
   sandbox?: { bridge: SandboxBridge; basePath: string };
   /** On a record page: the record the page is about. */
   recordId?: string;
+  /** The page address's query (search boxes and filters of tables and lists). */
+  params?: Params;
+  /** Online payments: ready, or not yet connected (then invoices offer to connect Stripe). */
+  payments?: { ready: boolean; settingsHref: string };
+}
+
+/** The filters a block offers, with their choices in plain words. */
+async function filterOptions(bp: Blueprint, store: BlockEnv["store"], table: Table, block: Block, now?: Date): Promise<FilterField[]> {
+  // A board already splits by its column field; filters on the block's own fixed filters are left out.
+  const fixed = new Set((block.source?.filters ?? []).map((f) => f.field));
+  const out: FilterField[] = [];
+  for (const f of filterableFields(table)) {
+    if (fixed.has(f.id) || (block.type === "board" && block.source?.groupBy === f.id)) continue;
+    if (f.type === "status" || f.type === "choice") out.push({ id: f.id, label: f.label, options: f.options.map((o) => ({ value: o.id, label: o.label })) });
+    else if (f.type === "checkbox") out.push({ id: f.id, label: f.label, options: [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }] });
+    else if (f.type === "date" || f.type === "datetime") out.push({ id: f.id, label: f.label, options: Object.entries(DATE_FILTERS).map(([value, d]) => ({ value, label: d.label })) });
+    else if (f.type === "link") {
+      const target = bp.tables.find((t) => t.id === f.to);
+      if (!target) continue;
+      const { records, total } = await store.query(buildRecordQuery(bp, { table: target.id, limit: 25 }, { now })).catch(() => ({ records: [], total: 0 }));
+      // Only short lists (staff, bays, categories) make sense as filter buttons; search covers the rest.
+      if (total > 0 && total <= 25) out.push({ id: f.id, label: f.label, options: records.map((r) => ({ value: r.id, label: recordLabel(target, r) })) });
+    }
+  }
+  return out.slice(0, 8);
 }
 
 export async function BlockView({ block, env, fullPage = false }: { block: Block; env: BlockEnv; fullPage?: boolean }) {
@@ -69,7 +97,12 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
       </div>
     );
   }
-  const data = await loadBlockData(block, blueprint, store, { now, recordId: env.recordId });
+  // Tables and lists get a search box and filters (in the page address).
+  const searchable = ["table", "list", "gallery", "board"].includes(block.type) && block.source ? blueprint.tables.find((t) => t.id === block.source!.table) : undefined;
+  const asked = searchable ? blockQuery(searchable, block.id, env.params) : undefined;
+  const links = asked?.q ? await matchingLinks(blueprint, store, searchable!, asked.q, { now }).catch(() => []) : [];
+  const extra = asked && (asked.q || asked.filters.length) ? { filters: asked.filters, ...(asked.q ? { search: { q: asked.q, links } } : {}) } : undefined;
+  const data = await loadBlockData(block, blueprint, store, { now, recordId: env.recordId, ...(extra ? { extra } : {}) });
 
   switch (data.kind) {
     case "error":
@@ -98,6 +131,11 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
       return (
         <section className="card flex h-full flex-col gap-4 overflow-hidden p-4 md:p-6">
           <DocumentActions table={block.source!.table} recordId={env.recordId!} kind={data.view.kind} label={data.view.label} sent={data.view.state !== "draft"} canInvoice={data.canInvoice} invoice={data.invoice} />
+          {data.view.kind === "invoice" && env.payments && !env.payments.ready && data.view.state !== "paid" && (
+            <a href={env.payments.settingsHref} className="no-print flex items-center gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:underline">
+              <span className="font-semibold">Connect Stripe to get paid online.</span> Until then {data.view.customer.name || "your client"} can’t pay this invoice from the link.
+            </a>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line p-5 md:p-8">
             <DocumentView doc={data.view} />
           </div>
@@ -128,6 +166,7 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
           <FormBlock
             fields={data.fields}
             choices={data.choices}
+            narrow={data.narrow}
             action={env.formAction(data.table.id, wanted)}
             submitLabel={typeof block.options?.submitLabel === "string" ? block.options.submitLabel : "Save"}
           />
@@ -142,6 +181,9 @@ export async function BlockView({ block, env, fullPage = false }: { block: Block
       const defaults = recordDefaults(block.source?.filters, env.recordId);
       return (
         <BlockFrame title={title} action={<span className="flex items-center gap-2 text-xs text-muted">{data.total}<AddRecordButton table={data.table.id} label={data.table.label.toLowerCase()} defaults={defaults} /></span>}>
+          {searchable && asked && (block.type === "table" || data.total > 6 || asked.q || Object.keys(asked.active).length > 0) && (
+            <BlockSearch blockId={block.id} q={asked.q} active={asked.active} fields={await filterOptions(blueprint, store, searchable, block, now)} />
+          )}
           {block.type === "table" && <TableBlock {...props} />}
           {block.type === "list" && <ListBlock {...props} />}
           {block.type === "gallery" && <GalleryBlock {...props} />}

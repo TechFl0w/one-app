@@ -179,6 +179,18 @@ export function SandboxFrame({
             window.open(await recordFileUrl(bridge, str(a[0], "path").slice(0, 500)), "_blank", "noopener");
             value = true;
             break;
+          case "bookings.freeTimes": {
+            if (!bridge.freeTimes) throw new Error("not_found: Online booking isn’t set up here");
+            value = unwrap(await bridge.freeTimes(str(a[0], "service"), str(a[1], "date"), typeof a[2] === "string" ? a[2] : undefined, typeof a[3] === "number" ? a[3] : undefined));
+            break;
+          }
+          case "bookings.book": {
+            if (!bridge.bookTime) throw new Error("not_found: Online booking isn’t set up here");
+            const c = a[2] && typeof a[2] === "object" ? (a[2] as Record<string, unknown>) : {};
+            const client = { name: String(c.name ?? "").slice(0, 100), ...(typeof c.email === "string" ? { email: c.email.slice(0, 200) } : {}), ...(typeof c.phone === "string" ? { phone: c.phone.slice(0, 40) } : {}) };
+            value = unwrap(await bridge.bookTime(str(a[0], "service"), str(a[1], "start"), client, typeof a[3] === "string" ? a[3] : undefined));
+            break;
+          }
           case "files.view": {
             // Photos and videos open full screen in One App (swipe through, videos play).
             const files = asFiles(a[0]).slice(0, 100).map((f) => ({ ...f, path: f.path.slice(0, 500) }));

@@ -10,6 +10,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createCheckout, getAccount, stripeConfigured } from "@/server/payments";
 import { depositAmount, MIN_CHECKOUT_MINUTES } from "@/payments/core";
 import type { Blueprint } from "@/schema/blueprint";
+import { ensureBookingLink } from "@/server/bookingLinks";
+import { FILES_BUCKET, filePathFor, maxBytesFor, sizeLabel } from "@/lib/files";
 
 /** Currency of the services' price field (money fields carry one), else CAD. */
 function currencyOf(bp: Blueprint): string {
@@ -44,11 +46,11 @@ export async function loadDays(slug: string, serviceId: string, practitionerId: 
 }
 
 /** Every free time for a service over the next `days` days (one call powers the whole calendar). */
-export async function loadAvailability(slug: string, serviceId: string, practitionerId: string | null, days = 35) {
+export async function loadAvailability(slug: string, serviceId: string, practitionerId: string | null, days = 35, kind?: string | null) {
   try {
     const r = await resolve(slug);
     if (!r) return fail(new RecordError("not_found", "Not found"));
-    const slots = await availableSlots(r.blueprint, r.backend, { serviceId, practitionerId: practitionerId ?? undefined, days: Math.min(Math.max(days, 1), 60) });
+    const slots = await availableSlots(r.blueprint, r.backend, { serviceId, practitionerId: practitionerId ?? undefined, kind: kind ?? undefined, days: Math.min(Math.max(days, 1), 60) });
     return { slots: slots.map((s) => ({ start: s.start, end: s.end, practitionerId: s.practitionerId })) };
   } catch (e) {
     return fail(e);
@@ -69,7 +71,19 @@ export async function loadSlots(slug: string, serviceId: string, practitionerId:
 
 export async function submitBooking(
   slug: string,
-  req: { serviceId: string; practitionerId: string | null; start: string; name: string; email: string; phone: string; website?: string },
+  req: {
+    serviceId: string;
+    practitionerId: string | null;
+    start: string;
+    name: string;
+    email: string;
+    phone: string;
+    website?: string;
+    kind?: string | null;
+    forName?: string;
+    forValues?: Record<string, string | boolean | { path: string; name: string }>;
+    clientValues?: Record<string, string | boolean | { path: string; name: string }>;
+  },
 ) {
   if (req.website) return { error: "Something went wrong. Please try again." }; // honeypot: bots fill hidden fields
   try {
@@ -79,7 +93,8 @@ export async function submitBooking(
     const services = await catalog(r.blueprint, r.backend);
     const service = services.services.find((s) => s.id === req.serviceId);
     // Deposit: only for real businesses with Stripe ready and a deposit rule that yields an amount.
-    const deposit = !r.demo && sc.deposit && service ? depositAmount(service.price, sc.deposit) : null;
+    const price = (req.kind ? service?.variants?.[req.kind]?.price : undefined) ?? service?.price ?? null;
+    const deposit = !r.demo && sc.deposit && service ? depositAmount(price, sc.deposit) : null;
     const account = deposit && "page" in r ? await getAccount(createAdminClient("public"), r.page.businessId) : null;
     const takeDeposit = !!(deposit && account?.chargesEnabled && stripeConfigured());
     const holdMinutes = Math.max(sc.rules.holdMin, MIN_CHECKOUT_MINUTES) + 1;
@@ -93,6 +108,10 @@ export async function submitBooking(
         practitionerId: req.practitionerId ?? undefined,
         start: req.start,
         client: { name: req.name.slice(0, 100), email: req.email.trim() || undefined, phone: req.phone.trim() || undefined },
+        kind: req.kind ?? undefined,
+        ...(req.forName !== undefined ? { for: { name: req.forName.slice(0, 100), values: req.forValues } } : {}),
+        clientValues: req.clientValues,
+        filesIn: "page" in r ? r.page.businessId : undefined,
       },
       now,
       takeDeposit ? { holdUntil: new Date(now.getTime() + holdMinutes * 60_000) } : {},
@@ -115,7 +134,34 @@ export async function submitBooking(
       });
       checkoutUrl = checkout.url;
     }
-    return { ok: true as const, start: booked.slot.start, practitionerId: booked.slot.practitionerId, confirmed: booked.state === "confirmed", demo: r.demo, checkoutUrl };
+    const manage = !r.demo && "page" in r ? `/book/${slug}/b/${await ensureBookingLink(createAdminClient("public"), r.page.businessId, booked.bookingId)}` : undefined;
+    return { ok: true as const, start: booked.slot.start, end: booked.slot.end, practitionerId: booked.slot.practitionerId, confirmed: booked.state === "confirmed", demo: r.demo, checkoutUrl, manage, price: booked.price };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * Where a client uploads a document the booking needs (a vaccination record, a signed waiver):
+ * only for a file requirement of this business, within size limits. The file is linked when the
+ * booking is made.
+ */
+export async function requirementUploadTarget(slug: string, fieldId: string, name: string, size: number, mime?: string) {
+  try {
+    if (slug === "demo") return fail(new RecordError("invalid", "The demo salon doesn’t take files."));
+    const r = await resolve(slug);
+    if (!r || !("page" in r)) return fail(new RecordError("not_found", "Not found"));
+    const sc = r.blueprint.scheduling!;
+    const req = (sc.requirements ?? []).find((x) => x.field === fieldId);
+    const table = req?.on === "for" ? sc.for?.table : req ? sc.clients.table : undefined;
+    const f = table ? r.blueprint.tables.find((t) => t.id === table)?.fields.find((x) => x.id === fieldId) : undefined;
+    if (!req || !table || f?.type !== "file") return fail(new RecordError("invalid", "That can’t be uploaded here."));
+    const limit = Math.min(maxBytesFor(mime), 15 * 1024 * 1024);
+    if (!(size > 0) || size > limit) return fail(new RecordError("invalid", `Files can be up to ${sizeLabel(limit)}.`));
+    const path = filePathFor(r.page.businessId, table, String(name ?? "document").slice(0, 120));
+    const { data, error } = await createAdminClient("public").storage.from(FILES_BUCKET).createSignedUploadUrl(path);
+    if (error || !data) return fail(new Error("upload"));
+    return { path, url: data.signedUrl, name: String(name ?? "document").slice(0, 120) };
   } catch (e) {
     return fail(e);
   }

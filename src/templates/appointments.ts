@@ -138,12 +138,10 @@ export const appointments: Template = {
         block("blk_week", "calendar", [0, 0, 12, 8], { table: "tbl_bookings", field: "fld_start" }, { title: "This week", view: "week" }),
       ]),
       page("pg_bookings", "Bookings", "schedule", 2, [
-        block("blk_board", "board", [0, 0, 12, 6], { table: "tbl_bookings", groupBy: "fld_status" }, { title: "By status" }),
-        block("blk_new_booking", "form", [0, 6, 4, 6], { table: "tbl_bookings" }, { title: "New booking", fields: ["fld_client", "fld_service", "fld_practitioner", "fld_start", "fld_status"] }),
+        block("blk_board", "board", [0, 0, 12, 8], { table: "tbl_bookings", groupBy: "fld_status" }, { title: "By status" }),
       ]),
       page("pg_clients", "Clients", "users", 3, [
-        block("blk_clients", "table", [0, 0, 8, 7], { table: "tbl_clients", sort: [{ field: "fld_name", dir: "asc" }] }, { title: "All clients" }),
-        block("blk_new_client", "form", [8, 0, 4, 6], { table: "tbl_clients" }, { title: "Add a client", fields: ["fld_name", "fld_whatsapp", "fld_email", "fld_fav_tech"] }),
+        block("blk_clients", "table", [0, 0, 12, 7], { table: "tbl_clients", sort: [{ field: "fld_name", dir: "asc" }] }, { title: "All clients" }),
       ]),
       page("pg_services", "Services", "sparkles", 4, [
         block("blk_services", "table", [0, 0, 8, 5], { table: "tbl_services" }, { title: "Menu" }),

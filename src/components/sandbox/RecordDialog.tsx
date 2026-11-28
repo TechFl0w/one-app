@@ -7,7 +7,9 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import type { SandboxBridge, SandboxRecord, SandboxSchema } from "@/sandbox/protocol";
 import { unwrap } from "@/sandbox/result";
 import { MediaUploader } from "@/components/media/Media";
+import { AddField, ChoiceInput, HoursInput } from "./FormParts";
 import { singular } from "@/lib/words";
+import { belongsTo, impliedParent, narrowings, parentFieldOf } from "@/engine/hierarchy";
 export { singular };
 
 type Table = SandboxSchema["tables"][number];
@@ -23,7 +25,7 @@ export interface RecordFormRequest {
   defaults?: Record<string, unknown>;
 }
 
-const SKIP = new Set(["rollup", "formula", "hours"]);
+const SKIP = new Set(["rollup", "formula"]);
 const pad = (n: number) => String(n).padStart(2, "0");
 function toLocal(iso: string) {
   const d = new Date(iso);
@@ -71,6 +73,11 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
   const statusDefaults = Object.fromEntries(t.fields.filter((f) => f.type === "status" && f.options?.length).map((f) => [f.id, f.options![0].id]));
   const [values, setValues] = useState<Record<string, unknown> | null>(editing ? null : { ...statusDefaults, ...(request.defaults ?? {}) });
   const [links, setLinks] = useState<Record<string, { value: string; label: string }[]>>({});
+  const [linkRecs, setLinkRecs] = useState<Record<string, SandboxRecord[]>>({});
+  // Link pickers are controlled here so one can narrow another (owner → pets).
+  const [linkVals, setLinkVals] = useState<Record<string, string | string[]>>({});
+  // Fields filled from a chosen link (a line's price from its rate), still editable.
+  const [filled, setFilled] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmAmount, setConfirmAmount] = useState<"no" | "asking" | "yes">("no");
@@ -82,8 +89,72 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
     setError(r.error);
     setDeleting("no");
   };
+  // Fields the owner added from this form ("+ Add field") show up right away.
+  const [added, setAdded] = useState<Field[]>([]);
   const all = t.fields.filter((f) => !SKIP.has(f.type) && !f.computed);
-  const shown = request.fields ? request.fields.map((id) => all.find((f) => f.id === id)).filter((f): f is Field => !!f) : all;
+  const shown = [
+    ...(request.fields ? request.fields.map((id) => all.find((f) => f.id === id)).filter((f): f is Field => !!f) : all),
+    ...added.filter((a) => !t.fields.some((f) => f.id === a.id) || request.fields),
+  ].filter((f, i, list) => list.findIndex((x) => x.id === f.id) === i);
+
+  const narrow = narrowings(schema.tables, t.id, shown.map((f) => f.id));
+  const asVal = (f: Field, v: unknown): string | string[] => (f.multiple ? (Array.isArray(v) ? v.map(String) : v ? [String(v)] : []) : v == null ? "" : String(v));
+  const linkVal = (f: Field) => linkVals[f.id] ?? asVal(f, values?.[f.id]);
+  const recOf = (f: Field, id: string) => linkRecs[f.to ?? ""]?.find((r) => r.id === id);
+  const setLink = (f: Field, v: string | string[]) => {
+    const next: Record<string, string | string[]> = { [f.id]: v };
+    // Choosing a pet fills in its owner.
+    const up = narrow[f.id];
+    const parentF = up && shown.find((x) => x.id === up.parent);
+    if (up && parentF && typeof v === "string" && v) {
+      const p = impliedParent(recOf(f, v), up.via);
+      if (p && linkVal(parentF) !== p) next[parentF.id] = parentF.multiple ? [p] : p;
+    }
+    // Choosing an owner keeps only their pets — and picks the pet when there's just one.
+    for (const [childId, n] of Object.entries(narrow)) {
+      if (n.parent !== f.id) continue;
+      const child = shown.find((x) => x.id === childId);
+      if (!child) continue;
+      const fits = (linkRecs[child.to ?? ""] ?? []).filter((r) => belongsTo(r, n.via, v));
+      const cur = linkVal(child);
+      const keep = (Array.isArray(cur) ? cur : [cur]).filter((id) => id && fits.some((r) => r.id === id));
+      if (!keep.length && fits.length === 1 && v && (!Array.isArray(v) || v.length)) next[child.id] = child.multiple ? [fits[0].id] : fits[0].id;
+      else next[child.id] = child.multiple ? keep : keep[0] ?? "";
+    }
+    setLinkVals((x) => ({ ...x, ...next }));
+    const picked = typeof v === "string" ? recOf(f, v) : Array.isArray(v) && v[0] ? recOf(f, v[0]) : undefined;
+    const fills = Object.fromEntries(shown.filter((x) => x.fill?.from === f.id && picked && picked.data[x.fill.field] != null).map((x) => [x.id, picked!.data[x.fill!.field]]));
+    if (Object.keys(fills).length) setFilled((x) => ({ ...x, ...fills }));
+  };
+  const optionsFor = (f: Field) => {
+    const all = links[f.to ?? ""] ?? [];
+    const n = narrow[f.id];
+    const parentF = n && shown.find((x) => x.id === n.parent);
+    if (!n || !parentF) return all;
+    const pv = linkVal(parentF);
+    const recs = linkRecs[f.to ?? ""] ?? [];
+    return all.filter((o) => { const r = recs.find((x) => x.id === o.value); return !r || belongsTo(r, n.via, pv); });
+  };
+  /** "+ New pet": made with its name (and the owner already chosen), then selected. */
+  const addLinked = (f: Field) => async (label: string): Promise<string | null> => {
+    const lt = schema.tables.find((x) => x.id === f.to);
+    const title = lt?.fields.find((x) => x.id === lt.primaryField);
+    if (!lt || !title || !["text", "email", "phone"].includes(title.type)) return null;
+    const data: Record<string, unknown> = { [title.id]: label };
+    const n = narrow[f.id];
+    const parentF = n && shown.find((x) => x.id === n.parent);
+    const pv = parentF ? linkVal(parentF) : "";
+    if (n && pv && (!Array.isArray(pv) || pv.length)) data[n.via] = Array.isArray(pv) ? pv[0] : pv;
+    const r = await bridge.create(lt.id, data);
+    if (!r.ok) {
+      setError(r.error);
+      return null;
+    }
+    const parentLabel = parentF ? (links[parentF.to ?? ""] ?? []).find((o) => o.value === data[n!.via])?.label.split(" · ")[0] : undefined;
+    setLinkRecs((x) => ({ ...x, [lt.id]: [...(x[lt.id] ?? []), r.value] }));
+    setLinks((x) => ({ ...x, [lt.id]: [...(x[lt.id] ?? []), { value: r.value.id, label: parentLabel ? `${label} · ${parentLabel}` : label }] }));
+    return r.value.id;
+  };
 
   useEffect(() => {
     let live = true;
@@ -96,17 +167,27 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
     for (const to of linked)
       bridge.list({ table: to, limit: 500 }).then(unwrap).then(async (res) => {
         const lt = schema.tables.find((x) => x.id === to);
-        // A title that is itself a link (a lease named by its tenant) shows that record's name.
+        // A title that is itself a link (a lease named by its tenant) shows that record's name;
+        // a record that belongs to another shows the path ("Biscuit · Lisa Moreau").
         const title = lt?.fields.find((f) => f.id === lt.primaryField);
-        const names = new Map<string, string>();
-        if (title?.type === "link" && title.to) {
-          const tt = schema.tables.find((x) => x.id === title.to);
-          const ids = [...new Set(res.records.map((r) => r.data[title.id]).filter((v): v is string => typeof v === "string"))];
-          if (ids.length) for (const r of unwrap(await bridge.list({ table: title.to, limit: 500 })).records) if (ids.includes(r.id)) names.set(r.id, labelOf(tt, r));
-        }
+        const parentF = parentFieldOf(schema.tables, to);
+        const nameOf = async (field: Field | undefined) => {
+          const names = new Map<string, string>();
+          if (!field || field.type !== "link" || !field.to) return names;
+          const tt = schema.tables.find((x) => x.id === field.to);
+          const want = new Set(res.records.flatMap((r) => (Array.isArray(r.data[field.id]) ? (r.data[field.id] as unknown[]) : [r.data[field.id]])).filter((v): v is string => typeof v === "string"));
+          if (want.size) for (const r of unwrap(await bridge.list({ table: field.to, limit: 500 })).records) if (want.has(r.id)) names.set(r.id, labelOf(tt, r));
+          return names;
+        };
+        const [titles, parents] = await Promise.all([nameOf(title), nameOf(parentF as Field | undefined)]);
         if (!live) return;
-        const label = (r: SandboxRecord) => (title?.type === "link" ? names.get(String(r.data[title.id])) ?? "Untitled" : labelOf(lt, r));
+        const label = (r: SandboxRecord) => {
+          const own = title?.type === "link" ? titles.get(String(r.data[title.id])) ?? "Untitled" : labelOf(lt, r);
+          const p = parentF ? parents.get(String(r.data[parentF.id])) : undefined;
+          return p ? `${own} · ${p}` : own;
+        };
         const opts = res.records.map((r) => ({ value: r.id, label: label(r) })).sort((a, b) => a.label.localeCompare(b.label));
+        setLinkRecs((x) => ({ ...x, [to]: res.records }));
         setLinks((x) => ({ ...x, [to]: opts }));
       }, () => {});
     return () => {
@@ -124,8 +205,13 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
       const raw = form.get(f.id);
       const s = typeof raw === "string" ? raw.trim() : "";
       let v: unknown;
+      const several = f.multiple && (f.type === "choice" || f.type === "link");
       if (f.type === "checkbox") v = form.has(f.id);
-      else if (!s) v = null;
+      else if (several) {
+        const list = form.getAll(f.id).map(String).filter(Boolean);
+        v = list.length ? list : null;
+      } else if (!s) v = null;
+      else if (f.type === "hours") v = JSON.parse(s);
       else if (f.type === "file") v = JSON.parse(s);
       else if (f.type === "number" || f.type === "money") v = Number(s);
       else if (f.type === "datetime") v = new Date(s).toISOString();
@@ -164,11 +250,28 @@ function Body({ request, table: t, schema, bridge, onDone }: { request: RecordFo
                 {f.label}
                 {f.required && <span className="text-accent"> *</span>}
               </label>
-              <FieldInput field={f} value={values[f.id]} table={t.id} bridge={bridge} options={f.type === "link" ? (links[f.to ?? ""] ?? []) : (f.options ?? []).map((o) => ({ value: o.id, label: o.label }))} />
+              {f.type === "link" ? (
+                <Select
+                  id={`rf-${f.id}`}
+                  name={f.id}
+                  required={f.required}
+                  multiple={f.multiple}
+                  value={linkVal(f)}
+                  onChange={(v) => setLink(f, v)}
+                  placeholder={f.required ? "Choose…" : "—"}
+                  options={[...(!f.multiple && !f.required && linkVal(f) ? [{ value: "", label: "—" }] : []), ...optionsFor(f)]}
+                  onAdd={addLinked(f)}
+                  addLabel={singular(schema.tables.find((x) => x.id === f.to)?.label ?? f.label).toLowerCase()}
+                  searchable
+                />
+              ) : (
+                <FieldInput key={`${f.id}:${JSON.stringify(filled[f.id] ?? null)}`} field={f} value={f.id in filled ? filled[f.id] : values[f.id]} table={t.id} bridge={bridge} options={(f.options ?? []).map((o) => ({ value: o.id, label: o.label }))} />
+              )}
             </>
           )}
         </div>
       ))}
+      <AddField table={t.id} onAdded={(f) => setAdded((x) => [...x, f])} />
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {confirmAmount === "asking" && (
         <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -219,25 +322,12 @@ function FieldInput({ field: f, value, options, table, bridge }: { field: Field;
     case "status":
     case "choice":
     case "link":
-      return <Choice id={id} name={f.id} required={f.required} initial={str} options={options} />;
+      return <ChoiceInput id={id} name={f.id} required={f.required} initial={value} options={options} table={table} field={f} multiple={f.multiple} />;
+    case "hours":
+      return <HoursInput name={f.id} initial={value} />;
     default:
       return <input {...common} type="text" />;
   }
-}
-
-function Choice({ id, name, required, initial, options }: { id: string; name: string; required?: boolean; initial: string; options: { value: string; label: string }[] }) {
-  const [value, setValue] = useState(initial);
-  return (
-    <Select
-      id={id}
-      name={name}
-      required={required}
-      value={value}
-      onChange={(v) => setValue(String(v))}
-      placeholder={required ? "Choose…" : "—"}
-      options={[...(!required && value ? [{ value: "", label: "—" }] : []), ...options]}
-    />
-  );
 }
 
 /** Photos, videos or files for a file field: uploaded as they're picked, saved with the form. */

@@ -3,12 +3,13 @@ import { randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Blueprint, DocumentDef } from "@/schema/blueprint";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { acceptPatch, documentById, documentFor, invoiceFromQuote, loadDocument, paymentRecord, type DocView } from "@/engine/documents";
+import { acceptPatch, documentById, documentFor, loadDocument, makeInvoiceFromQuote, paymentRecord, type DocView } from "@/engine/documents";
+import { supabaseOwnerBackend } from "./ownerBackend";
 import { isoDate, localToday } from "@/engine/dates";
 import { withComputed } from "@/engine/computed";
 import { getCurrentBlueprint } from "./blueprints";
 import { supabaseStore } from "./store";
-import { createRecord, getRecord, listRecords, updateRecord } from "./records";
+import { createRecord, getRecord, updateRecord } from "./records";
 import { createCheckout } from "./payments";
 import { ensureEmailSettings, sendEmail } from "./email";
 
@@ -120,19 +121,8 @@ export async function sendDocument(supabase: SupabaseClient, businessId: string,
   return r.sent ? { link, emailed: true } : { link, emailed: false, reason: r.reason };
 }
 
-/** An invoice made from an accepted quote (lines copied). Returns the new invoice's id. */
-export async function createInvoiceFromQuote(supabase: SupabaseClient, businessId: string, quoteTable: string, quoteId: string): Promise<{ table: string; id: string }> {
+/** An invoice made from an accepted quote: the full amount (less earlier invoices) or a deposit. */
+export async function createInvoiceFromQuote(supabase: SupabaseClient, businessId: string, quoteTable: string, quoteId: string, opts: { depositPercent?: number } = {}): Promise<{ table: string; id: string }> {
   const bp = await getCurrentBlueprint(supabase, businessId);
-  const quote = documentFor(bp, quoteTable);
-  const invoice = bp.documents?.find((d) => d.kind === "invoice" && d.from?.document === quote?.id);
-  if (!quote || quote.kind !== "quote" || !invoice) throw new Error("There’s no invoice set up for this quote.");
-  const q = await getRecord(supabase, businessId, quoteTable, quoteId, bp);
-  if (quote.accept && !q.data[quote.accept.acceptedOn]) throw new Error("The quote hasn’t been accepted yet.");
-  const existing = await listRecords(supabase, businessId, { table: invoice.table, filters: [{ field: invoice.from!.link, op: "eq", value: quoteId }], limit: 1 });
-  if (existing.records[0]) return { table: invoice.table, id: existing.records[0].id };
-  const lines = await listRecords(supabase, businessId, { table: quote.lines.table, filters: [{ field: quote.lines.via, op: "eq", value: quoteId }], sort: [{ field: "_created_at", dir: "asc" }], limit: 500 });
-  const made = invoiceFromQuote(bp, invoice, quote, q, lines.records);
-  const inv = await createRecord(supabase, businessId, invoice.table, made.invoice);
-  for (const l of made.lines) await createRecord(supabase, businessId, invoice.lines.table, { ...l, [invoice.lines.via]: inv.id });
-  return { table: invoice.table, id: inv.id };
+  return makeInvoiceFromQuote(bp, supabaseOwnerBackend(supabase, businessId), quoteTable, quoteId, opts);
 }

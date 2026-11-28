@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { EditContext, type Confirm, type EditContextValue } from "./editContext";
+export { useEdit, useEditOptional } from "./editContext";
 import { useRouter } from "next/navigation";
 import type { Blueprint } from "@/schema/blueprint";
 import type { ChangeSet, Operation } from "@/schema/changeSet";
@@ -16,42 +18,6 @@ import { saveBlueprintChanges, undoBlueprintChange } from "@/app/b/[businessId]/
  */
 
 export type EditMode = { kind: "server"; businessId: string } | { kind: "local" };
-
-interface Confirm {
-  purpose: "save" | "undo";
-  items: string[];
-}
-
-interface EditContextValue {
-  /** What to render: the draft while editing, else the saved blueprint. */
-  blueprint: Blueprint;
-  editing: boolean;
-  pending: number;
-  error: string | null;
-  busy: boolean;
-  confirm: Confirm | null;
-  lastSaved: { summary: string; undo: UndoToken } | null;
-  local: boolean;
-  start(): void;
-  discard(): void;
-  /** Adds ops to the pending change set. Returns false (and sets `error`) if they don't apply. */
-  push(ops: Operation | Operation[]): boolean;
-  save(confirmed?: boolean): void;
-  undo(confirmed?: boolean): void;
-  cancelConfirm(): void;
-  clearError(): void;
-  dismissSaved(): void;
-  /** Take a blueprint changed elsewhere (demo assistant). Ignored while editing. */
-  adoptBlueprint(bp: Blueprint): void;
-}
-
-const EditContext = createContext<EditContextValue | null>(null);
-
-export function useEdit(): EditContextValue {
-  const v = useContext(EditContext);
-  if (!v) throw new Error("useEdit must be used inside <EditProvider>");
-  return v;
-}
 
 export function EditProvider({ blueprint: fromServer, mode, children }: { blueprint: Blueprint; mode: EditMode; children: React.ReactNode }) {
   const router = useRouter();
@@ -190,8 +156,24 @@ export function EditProvider({ blueprint: fromServer, mode, children }: { bluepr
       adoptBlueprint: (bp: Blueprint) => {
         if (!editing) setBase(bp);
       },
+      applyNow: async (list: Operation[], summary: string) => {
+        const cs: ChangeSet = { baseVersion: base.version, source: "ui", summary, ops: list };
+        if (mode.kind === "server") {
+          const r = await saveBlueprintChanges(mode.businessId, cs, false);
+          if (!r.ok) return r.needsConfirmation ? "That change needs your approval — ask the assistant." : r.error;
+          setBase(r.blueprint);
+          router.refresh();
+          return null;
+        }
+        try {
+          setBase(applyChangeSet(base, cs, {}).blueprint);
+          return null;
+        } catch (e) {
+          return e instanceof Error ? e.message : "Couldn’t change that";
+        }
+      },
     }),
-    [editing, draft, base, ops.length, error, busy, confirm, lastSaved, mode.kind, reset, push, save, undo],
+    [editing, draft, base, ops.length, error, busy, confirm, lastSaved, mode, reset, push, save, undo, router],
   );
 
   return <EditContext.Provider value={value}>{children}</EditContext.Provider>;
