@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { assignNumber } from "@/engine/documents";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Blueprint } from "@/schema/blueprint";
@@ -109,7 +110,25 @@ export async function createRecord(
   if (error) throw new Error(`Could not save record: ${error.message}`);
   // With computed values, so callers (screens, the assistant) see the status the record now has.
   const [view] = await addComputed(bp, tableId, [toView(bp, tableId, row as Row)], loadAllVia(supabaseStore(supabase, businessId), bp));
+  calendarAfterWrite(bp, businessId, tableId, view.id, (row as Row).data, null);
   return view;
+}
+
+/**
+ * A booking goes to the connected Google calendars right after it's saved (after the response,
+ * so saving stays fast). The 5-minute background job does the same as a backup.
+ */
+function calendarAfterWrite(bp: Blueprint, businessId: string, tableId: string, recordId: string, data: Record<string, unknown> | null, before: Record<string, unknown> | null) {
+  if (!bp.scheduling || tableId !== bp.scheduling.bookings.table) return;
+  try {
+    after(async () => {
+      const { syncBooking } = await import("./googleCalendar");
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      await syncBooking(createAdminClient(), bp, businessId, recordId, data, before).catch((e) => console.error("calendar sync", e));
+    });
+  } catch {
+    // Outside a request (background jobs): the job's own calendar pass covers it.
+  }
 }
 
 /** Merges the given fields into the record; `null` clears a field. */
@@ -144,6 +163,7 @@ export async function updateRecord(
   if (!row) throw new RecordError("not_found", "Record not found");
   // With computed values, so callers (screens, the assistant) see the status the record now has.
   const [view] = await addComputed(bp, tableId, [toView(bp, tableId, row as Row)], loadAllVia(supabaseStore(supabase, businessId), bp));
+  calendarAfterWrite(bp, businessId, tableId, recordId, (row as Row).data, null);
   return view;
 }
 
@@ -166,6 +186,8 @@ export async function deleteRecord(
     .select("id");
   if (error) throw new Error(`Could not delete record: ${error.message}`);
   if (!data?.length) throw new RecordError("not_found", "Record not found or you are not allowed to delete it");
+  const bp = await getCurrentBlueprint(supabase, businessId).catch(() => null);
+  if (bp) calendarAfterWrite(bp, businessId, tableId, recordId, null, null);
 }
 
 async function assertLinksExist(supabase: SupabaseClient, businessId: string, byTable: Map<string, Set<string>>) {
